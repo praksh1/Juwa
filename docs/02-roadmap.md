@@ -96,7 +96,12 @@ Now the architecture pays off. Each new game is one file implementing
 [Adding a game](04-adding-a-game.md).
 
 - [x] Blackjack UI — dealt cards, splits, doubles, dealer reveal *(done)*
-- [ ] Roulette UI (engine and API are done — needs a screen)
+- [x] Roulette UI — rotated felt, chip stacking, outside bets *(done)*
+Every shipped engine now has a screen. The remaining tiles in the lobby are
+placeholders for games whose engines are not written yet.
+
+- [ ] Roulette splits, streets and corners — bets on the lines *between*
+      numbers, which need a pinch-zoom felt rather than a tap grid
 - [ ] Texas Hold'em — the big one; needs real-time multiplayer, budget for it
 - [ ] Video poker, baccarat, keno, scratch cards
 - [ ] Three to five more slot themes reusing the slot renderer

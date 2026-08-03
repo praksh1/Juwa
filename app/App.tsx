@@ -9,6 +9,7 @@ import { colors, typography } from '@juwa/ui';
 import { LobbyScreen } from './src/screens/LobbyScreen';
 import { SlotsScreen } from './src/screens/SlotsScreen';
 import { BlackjackScreen } from './src/screens/BlackjackScreen';
+import { RouletteScreen } from './src/screens/RouletteScreen';
 import { StoreScreen } from './src/screens/StoreScreen';
 import { WalletScreen } from './src/screens/WalletScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
@@ -36,6 +37,11 @@ function LobbyStack() {
         name="juwa-blackjack"
         component={BlackjackScreen}
         options={{ headerShown: true, title: 'Blackjack' }}
+      />
+      <Stack.Screen
+        name="juwa-roulette-eu"
+        component={RouletteScreen}
+        options={{ headerShown: true, title: 'European Roulette' }}
       />
     </Stack.Navigator>
   );

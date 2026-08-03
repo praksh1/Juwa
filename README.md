@@ -71,7 +71,7 @@ PGPORT=5432 db/test/run.sh
 | Free-spins bonus round with running total | ✅ **verified in browser** |
 | Blackjack table — splits, doubles, dealt cards | ✅ **verified in browser** |
 | Sound — synthesised, no audio files | ✅ verified |
-| Roulette UI | ⬜ next |
+| Roulette table — straight-up and outside bets | ✅ **verified in browser** |
 | Transaction history from the ledger | ✅ tested |
 | Stripe checkout — signed webhooks, replay-proof | ✅ **verified end to end** |
 

@@ -88,6 +88,11 @@ export interface PlayApi {
     gameId: string;
     stake: number;
     idempotencyKey: string;
+    /**
+     * Games that need their bet layout before the wheel turns — roulette —
+     * send it here, and the server applies it in the same request.
+     */
+    action?: { type: string; [key: string]: unknown };
   }): Promise<RoundResponse>;
   getProfile(): Promise<Profile>;
   register(details: {
@@ -156,7 +161,12 @@ export class HttpPlayApi implements PlayApi {
     return this.request<{ balance: number; dailyStreak: number; vipLevel: number }>('/balance');
   }
 
-  placeBet(request: { gameId: string; stake: number; idempotencyKey: string }) {
+  placeBet(request: {
+    gameId: string;
+    stake: number;
+    idempotencyKey: string;
+    action?: { type: string; [key: string]: unknown };
+  }) {
     return this.request<RoundResponse>('/bet', request);
   }
 
@@ -285,7 +295,21 @@ export class DemoPlayApi implements PlayApi {
     };
   }
 
-  async placeBet(request: { gameId: string; stake: number; idempotencyKey: string }) {
+  async placeBet(request: {
+    gameId: string;
+    stake: number;
+    idempotencyKey: string;
+    action?: { type: string; [key: string]: unknown };
+  }) {
+    if (request.gameId !== 'juwa-classic-slots') {
+      // Only the slot stub exists. Faking a roulette wheel on the device would
+      // mean the client deciding outcomes, which is the one thing the whole
+      // architecture exists to prevent.
+      throw new PlayApiError(
+        'This game needs a configured server — set EXPO_PUBLIC_API_URL.',
+        'server_required',
+      );
+    }
     if (request.stake > this.balance) {
       throw new PlayApiError(
         `Not enough coins: balance ${this.balance}, stake ${request.stake}`,

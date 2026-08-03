@@ -105,11 +105,15 @@ export const GAMES: GameSummary[] = [
 /**
  * Games with a shipped *renderer*.
  *
- * Roulette has a finished, tested engine and is fully playable through the API
- * — it simply has no UI yet, so the lobby still shows it as coming soon.
- * Adding it is a screen, not a game.
+ * Every engine now has one. The remaining tiles are placeholders for games
+ * whose engines have not been written — each is a file implementing
+ * `GameEngine` plus a screen, per docs/04-adding-a-game.md.
  */
-export const PLAYABLE = new Set(['juwa-classic-slots', 'juwa-blackjack']);
+export const PLAYABLE = new Set([
+  'juwa-classic-slots',
+  'juwa-blackjack',
+  'juwa-roulette-eu',
+]);
 
 export function gamesInCategory(category: GameCategory | 'all'): GameSummary[] {
   return category === 'all' ? GAMES : GAMES.filter((g) => g.category === category);
