@@ -1,11 +1,11 @@
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, type Theme } from '@react-navigation/native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, typography } from '@juwa/ui';
+import { colors, spacing, typography } from '@juwa/ui';
 import { LobbyScreen } from './src/screens/LobbyScreen';
 import { SlotsScreen } from './src/screens/SlotsScreen';
 import { BlackjackScreen } from './src/screens/BlackjackScreen';
@@ -69,12 +69,61 @@ const theme: Theme = {
   },
 };
 
+/** Icon (24) + label line (16) + breathing room, before any safe-area inset. */
+const TAB_BAR_CONTENT_HEIGHT = 60;
+
 const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Lobby: 'game-controller',
   Store: 'cart',
   Wallet: 'wallet',
   Profile: 'person',
 };
+
+/**
+ * The tab bar, sized explicitly.
+ *
+ * React Navigation's default height fits an icon and a label on iOS, where it
+ * also adds the home-indicator inset. On the web build it does neither: the
+ * browser reports no safe-area inset, the bar keeps its bare 49pt, and the
+ * labels are cut off along the bottom edge of the screen. Since the web build
+ * is the product, the bar is measured here instead — tall enough for icon plus
+ * label, plus whatever inset the device actually reports.
+ *
+ * This lives in its own component because `useSafeAreaInsets` has to be read
+ * below `SafeAreaProvider`, not in the component that renders it.
+ */
+function Tabs() {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarActiveTintColor: colors.gold.default,
+        tabBarInactiveTintColor: colors.text.muted,
+        tabBarStyle: {
+          backgroundColor: colors.surface.raised,
+          borderTopColor: colors.surface.border,
+          height: TAB_BAR_CONTENT_HEIGHT + insets.bottom,
+          paddingTop: spacing.xs,
+          paddingBottom: insets.bottom + spacing.xs,
+        },
+        tabBarLabelStyle: {
+          fontSize: typography.caption.fontSize,
+          lineHeight: typography.caption.lineHeight,
+        },
+        tabBarIcon: ({ color, size }) => (
+          <Ionicons name={ICONS[route.name] ?? 'ellipse'} size={size} color={color} />
+        ),
+      })}
+    >
+      <Tab.Screen name="Lobby" component={LobbyStack} />
+      <Tab.Screen name="Store" component={StoreScreen} />
+      <Tab.Screen name="Wallet" component={WalletScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
+    </Tab.Navigator>
+  );
+}
 
 export default function App() {
   // Registers the offline shell. No-op off the web.
@@ -87,29 +136,7 @@ export default function App() {
       <NavigationContainer theme={theme}>
         <StatusBar style="light" />
         <AppGate>
-        <Tab.Navigator
-          screenOptions={({ route }) => ({
-            headerShown: false,
-            tabBarActiveTintColor: colors.gold.default,
-            tabBarInactiveTintColor: colors.text.muted,
-            // Colours only. React Navigation already sizes the bar against the
-            // device's bottom safe-area inset; overriding the height or padding
-            // clips the labels on phones with a home indicator.
-            tabBarStyle: {
-              backgroundColor: colors.surface.raised,
-              borderTopColor: colors.surface.border,
-            },
-            tabBarLabelStyle: { fontSize: typography.caption.fontSize },
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name={ICONS[route.name] ?? 'ellipse'} size={size} color={color} />
-            ),
-          })}
-        >
-          <Tab.Screen name="Lobby" component={LobbyStack} />
-          <Tab.Screen name="Store" component={StoreScreen} />
-          <Tab.Screen name="Wallet" component={WalletScreen} />
-          <Tab.Screen name="Profile" component={ProfileScreen} />
-        </Tab.Navigator>
+          <Tabs />
         </AppGate>
       </NavigationContainer>
     </SafeAreaProvider>

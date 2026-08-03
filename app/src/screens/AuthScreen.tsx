@@ -116,11 +116,15 @@ export function AuthScreen() {
         />
       </Card>
 
+      {/* Deployed demo builds are on a public URL, so this says what a visitor
+          needs to know and nothing more. Naming the environment variables here
+          told strangers how the site is configured and read, to anyone who was
+          not expecting it, as a broken page. The build log is where a
+          misconfiguration belongs. */}
       {!IS_CONFIGURED ? (
         <Txt variant="caption" color={colors.feedback.warning} style={styles.notice}>
-          ⚠️ Demo mode — no Supabase project is configured, so any email works and
-          nothing is saved. Set EXPO_PUBLIC_SUPABASE_URL and
-          EXPO_PUBLIC_SUPABASE_ANON_KEY for real accounts.
+          Demo mode — play as much as you like, but accounts and coins are not
+          saved.
         </Txt>
       ) : null}
 
