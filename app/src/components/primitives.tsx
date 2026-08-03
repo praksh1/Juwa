@@ -186,7 +186,9 @@ const styles = StyleSheet.create({
   },
   button: {
     minHeight: layout.minTouchTarget,
-    paddingHorizontal: spacing.lg,
+    // 12 rather than 16: two buttons side by side in a card leave little room,
+    // and "Free Coins" was truncating to "Free Co…".
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     borderRadius: radius.pill,
     borderWidth: 1,

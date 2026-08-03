@@ -151,7 +151,10 @@ describe('api', { skip: URL_ENV ? false : 'JUWA_TEST_DATABASE_URL not set' }, ()
 
     const sql = (path: string) => readFileSync(path, 'utf8');
     await pool.query(sql(resolve(dbTest, 'supabase_shim.sql')));
-    for (const file of ['0001_ledger.sql', '0002_social_economy.sql', '0003_play.sql', '0004_accounts.sql']) {
+    for (const file of [
+      '0001_ledger.sql', '0002_social_economy.sql', '0003_play.sql',
+      '0004_accounts.sql', '0005_purchases.sql',
+    ]) {
       await pool.query(sql(resolve(migrations, file)));
     }
     for (const id of [PLAYER, MINOR, FLOODER, ...VALIDATORS]) {
@@ -361,6 +364,53 @@ describe('api', { skip: URL_ENV ? false : 'JUWA_TEST_DATABASE_URL not set' }, ()
     const games = response.body as unknown as { id: string; rtp: number }[];
     assert.ok(Array.isArray(games) && games.length >= 3);
     assert.ok(games.every((game) => game.rtp > 0.8 && game.rtp <= 1));
+  });
+
+  it('serves a coin history straight from the ledger', async () => {
+    const response = await call('/history');
+    assert.equal(response.status, 200);
+    const entries = response.body['entries'] as {
+      amount: number; type: string; meta: Record<string, unknown>;
+    }[];
+    assert.ok(entries.length > 0, 'no history for a player who has played');
+
+    // Newest first, so the player sees what just happened.
+    const ids = entries.map((e) => Number((e as unknown as { id: string }).id));
+    assert.deepEqual(ids, [...ids].sort((a, b) => b - a), 'history is not newest-first');
+
+    // A bet and its payout are separate rows, never one net figure — that is
+    // what the player experienced, and it keeps handle separate from net win.
+    assert.ok(entries.some((e) => e.type === 'bet' && e.amount < 0), 'no bet rows');
+    assert.ok(entries.some((e) => e.type === 'bonus' && e.amount > 0), 'no bonus rows');
+
+    // The welcome bonus is the oldest entry, and it is the full amount.
+    const welcome = entries[entries.length - 1]!;
+    assert.equal(welcome.type, 'bonus');
+    assert.equal(welcome.amount, WELCOME_BONUS);
+
+    // Every entry sums to the balance the API reports. If these ever disagree,
+    // the history is lying to the player.
+    const summed = entries.reduce((total, e) => total + e.amount, 0);
+    assert.equal(summed, (await call('/balance')).body['balance']);
+  });
+
+  it('never shows one player another player\'s history', async () => {
+    const stranger = await call('/history', { auth: token(randomUUID()) });
+    assert.equal(stranger.status, 200);
+    assert.deepEqual(stranger.body['entries'], []);
+  });
+
+  it('paginates history without drifting', async () => {
+    const first = await call('/history?limit=2');
+    const page = first.body['entries'] as { id: string }[];
+    assert.equal(page.length, 2);
+    assert.ok(first.body['nextBefore'], 'no cursor for a full page');
+
+    const second = await call(`/history?limit=2&before=${first.body['nextBefore']}`);
+    const nextPage = second.body['entries'] as { id: string }[];
+    // Keyset pagination, so pages never overlap even as new rows land on top.
+    const overlap = nextPage.filter((e) => page.some((p) => p.id === e.id));
+    assert.equal(overlap.length, 0, 'pages overlap');
   });
 
   it('leaves the ledger balanced after everything above', async () => {

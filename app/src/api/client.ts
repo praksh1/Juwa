@@ -64,6 +64,15 @@ export interface RoundResponse {
   fairness: { serverSeedHash: string; clientSeed: string; nonce: number };
 }
 
+export interface HistoryEntry {
+  id: string;
+  /** Positive is coins in, negative is coins out. Never a net figure. */
+  amount: number;
+  type: 'deposit' | 'withdrawal' | 'bet' | 'payout' | 'bonus' | 'adjustment' | 'refund';
+  at: string;
+  meta: Record<string, unknown>;
+}
+
 export interface Profile {
   registered: boolean;
   username?: string;
@@ -88,6 +97,13 @@ export interface PlayApi {
   }): Promise<{ username: string; balance: number; ageVerified: boolean }>;
   claimDailyBonus(): Promise<{ granted: boolean; coins: number; streakDay: number; balance: number; reason?: string }>;
   startCheckout(packId: string): Promise<{ purchaseId: string; checkoutUrl: string; coins: number }>;
+  getHistory(before?: string): Promise<{ entries: HistoryEntry[]; nextBefore: string | null }>;
+  /** Continue a multi-step round: hit, stand, double, split. */
+  act(request: {
+    roundId: string;
+    action: { type: string; [key: string]: unknown };
+    idempotencyKey: string;
+  }): Promise<RoundResponse>;
   getPurchase(id: string): Promise<{ id: string; status: string; coins: number; packId: string }>;
 }
 
@@ -177,6 +193,21 @@ export class HttpPlayApi implements PlayApi {
       `/store/purchase?id=${encodeURIComponent(id)}`,
     );
   }
+
+  getHistory(before?: string) {
+    const query = before ? `?before=${encodeURIComponent(before)}` : '';
+    return this.request<{ entries: HistoryEntry[]; nextBefore: string | null }>(
+      `/history${query}`,
+    );
+  }
+
+  act(request: {
+    roundId: string;
+    action: { type: string; [key: string]: unknown };
+    idempotencyKey: string;
+  }) {
+    return this.request<RoundResponse>('/act', request);
+  }
 }
 
 // ------------------------------------------------------------------- demo
@@ -230,6 +261,28 @@ export class DemoPlayApi implements PlayApi {
 
   async getPurchase(id: string) {
     return { id, status: 'pending', coins: 0, packId: '' };
+  }
+
+  async act(): Promise<RoundResponse> {
+    // Multi-step games need a real dealer holding a real shoe. Faking one on
+    // the device would mean the client deciding card outcomes, which is exactly
+    // what the whole architecture exists to prevent.
+    throw new PlayApiError(
+      'Blackjack needs a configured server — set EXPO_PUBLIC_API_URL.',
+      'server_required',
+    );
+  }
+
+  async getHistory() {
+    const now = Date.now();
+    return {
+      entries: [
+        { id: '3', amount: 12_500, type: 'payout' as const, at: new Date(now - 120_000).toISOString(), meta: { game_id: 'juwa-classic-slots' } },
+        { id: '2', amount: -2_000, type: 'bet' as const, at: new Date(now - 121_000).toISOString(), meta: { game_id: 'juwa-classic-slots' } },
+        { id: '1', amount: 100_000, type: 'bonus' as const, at: new Date(now - 86_400_000).toISOString(), meta: { kind: 'welcome' } },
+      ],
+      nextBefore: null,
+    };
   }
 
   async placeBet(request: { gameId: string; stake: number; idempotencyKey: string }) {

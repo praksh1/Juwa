@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, typography } from '@juwa/ui';
 import { LobbyScreen } from './src/screens/LobbyScreen';
 import { SlotsScreen } from './src/screens/SlotsScreen';
+import { BlackjackScreen } from './src/screens/BlackjackScreen';
 import { StoreScreen } from './src/screens/StoreScreen';
 import { WalletScreen } from './src/screens/WalletScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
@@ -30,6 +31,11 @@ function LobbyStack() {
         name="juwa-classic-slots"
         component={SlotsScreen}
         options={{ headerShown: true, title: 'Juwa Classic' }}
+      />
+      <Stack.Screen
+        name="juwa-blackjack"
+        component={BlackjackScreen}
+        options={{ headerShown: true, title: 'Blackjack' }}
       />
     </Stack.Navigator>
   );

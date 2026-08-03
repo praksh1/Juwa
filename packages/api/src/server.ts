@@ -176,6 +176,43 @@ export function createServer(config: ServerConfig) {
 
     'GET /store': async () => ({ packs: COIN_PACKS, vipTiers: VIP_TIERS }),
 
+    /**
+     * The player's coin history, straight from the ledger.
+     *
+     * Every row here is one side of a balanced double-entry transaction, which
+     * is why a support question — "where did my 500 coins go?" — always has an
+     * answer that reconciles. Nothing is summarised or recomputed for display.
+     */
+    'GET /history': async (ctx) => {
+      const limit = Math.min(100, Math.max(1, Number(ctx.url.searchParams.get('limit') ?? 50)));
+      const before = ctx.url.searchParams.get('before');
+
+      const { rows } = await config.query<Record<string, unknown>>(
+        `select e.id, e.amount, e.created_at, t.type, t.metadata
+           from ledger_entries e
+           join transactions t on t.id = e.transaction_id
+           join accounts a on a.id = e.account_id
+          where a.owner_id = $1 and a.kind = 'player' and a.currency = 'GC'
+            and ($2::bigint is null or e.id < $2::bigint)
+          order by e.id desc
+          limit $3`,
+        [ctx.player.playerId, before ?? null, limit],
+      );
+
+      return {
+        entries: rows.map((row) => ({
+          id: String(row['id']),
+          amount: Number(row['amount']),
+          type: row['type'],
+          at: row['created_at'],
+          meta: row['metadata'] ?? {},
+        })),
+        // Keyset pagination rather than OFFSET: a player's history only grows,
+        // and OFFSET pages drift as new rows land at the top.
+        nextBefore: rows.length === limit ? String(rows[rows.length - 1]!['id']) : null,
+      };
+    },
+
     'POST /register': async (ctx) => {
       const { username, dateOfBirth, country } = ctx.body as {
         username?: string;

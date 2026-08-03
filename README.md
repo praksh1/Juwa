@@ -36,7 +36,7 @@ never on a device the player controls.
 npm install
 npm run build      # compile shared packages
 npm test           # 78 tests (no database needed)
-npm run test:db    # +60 tests against a real Postgres — play, API and payments
+npm run test:db    # +63 tests against a real Postgres — play, API and payments
 npm run rtp        # simulate 2,000,000 spins, report real payout rates
 npm run economy    # simulate player sessions — how long does a balance last?
 
@@ -69,8 +69,10 @@ PGPORT=5432 db/test/run.sh
 | Design tokens (WCAG AA verified) | ✅ tested |
 | App shell — lobby, store, wallet, profile | ✅ builds & renders |
 | Free-spins bonus round with running total | ✅ **verified in browser** |
-| Blackjack / roulette UI, sound | ⬜ next |
-| Transaction history from the ledger | ⬜ next |
+| Blackjack table — splits, doubles, dealt cards | ✅ **verified in browser** |
+| Sound — synthesised, no audio files | ✅ verified |
+| Roulette UI | ⬜ next |
+| Transaction history from the ledger | ✅ tested |
 | Stripe checkout — signed webhooks, replay-proof | ✅ **verified end to end** |
 
 ## Principles
@@ -98,6 +100,12 @@ disclosed while it can still predict a future spin.
 **No window where a stake is taken but a payout is lost.** The nonce is claimed
 first (moving no money), the engine runs, and then debit-credit-record happens in
 a single transaction. See [The Play Path](docs/06-the-play-path.md).
+
+**Sound is synthesised, not sampled.** `app/src/sound.ts` builds every effect
+from oscillators and filtered noise at runtime — about 6KB of code instead of a
+sample pack, and no licence to track. The trade is honest: it reads as arcade
+rather than as a Vegas floor, and swapping in CC0 samples later means changing
+the bodies of those functions and nothing else.
 
 **Coins are granted by the webhook, never the redirect.** A success URL is not
 proof of payment — anyone can visit it. Three independent layers stop a replayed

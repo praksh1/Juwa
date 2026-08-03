@@ -3,6 +3,7 @@ import { StyleSheet, Switch, View } from 'react-native';
 import { colors, spacing } from '@juwa/ui';
 import { Card, Screen, SectionHeader, Txt } from '../components/primitives';
 import { createPlayApi, type Profile } from '../api/client';
+import { isMuted, setMuted, sounds, unlock } from '../sound';
 
 /**
  * Profile wireframe.
@@ -11,7 +12,19 @@ import { createPlayApi, type Profile } from '../api/client';
  * deep. That placement is a legal requirement in licensed markets and the
  * right default everywhere else.
  */
-function Row({ label, hint, value }: { label: string; hint?: string; value?: string }) {
+function Row({
+  label,
+  hint,
+  value,
+  switchValue,
+  onToggle,
+}: {
+  label: string;
+  hint?: string;
+  value?: string;
+  switchValue?: boolean;
+  onToggle?: (next: boolean) => void;
+}) {
   return (
     <View style={styles.row}>
       <View style={styles.rowLeft}>
@@ -27,7 +40,11 @@ function Row({ label, hint, value }: { label: string; hint?: string; value?: str
           {value}
         </Txt>
       ) : (
-        <Switch value={false} onValueChange={() => {}} />
+        <Switch
+          value={switchValue ?? false}
+          onValueChange={(next) => onToggle?.(next)}
+          accessibilityLabel={label}
+        />
       )}
     </View>
   );
@@ -36,6 +53,7 @@ function Row({ label, hint, value }: { label: string; hint?: string; value?: str
 export function ProfileScreen() {
   const api = React.useRef(createPlayApi()).current;
   const [username, setUsername] = React.useState<string | null>(null);
+  const [soundOn, setSoundOn] = React.useState(!isMuted());
 
   React.useEffect(() => {
     api.getProfile().then((profile: Profile) => setUsername(profile.username ?? null)).catch(() => {});
@@ -78,7 +96,21 @@ export function ProfileScreen() {
         <Card style={styles.group}>
           <Row label="Email" value="alex@example.com" />
           <Row label="Notifications" />
-          <Row label="Sound effects" />
+          <Row
+            label="Sound effects"
+            hint="Reels, wins and card sounds"
+            switchValue={soundOn}
+            onToggle={(next) => {
+              setSoundOn(next);
+              setMuted(!next);
+              // Play the confirmation AFTER unmuting, so turning sound on is
+              // audibly confirmed rather than silently accepted.
+              if (next) {
+                unlock();
+                sounds.tap();
+              }
+            }}
+          />
           <Row label="Support" value="Contact" />
         </Card>
       </View>

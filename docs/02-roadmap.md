@@ -50,7 +50,7 @@ The money plumbing, with no real money in it yet.
 - [x] Age gate — 18+, enforced in the database *(done, migration 0004)*
 - [x] Wallet and lobby reading the real server balance *(done)*
 - [ ] Password reset and email change
-- [ ] Transaction history from the ledger (the list is still placeholder data)
+- [x] Transaction history, straight from the ledger *(done)*
 - [ ] Test credits so you can play without paying
 - [x] Free economy: welcome, daily streak, top-up *(done, `packages/economy`)*
 - [ ] Responsible-gaming controls: spend limits, self-exclusion
@@ -76,7 +76,7 @@ hardest part of the UI.
 - [x] Playable slot screen with staggered reel animation *(done)*
 - [ ] Win-line overlay for zig-zag paylines (straight rows highlight today)
 - [x] Free-spins sequence — intro, staggered bonus spins, running total *(done)*
-- [ ] Sound: spin loop, reel stops, win stingers
+- [x] Sound — synthesised with the Web Audio API, no asset pack *(done)*
 - [ ] Blackjack and roulette screens (engines and API are already done)
 
 Reel animation uses React Native's built-in `Animated` with the native driver
@@ -95,7 +95,7 @@ Now the architecture pays off. Each new game is one file implementing
 `GameEngine`, one line in the registry, and a renderer — see
 [Adding a game](04-adding-a-game.md).
 
-- [ ] Blackjack UI (engine and API are done — needs a screen)
+- [x] Blackjack UI — dealt cards, splits, doubles, dealer reveal *(done)*
 - [ ] Roulette UI (engine and API are done — needs a screen)
 - [ ] Texas Hold'em — the big one; needs real-time multiplayer, budget for it
 - [ ] Video poker, baccarat, keno, scratch cards

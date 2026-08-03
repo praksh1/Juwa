@@ -5,6 +5,7 @@ import { format, minor } from '@juwa/money';
 import { betOptions, suggestedBet } from '@juwa/economy';
 import { Button, Card, Txt } from '../components/primitives';
 import { Reel } from '../components/Reel';
+import { sounds, unlock } from '../sound';
 import {
   PlayApiError,
   createPlayApi,
@@ -114,6 +115,10 @@ export function SlotsScreen() {
       return;
     }
 
+    // Must happen inside the tap: iOS refuses to start audio otherwise.
+    unlock();
+    sounds.spinStart();
+
     const token = ++spinToken.current;
     setError(null);
     setRound(null);
@@ -154,8 +159,13 @@ export function SlotsScreen() {
       setRound(result);
       setRunningWin(spinWin(state.baseSpin.totalMultiplier));
 
+      const baseWin = spinWin(state.baseSpin.totalMultiplier);
+      if (baseWin >= bet * 10) sounds.bigWin();
+      else if (baseWin > 0) sounds.win();
+
       if (state.freeSpinsAwarded > 0) {
         setFreeSpinsTotal(state.freeSpinsAwarded);
+        sounds.bonus();
         setPhase('fs-intro');
         await wait(1_800);
         if (superseded()) return;
@@ -172,11 +182,14 @@ export function SlotsScreen() {
 
           setGrid(spinResult.grid);
           setRunningWin((won) => won + spinWin(spinResult.totalMultiplier));
+          if (spinResult.totalMultiplier > 0) sounds.win();
           await wait(500);
           if (superseded()) return;
         }
 
         setPhase('fs-total');
+        sounds.bigWin();
+        sounds.coins(8);
         await wait(2_600);
         if (superseded()) return;
       }
@@ -190,6 +203,7 @@ export function SlotsScreen() {
       if (superseded()) return;
       setSpinning(false);
       setPhase('idle');
+      sounds.error();
       // The optimistic debit never happened as far as the server is concerned.
       setBalance((current) => minor(current + bet));
       setError(
@@ -231,6 +245,7 @@ export function SlotsScreen() {
               speed={phase === 'fs' ? FS_SPEED : 1}
               result={grid[i] ?? IDLE_GRID[i]!}
               winningRows={winningRows}
+              onStopped={() => sounds.reelStop(i)}
             />
           ))}
         </View>
