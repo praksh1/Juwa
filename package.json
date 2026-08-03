@@ -15,7 +15,8 @@
     "verify": "npm run test && npm run typecheck",
     "test:db": "npm run build && JUWA_TEST_DATABASE_URL=${JUWA_TEST_DATABASE_URL:-postgres://postgres@localhost:5432/juwa_play} node --test \"packages/server/dist/**/*.test.js\"",
     "migration": "node scripts/build-migration.mjs",
-    "check": "node scripts/check-deployment.mjs"
+    "check": "node scripts/check-deployment.mjs",
+    "build:web": "npm run build --workspace @juwa/money && npm run build --workspace @juwa/economy && npm run build --workspace @juwa/ui && npm run build:web --workspace @juwa/app"
   },
   "engines": {
     "node": ">=20"

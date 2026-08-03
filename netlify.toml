@@ -12,9 +12,16 @@
 #   EXPO_PUBLIC_SUPABASE_ANON_KEY /
 
 [build]
-  base = "app"
+  # No `base`. Juwa is an npm workspace, so the install has to happen at the
+  # repo root — running it inside app/ leaves @juwa/ui and friends unlinked and
+  # the bundle fails with "Unable to resolve @juwa/ui".
   command = "npm run build:web"
   publish = "app/dist"
+
+# `build:web` at the root compiles the shared packages FIRST and then exports
+# the site. The app resolves @juwa/ui through its package.json `main`, which
+# points at dist/ — so on a fresh clone, where nothing is built yet, exporting
+# without that step cannot resolve a single shared import.
 
 [build.environment]
   # Expo's web export needs a modern Node. Netlify defaults to older.
