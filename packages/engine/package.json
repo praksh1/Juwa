@@ -1,0 +1,23 @@
+{
+  "name": "@juwa/engine",
+  "version": "0.1.0",
+  "description": "Server-authoritative game engines, provably-fair RNG, and money primitives for Juwa.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test \"dist/**/*.test.js\"",
+    "rtp": "npm run build && node dist/tools/rtp.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "@juwa/money": "*"
+  }
+}

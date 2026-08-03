@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Juwa",
+    "slug": "juwa",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "juwa",
+    "backgroundColor": "#0A0710",
+    "splash": {
+      "backgroundColor": "#0A0710",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.juwa.app"
+    },
+    "android": {
+      "package": "com.juwa.app",
+      "adaptiveIcon": { "backgroundColor": "#0A0710" }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    }
+  }
+}

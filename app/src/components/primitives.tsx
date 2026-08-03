@@ -1,0 +1,219 @@
+/**
+ * Shared UI primitives.
+ *
+ * Everything here reads its values from `@juwa/ui` tokens. No component in this
+ * app should ever contain a raw colour or a raw pixel value — if you find
+ * yourself typing `#D4AF37` or `marginTop: 13`, the token is missing and should
+ * be added rather than worked around.
+ */
+
+import React from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type TextStyle,
+  type ViewStyle,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { colors, layout, radius, spacing, typography } from '@juwa/ui';
+
+// ------------------------------------------------------------------- screen
+
+/**
+ * Standard scrollable screen.
+ *
+ * Every screen goes through this so the safe-area insets are handled in exactly
+ * one place. Without the top inset, content slides under the notch and the
+ * status bar; without the bottom inset it hides behind the iPhone home
+ * indicator. Both look fine in a simulator and broken on a real phone, which is
+ * why it belongs in a shared component rather than in each screen.
+ */
+export function Screen({
+  children,
+  contentStyle,
+}: {
+  children: React.ReactNode;
+  contentStyle?: StyleProp<ViewStyle>;
+}) {
+  const insets = useSafeAreaInsets();
+  return (
+    <ScrollView
+      style={styles.screen}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={[
+        styles.screenContent,
+        { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing['4xl'] },
+        contentStyle,
+      ]}
+    >
+      {children}
+    </ScrollView>
+  );
+}
+
+// --------------------------------------------------------------------- text
+
+type TextVariant = keyof typeof typography;
+
+export function Txt({
+  variant = 'body',
+  color = colors.text.primary,
+  style,
+  children,
+  numberOfLines,
+}: {
+  variant?: TextVariant;
+  color?: string;
+  style?: StyleProp<TextStyle>;
+  children: React.ReactNode;
+  numberOfLines?: number;
+}) {
+  return (
+    <Text
+      numberOfLines={numberOfLines}
+      style={[typography[variant] as TextStyle, { color }, style]}
+    >
+      {children}
+    </Text>
+  );
+}
+
+// ------------------------------------------------------------------- button
+
+export function Button({
+  label,
+  onPress,
+  variant = 'primary',
+  disabled = false,
+  loading = false,
+  style,
+}: {
+  label: string;
+  onPress: () => void;
+  variant?: 'primary' | 'secondary' | 'ghost';
+  disabled?: boolean;
+  loading?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const isDisabled = disabled || loading;
+  const palette = {
+    primary: { bg: colors.gold.default, fg: colors.text.inverse, border: 'transparent' },
+    secondary: { bg: colors.surface.overlay, fg: colors.text.primary, border: colors.surface.border },
+    ghost: { bg: 'transparent', fg: colors.gold.default, border: 'transparent' },
+  }[variant];
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={isDisabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
+      style={({ pressed }) => [
+        styles.button,
+        {
+          backgroundColor: palette.bg,
+          borderColor: palette.border,
+          // Pressing shrinks the button very slightly. It is barely perceptible
+          // and it is most of why a UI feels physical rather than flat.
+          transform: [{ scale: pressed && !isDisabled ? 0.97 : 1 }],
+          opacity: isDisabled ? 0.45 : 1,
+        },
+        style,
+      ]}
+    >
+      {loading ? (
+        <ActivityIndicator color={palette.fg} />
+      ) : (
+        <Text numberOfLines={1} style={[typography.h3 as TextStyle, { color: palette.fg }]}>
+          {label}
+        </Text>
+      )}
+    </Pressable>
+  );
+}
+
+// --------------------------------------------------------------------- card
+
+export function Card({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return <View style={[styles.card, style]}>{children}</View>;
+}
+
+// ------------------------------------------------------------------- badge
+
+export function Badge({ label, color = colors.gold.default }: { label: string; color?: string }) {
+  return (
+    <View style={[styles.badge, { backgroundColor: color }]}>
+      <Text style={[typography.caption as TextStyle, styles.badgeText]}>{label.toUpperCase()}</Text>
+    </View>
+  );
+}
+
+// ----------------------------------------------------------- section header
+
+export function SectionHeader({ title, action }: { title: string; action?: string }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <Txt variant="h3">{title}</Txt>
+      {action ? (
+        <Txt variant="bodySmall" color={colors.gold.default}>
+          {action}
+        </Txt>
+      ) : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.surface.base },
+  screenContent: {
+    paddingHorizontal: layout.screenPadding,
+    gap: spacing.xl,
+    maxWidth: layout.maxContentWidth,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  button: {
+    minHeight: layout.minTouchTarget,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  card: {
+    backgroundColor: colors.surface.raised,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.surface.border,
+    padding: spacing.lg,
+  },
+  badge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.sm,
+    alignSelf: 'flex-start',
+  },
+  badgeText: {
+    color: colors.text.inverse,
+    letterSpacing: 0.6,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
+});
