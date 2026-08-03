@@ -80,6 +80,34 @@ schema is select-only and scoped to `auth.uid()`.
 **The JWT secret is not public.** Anyone holding it can mint a token for any
 player.
 
+### Doing step 1 from a phone
+
+The Supabase dashboard collapses its left sidebar on a narrow screen, so
+"SQL Editor → New query" is not visible on iOS Safari. Two things make the whole
+step work from a phone with no laptop.
+
+**Navigate by URL instead of by sidebar.** `supabase.com/dashboard/project/_/sql/new`
+opens a blank query against your current project. The `_` is Supabase's
+"whichever project I'm in" placeholder; if an account rejects it, the project
+reference is already in the address bar — append `/sql/new` to it.
+
+**Get the SQL from the raw file, not the GitHub file view.** GitHub's rendered
+view of a 50KB file is paginated and its copy button is easy to miss on a phone.
+The raw URL is plain text, so long-press → **Select All** → **Copy** takes the
+whole file in one go:
+
+```
+raw.githubusercontent.com/praksh1/Juwa/<branch>/db/migrations/ALL.sql
+```
+
+Copy first, then navigate to Supabase — the clipboard survives the tab change.
+Pasting 50KB into the editor takes a few seconds on a phone; wait for it before
+tapping **Run**.
+
+If any Supabase page looks squashed or is missing controls, **`aA`** in Safari's
+address bar → **Request Desktop Website** restores the full layout at the cost of
+pinch-zooming.
+
 ---
 
 ## 2. The API
