@@ -1,64 +1,84 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, View } from 'react-native';
-import { colors, motion, radius, spacing } from '@juwa/ui';
+import { Animated, StyleSheet, View } from 'react-native';
+import { colors, radius } from '@juwa/ui';
 import { SlotSymbol } from './SlotSymbol';
+import { spinNow } from '../sound';
 
 /**
  * One reel of the slot machine.
  *
- * HOW A REEL ACTUALLY BEHAVES
+ * ONE CLOCK
  *
- * A physical reel spins for as long as it needs to and then stops. It does not
- * spin for a duration agreed in advance — which is what this component used to
- * do, and it caused two visible faults:
+ * The reel's position is a pure function of `spinNow()` — the same clock the
+ * stop sounds are scheduled against. Every frame asks "what time is it, and
+ * where should I therefore be", rather than advancing a tween by however long
+ * the last frame happened to take.
  *
- *   1. The reels ran on a fixed timer started at the tap, while the result
- *      arrived over the network. Everything keyed to "the reels have landed"
- *      was therefore late by exactly the round-trip time, and that time changes
- *      every spin. The stop sounds drifted away from the stopping.
- *   2. When the network was slower than the animation, the reels stopped on the
- *      *previous* result and the new symbols appeared afterwards.
+ * That matters because the alternative is two clocks. A tween driven by frame
+ * deltas and a sound booked on the audio clock agree at the start and diverge
+ * from there — a dropped frame moves the picture but not the sound. 50-300ms
+ * of drift is exactly what makes a slot machine feel broken, and it is the
+ * single most common defect in a web slot.
  *
- * So the reel has three phases instead. It idles, it loops indefinitely while
- * we wait for the server, and when the result exists it lands — decelerating
- * onto the real symbols. `onLanded` fires from the landing animation's own
- * completion callback, so anything scheduled off it is in sync by construction
- * rather than by arithmetic.
+ * Because position is derived rather than accumulated, a stalled tab or a
+ * garbage-collection pause cannot desynchronise anything: the reel simply
+ * appears where it should be for the current time, and the sound that was
+ * booked for that instant still fires on the audio thread.
  *
- * The loop and the landing use different strips. During the loop the reel shows
- * filler only; the landing strip is filler followed by the result. The swap
- * happens while the strip is moving at full speed, where it cannot be seen.
+ * REELS MUST TRAVEL
+ *
+ * Each landing starts by displacing the strip a fixed distance and easing back
+ * to zero, and the landing strip is rebuilt from the incoming result every
+ * time. The reel therefore always has ground to cover. The classic bug here is
+ * a reel that lands on an absolute index and is then asked to travel to that
+ * same index next spin, covering zero distance — the reels never move again
+ * while every other part of the machine keeps running, so results appear
+ * instantly with no animation. `landingTravel` is a non-zero constant, which is
+ * what makes that impossible.
  */
 
 const FILLER = ['CHERRY', 'LEMON', 'PLUM', 'BAR', 'BELL', 'SEVEN', 'DIAMOND', 'WILD'];
 const SYMBOL_SIZE = 58;
 const VISIBLE_ROWS = 3;
-/** Symbols in one loop cycle. More is smoother; fewer is cheaper to render. */
+/** Symbols in one loop cycle. */
 const LOOP_SYMBOLS = 8;
 /** Decorative symbols that scroll past during the landing deceleration. */
 const LANDING_FILLER = 10;
-/** One full loop cycle. ~55ms per symbol reads as a blur, not as a slideshow. */
-const LOOP_MS = LOOP_SYMBOLS * 55;
+/** Loop scroll rate, symbols per second. Fast enough to blur. */
+const LOOP_SYMBOLS_PER_SECOND = 18;
 
 export type ReelPhase = 'idle' | 'spinning' | 'landing';
+
+/**
+ * Fast out, hard decelerate, overshoot, settle — a reel hitting its detent.
+ *
+ * The overshoot is not decoration. A curve that approaches its target
+ * asymptotically looks stopped well before it formally ends, so a stop sound
+ * booked for the end arrives after the picture has already settled. This one is
+ * still visibly moving until the last frame.
+ */
+function easeOutBack(u: number): number {
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  const p = u - 1;
+  return 1 + c3 * p * p * p + c1 * p * p;
+}
 
 export interface ReelProps {
   /** The three symbols this reel shows once landed, top to bottom. */
   result: string[];
-  /** Which reel this is, 0-based. Drives the stagger. */
+  /** Which reel this is, 0-based. */
   index: number;
   phase: ReelPhase;
+  /** Absolute time on the shared clock at which this reel begins landing. */
+  landFrom?: number;
+  /** How long this reel's landing takes, in seconds. */
+  landDuration?: number;
   /** Rows that form part of a winning line, for the highlight. */
   winningRows?: number[];
-  /**
-   * Multiplier on the landing duration. Free spins run at ~0.45: the tension
-   * that earns a slow base spin is already spent, and a dozen full-length
-   * landings is a minute of waiting.
-   */
-  speed?: number;
   /** Increments once per spin, so each spin is a distinct animation. */
   round?: number;
-  /** Fires when this reel physically stops. The only correct stop signal. */
+  /** Fires when this reel physically stops. */
   onLanded?: () => void;
 }
 
@@ -70,8 +90,9 @@ export function Reel({
   result,
   index,
   phase,
+  landFrom = 0,
+  landDuration = 1,
   winningRows = [],
-  speed = 1,
   round = 0,
   onLanded,
 }: ReelProps) {
@@ -79,8 +100,8 @@ export function Reel({
   const loopFiller = useRef<string[]>(randomFiller(LOOP_SYMBOLS)).current;
   const landingFiller = useRef<string[]>(randomFiller(LANDING_FILLER)).current;
 
-  // Keep the callback in a ref: it changes identity on every render of the
-  // parent, and depending on it directly would restart the animation mid-spin.
+  // Held in a ref: it changes identity on every parent render, and depending on
+  // it would restart the animation mid-spin.
   const landedRef = useRef(onLanded);
   landedRef.current = onLanded;
 
@@ -88,64 +109,63 @@ export function Reel({
   const landing = phase === 'landing';
 
   // The loop strip is duplicated so translating by exactly one cycle height
-  // returns to an identical image — that is what makes the repeat invisible.
+  // returns an identical image, which is what makes the repeat invisible.
   const loopStrip = [...loopFiller, ...loopFiller];
   const loopSpan = LOOP_SYMBOLS * SYMBOL_SIZE;
 
   const landingStrip = [...landingFiller, ...result];
   const landingTravel = LANDING_FILLER * SYMBOL_SIZE;
 
+  // ------------------------------------------------------------------- loop
   useEffect(() => {
     if (!spinning) return;
 
-    // Every reel starts its loop at a different point in the cycle, so five
-    // reels do not move as one rigid block.
-    const startAt = (loopSpan * index) / 5;
-    offset.setValue(startAt);
+    // Each reel starts at a different point in the cycle so five reels do not
+    // move as one rigid block.
+    const phaseOffset = (loopSpan * index) / 5;
+    const startedAt = spinNow();
+    let frame = 0;
 
-    const loop = Animated.loop(
-      Animated.timing(offset, {
-        toValue: startAt - loopSpan,
-        duration: LOOP_MS,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    );
-    loop.start();
-    return () => loop.stop();
+    const tick = () => {
+      const elapsed = spinNow() - startedAt;
+      const travelled = elapsed * LOOP_SYMBOLS_PER_SECOND * SYMBOL_SIZE;
+      // Modulo keeps the value bounded; without it the transform grows without
+      // limit and eventually loses precision.
+      offset.setValue(((phaseOffset - travelled) % loopSpan) + loopSpan);
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spinning, index, loopSpan]);
 
+  // ---------------------------------------------------------------- landing
   useEffect(() => {
     if (!landing) return;
 
-    offset.setValue(landingTravel);
-    const duration = (motion.reelSpin * 0.42 + index * motion.reelStagger) * speed;
+    let frame = 0;
+    let done = false;
 
-    const animation = Animated.timing(offset, {
-      toValue: 0,
-      /**
-       * Overshoot slightly and snap back, the way a mechanical reel settles
-       * against its detent.
-       *
-       * This is not only about feel. A plain ease-out approaches zero
-       * asymptotically: the reel LOOKS stopped roughly 140ms before the tween
-       * formally ends, so the stop sound — which fires on completion — landed
-       * that far behind the picture. Measured at 138ms before this change and
-       * under 40ms after. A curve that is still visibly moving right up to the
-       * end makes the completion callback and the apparent stop the same event.
-       */
-      easing: Easing.out(Easing.back(1.4)),
-      duration,
-      useNativeDriver: true,
-    });
+    const tick = () => {
+      const u = Math.min(1, Math.max(0, (spinNow() - landFrom) / landDuration));
+      offset.setValue(landingTravel * (1 - easeOutBack(u)));
 
-    animation.start(({ finished }) => {
-      if (finished) landedRef.current?.();
-    });
-    return () => animation.stop();
+      if (u < 1) {
+        frame = requestAnimationFrame(tick);
+        return;
+      }
+      // Land exactly on zero. The eased value is within a fraction of a pixel
+      // at u = 1, but "within a fraction" is not "on the payline".
+      offset.setValue(0);
+      if (!done) {
+        done = true;
+        landedRef.current?.();
+      }
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [landing, index, landingTravel, speed, round]);
+  }, [landing, landFrom, landDuration, landingTravel, round]);
 
   const strip = spinning ? loopStrip : landingStrip;
   const resultStart = spinning ? Infinity : landingFiller.length;
@@ -177,7 +197,7 @@ const styles = StyleSheet.create({
     height: SYMBOL_SIZE * VISIBLE_ROWS,
     // The strip is taller than the window; this is what turns it into a window.
     overflow: 'hidden',
-    backgroundColor: '#080D1C',
+    backgroundColor: '#05091A',
     borderRadius: radius.sm,
     // The result sits at the bottom of the strip, so the window shows the end.
     justifyContent: 'flex-end',
@@ -192,6 +212,3 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
   },
 });
-
-export const REEL_SYMBOL_SIZE = SYMBOL_SIZE;
-export const REEL_GAP = spacing.xs;

@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { colors, motion, radius, spacing } from '@juwa/ui';
+import { colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
 import { betOptions, suggestedBet } from '@juwa/economy';
 import { Button, Card, Txt } from '../components/primitives';
 import { Reel, type ReelPhase } from '../components/Reel';
-import { sounds, unlock } from '../sound';
+import { sounds, spinNow, unlock } from '../sound';
 import {
   PlayApiError,
   createPlayApi,
@@ -21,6 +21,36 @@ const MAX_BET = minor(50_000);
 const REELS = 5;
 /** Free spins run at this fraction of the base spin duration. */
 const FS_SPEED = 0.45;
+
+/**
+ * The landing schedule, in seconds. These are the numbers that decide whether
+ * the machine feels mechanical or cheap.
+ */
+const BASE_LAND_SECONDS = 0.95;
+/** Gap between consecutive reels stopping. */
+const STAGGER_SECONDS = 0.27;
+/** Added to the final reel when a win is still live on it. */
+const ANTICIPATION_SECONDS = 0.7;
+/** Booked slightly ahead so the audio thread receives the schedule in time. */
+const LEAD_IN_SECONDS = 0.04;
+
+/**
+ * Is a win still possible once four reels have landed?
+ *
+ * Two scatters in the first four reels means a third anywhere on the last reel
+ * triggers the bonus round. That is the moment worth stretching: the player can
+ * see it coming, and a reel that simply stops on schedule throws the tension
+ * away. Line wins are deliberately not included — with wilds and twenty
+ * paylines almost every spin leaves something technically live, and a machine
+ * that anticipates every spin has stopped anticipating anything.
+ */
+function shouldAnticipate(grid: string[][]): boolean {
+  let scatters = 0;
+  for (const column of grid.slice(0, REELS - 1)) {
+    for (const symbol of column) if (symbol === 'SCATTER') scatters++;
+  }
+  return scatters >= 2;
+}
 
 const IDLE_GRID: string[][] = Array.from({ length: REELS }, () => [
   'CHERRY',
@@ -72,15 +102,24 @@ export function SlotsScreen() {
   const [runningWin, setRunningWin] = useState(0);
   // Increments per spin so each reel run is a distinct animation.
   const [reelRound, setReelRound] = useState(0);
-  const [reelSpeed, setReelSpeed] = useState(1);
+  /**
+   * The landing schedule: when each reel starts settling and for how long, in
+   * seconds on the shared clock. Computed once per spin and handed to the
+   * reels, so every reel and every stop sound refers to one timeline.
+   */
+  const [schedule, setSchedule] = useState<{ from: number; duration: number }[]>([]);
   /**
    * Resolved by the LAST reel's own stop callback. This is the handshake that
    * keeps the sound and the readout tied to what is actually on screen.
    */
   const landingResolver = useRef<(() => void) | null>(null);
 
+  /**
+   * The reel's own stop callback. It no longer plays the sound — that was
+   * booked in advance against the audio clock — it only reports that the last
+   * reel has physically settled, which is what the spin sequence waits on.
+   */
   const handleReelLanded = useCallback((index: number) => {
-    sounds.reelStop(index);
     if (index === REELS - 1) {
       landingResolver.current?.();
       landingResolver.current = null;
@@ -162,8 +201,35 @@ export function SlotsScreen() {
     const landReels = (next: string[][], speedScale: number) =>
       new Promise<void>((resolve) => {
         landingResolver.current = resolve;
+
+        // Book the entire landing before any of it happens.
+        //
+        // A small lead-in gives the audio thread time to receive the schedule;
+        // without it the first stop can be requested for a moment that has
+        // already passed and fires late.
+        const t0 = spinNow() + LEAD_IN_SECONDS;
+        const anticipate = shouldAnticipate(next);
+
+        const plan = Array.from({ length: REELS }, (_, i) => {
+          const base = (BASE_LAND_SECONDS + i * STAGGER_SECONDS) * speedScale;
+          // The last reel runs long when a win is still live, so the pause
+          // before it lands is the tension rather than an accident of timing.
+          const extra = anticipate && i === REELS - 1 ? ANTICIPATION_SECONDS : 0;
+          return { from: t0, duration: base + extra };
+        });
+
+        for (const [i, reel] of plan.entries()) {
+          sounds.reelStopAt(i, reel.from + reel.duration);
+        }
+        if (anticipate) {
+          const fourth = plan[REELS - 2]!;
+          const last = plan[REELS - 1]!;
+          const from = fourth.from + fourth.duration;
+          sounds.tensionAt(from, last.from + last.duration - from);
+        }
+
+        setSchedule(plan);
         setGrid(next);
-        setReelSpeed(speedScale);
         setReelRound((n) => n + 1);
         setReelPhase('landing');
       });
@@ -281,7 +347,8 @@ export function SlotsScreen() {
               index={i}
               phase={reelPhase}
               round={reelRound}
-              speed={reelSpeed}
+              landFrom={schedule[i]?.from ?? 0}
+              landDuration={schedule[i]?.duration ?? 1}
               result={grid[i] ?? IDLE_GRID[i]!}
               winningRows={winningRows}
               onLanded={() => handleReelLanded(i)}

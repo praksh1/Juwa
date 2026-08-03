@@ -105,18 +105,24 @@ function tone(
     duration = 0.15,
     gain = 0.5,
     sweepTo,
+    when,
   }: {
     type?: OscillatorType;
     at?: number;
     duration?: number;
     gain?: number;
     sweepTo?: number;
+    when?: number;
   } = {},
 ): void {
   const audio = context();
   if (!audio || !master || muted) return;
 
-  const start = audio.currentTime + at;
+  // `when` is an ABSOLUTE time on the audio clock, for sounds booked in
+  // advance; `at` is relative to now, for sounds fired in response to a tap.
+  // Booking ahead is what keeps a scheduled sound exact — the browser hands it
+  // to the audio thread, so it does not drift with a busy main thread.
+  const start = Math.max(audio.currentTime, when ?? audio.currentTime + at);
   const osc = audio.createOscillator();
   const env = audio.createGain();
 
@@ -146,6 +152,7 @@ function noise({
   frequency = 2000,
   q = 1,
   type = 'bandpass',
+  when,
 }: {
   at?: number;
   duration?: number;
@@ -153,11 +160,12 @@ function noise({
   frequency?: number;
   q?: number;
   type?: BiquadFilterType;
+  when?: number;
 } = {}): void {
   const audio = context();
   if (!audio || !master || muted) return;
 
-  const start = audio.currentTime + at;
+  const start = Math.max(audio.currentTime, when ?? audio.currentTime + at);
   const frames = Math.max(1, Math.floor(audio.sampleRate * duration));
   const buffer = audio.createBuffer(1, frames, audio.sampleRate);
   const data = buffer.getChannelData(0);
@@ -204,6 +212,31 @@ export const sounds = {
     noise({ duration: 0.035, gain: 0.3, frequency: 2600, q: 1.6 });
     // Each reel lands slightly lower than the last, so the run has a shape.
     tone(150 - index * 8, { type: 'sine', duration: 0.09, gain: 0.32 });
+  },
+
+  /**
+   * A reel landing, BOOKED IN ADVANCE at an absolute time on the audio clock.
+   *
+   * This is the half of "one clock" that the sound owns. The reel animation
+   * computes its position from `spinNow()`, which is this same clock, and the
+   * stop is scheduled for the exact instant the animation reaches its end. Both
+   * therefore refer to one timeline rather than two that agree only at the
+   * start — which is what made the old version drift by the network round trip.
+   */
+  reelStopAt(index: number, when: number): void {
+    noise({ when, duration: 0.035, gain: 0.3, frequency: 2600, q: 1.6 });
+    tone(150 - index * 8, { when, type: 'sine', duration: 0.09, gain: 0.32 });
+  },
+
+  /**
+   * The anticipation tone under a reel that could still complete a win.
+   *
+   * Rises across the extended spin so the tension resolves exactly as the reel
+   * lands. Also booked in advance, for the same reason.
+   */
+  tensionAt(when: number, duration: number): void {
+    tone(220, { when, type: 'sawtooth', duration, gain: 0.1, sweepTo: 880 });
+    noise({ when, duration, gain: 0.05, frequency: 1200, q: 0.6, type: 'bandpass' });
   },
 
   /** A modest win: a short major third. */
@@ -259,6 +292,25 @@ export const sounds = {
     tone(180, { type: 'square', duration: 0.12, gain: 0.18 });
   },
 };
+
+/**
+ * The clock everything in a spin is measured against.
+ *
+ * `AudioContext.currentTime` when there is an audio context, because that is
+ * the clock scheduled sounds actually run on. `performance.now()` otherwise —
+ * on a device with no Web Audio, or before the first gesture has unlocked it,
+ * there is no sound to be out of step with, so any monotonic clock will do.
+ *
+ * The rule is that the reels and the sounds must read the SAME function. A
+ * reel animated off `requestAnimationFrame` deltas while its stop sound is
+ * scheduled on the audio clock is two clocks, and they drift.
+ */
+export function spinNow(): number {
+  const audio = context();
+  if (audio) return audio.currentTime;
+  if (isWeb() && typeof performance !== 'undefined') return performance.now() / 1000;
+  return Date.now() / 1000;
+}
 
 /** Test seam: lets the browser check the context actually started. */
 export function audioState(): string | null {
