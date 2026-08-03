@@ -99,6 +99,8 @@ export interface PlayApi {
     username: string;
     dateOfBirth: string;
     country: string;
+    /** USPS state code. Required for US players; the server re-checks it. */
+    region: string;
   }): Promise<{ username: string; balance: number; ageVerified: boolean }>;
   claimDailyBonus(): Promise<{ granted: boolean; coins: number; streakDay: number; balance: number; reason?: string }>;
   startCheckout(packId: string): Promise<{ purchaseId: string; checkoutUrl: string; coins: number }>;
@@ -174,7 +176,7 @@ export class HttpPlayApi implements PlayApi {
     return this.request<Profile>('/me');
   }
 
-  register(details: { username: string; dateOfBirth: string; country: string }) {
+  register(details: { username: string; dateOfBirth: string; country: string; region: string }) {
     return this.request<{ username: string; balance: number; ageVerified: boolean }>(
       '/register',
       details,

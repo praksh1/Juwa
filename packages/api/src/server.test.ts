@@ -16,7 +16,7 @@ import { dirname, resolve } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { PostgresDb } from '@juwa/server';
-import { WELCOME_BONUS } from '@juwa/economy';
+import { RESTRICTED_STATES, WELCOME_BONUS } from '@juwa/economy';
 import { createServer } from './server.js';
 import { signJwt, verifyJwt, AuthError } from './jwt.js';
 import { RateLimiter } from './ratelimit.js';
@@ -120,7 +120,13 @@ describe('api', { skip: URL_ENV ? false : 'JUWA_TEST_DATABASE_URL not set' }, ()
   // Fresh identities for the input-validation cases, for the same reason:
   // registration is rate limited, so reusing one account would turn a
   // validation assertion into a 429.
-  const VALIDATORS = [randomUUID(), randomUUID(), randomUUID()];
+  // One per validation case; each must be a fresh player, because a successful
+  // registration is idempotent and would mask a later failure.
+  const VALIDATORS = [randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+  const RESTRICTED: Record<string, string> = Object.fromEntries(
+    RESTRICTED_STATES.map((code) => [code, randomUUID()]),
+  );
+  const LOWERCASE_REGION = randomUUID();
   const token = (sub: string) =>
     signJwt({ sub, exp: Math.floor(Date.now() / 1000) + 3600 }, SECRET);
 
@@ -232,6 +238,7 @@ describe('api', { skip: URL_ENV ? false : 'JUWA_TEST_DATABASE_URL not set' }, ()
         username: 'kiddo',
         dateOfBirth: tooYoung.toISOString().slice(0, 10),
         country: 'US',
+        region: 'CA',
       },
     });
     assert.equal(response.status, 403);
@@ -244,7 +251,7 @@ describe('api', { skip: URL_ENV ? false : 'JUWA_TEST_DATABASE_URL not set' }, ()
 
   it('registers an adult and pays the welcome bonus once', async () => {
     const response = await call('/register', {
-      body: { username: 'alex', dateOfBirth: '1990-04-01', country: 'US' },
+      body: { username: 'alex', dateOfBirth: '1990-04-01', country: 'US', region: 'CA' },
     });
     assert.equal(response.status, 200);
     assert.equal(response.body['ageVerified'], true);
@@ -252,22 +259,47 @@ describe('api', { skip: URL_ENV ? false : 'JUWA_TEST_DATABASE_URL not set' }, ()
 
     // Registering again must not pay a second welcome bonus.
     const repeat = await call('/register', {
-      body: { username: 'alex', dateOfBirth: '1990-04-01', country: 'US' },
+      body: { username: 'alex', dateOfBirth: '1990-04-01', country: 'US', region: 'CA' },
     });
     assert.equal(repeat.status, 200);
     assert.equal(repeat.body['balance'], WELCOME_BONUS, 'welcome bonus paid twice');
   });
 
   it('validates registration input', async () => {
+    // Each case carries a valid region, so a 400 means the defect under test
+    // rather than the jurisdiction check catching it first.
     const cases = [
-      { username: 'ok', dateOfBirth: '1990-01-01' },   // username too short
-      { username: 'okname', dateOfBirth: '01/01/1990' }, // wrong date format
-      { username: 'okname' },                            // no date at all
+      { username: 'ok', dateOfBirth: '1990-01-01', country: 'US', region: 'CA' },   // username too short
+      { username: 'okname', dateOfBirth: '01/01/1990', country: 'US', region: 'CA' }, // wrong date format
+      { username: 'okname', country: 'US', region: 'CA' },                           // no date at all
+      { username: 'okname', dateOfBirth: '1990-01-01', country: 'US' },              // no state
+      { username: 'okname', dateOfBirth: '1990-01-01', country: 'US', region: 'ZZ' },// not a state
     ];
     for (const [i, body] of cases.entries()) {
       const response = await call('/register', { auth: token(VALIDATORS[i]!), body });
       assert.equal(response.status, 400, `${JSON.stringify(body)} -> ${JSON.stringify(response.body)}`);
     }
+  });
+
+  it('refuses to register a player in a restricted state', async () => {
+    for (const region of RESTRICTED_STATES) {
+      const response = await call('/register', {
+        auth: token(RESTRICTED[region]!),
+        body: { username: `resident${region}`, dateOfBirth: '1990-01-01', country: 'US', region },
+      });
+      assert.equal(response.status, 403, `${region} was allowed to register`);
+      assert.equal(response.body['error'], 'restricted_region');
+    }
+  });
+
+  it('accepts a lower-case state code', async () => {
+    // The dropdown sends upper case, but the endpoint is public and a hand
+    // written request should not fail on capitalisation alone.
+    const response = await call('/register', {
+      auth: token(LOWERCASE_REGION),
+      body: { username: 'lowercase', dateOfBirth: '1990-01-01', country: 'US', region: 'ca' },
+    });
+    assert.equal(response.status, 200);
   });
 
   it('plays a spin over HTTP and the balance follows the ledger', async () => {
@@ -307,7 +339,7 @@ describe('api', { skip: URL_ENV ? false : 'JUWA_TEST_DATABASE_URL not set' }, ()
   it('rate limits a spin flood', async () => {
     await call('/register', {
       auth: token(FLOODER),
-      body: { username: 'flooder', dateOfBirth: '1985-06-15', country: 'US' },
+      body: { username: 'flooder', dateOfBirth: '1985-06-15', country: 'US', region: 'CA' },
     });
 
     // Far faster than the reel animation allows, so only a script gets here.

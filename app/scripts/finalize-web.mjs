@@ -10,7 +10,11 @@
  *   node app/scripts/finalize-web.mjs <dist-dir>
  */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/** app/, regardless of the working directory the build ran from. */
+const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 const dist = resolve(process.argv[2] ?? 'dist');
 const indexPath = resolve(dist, 'index.html');
@@ -58,7 +62,28 @@ if (absent.length > 0) {
   console.error(`Manifest references missing icons: ${absent.join(', ')}`);
   process.exit(1);
 }
-console.log(`verified ${manifest.icons.length} icons and the service worker`);
+// The product name lives in src/brand.ts, but app.json and manifest.json are
+// static files the bundler and the browser read directly and cannot import it.
+// Three copies of a name is how an app ends up called two different things on
+// the home screen and in the tab, so they are compared here and the build fails
+// rather than shipping the disagreement.
+const brandSource = readFileSync(resolve(appRoot, 'src/brand.ts'), 'utf8');
+const declaredName = brandSource.match(/APP_NAME\s*=\s*'([^']+)'/)?.[1];
+if (!declaredName) {
+  console.error('Could not read APP_NAME from src/brand.ts');
+  process.exit(1);
+}
+
+const expoName = JSON.parse(readFileSync(resolve(appRoot, 'app.json'), 'utf8')).expo?.name;
+const names = { 'src/brand.ts': declaredName, 'app.json': expoName, 'manifest.json': manifest.name };
+const disagreeing = Object.entries(names).filter(([, value]) => value !== declaredName);
+if (disagreeing.length > 0) {
+  console.error('Product name disagrees across files:');
+  for (const [file, value] of Object.entries(names)) console.error(`  ${file}: ${value}`);
+  process.exit(1);
+}
+
+console.log(`verified ${manifest.icons.length} icons, the service worker, and the name "${declaredName}"`);
 
 if (!existsSync(resolve(dist, 'sw.js'))) {
   console.error('sw.js is missing from the build');

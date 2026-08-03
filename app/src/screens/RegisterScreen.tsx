@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { colors, layout, radius, spacing, typography } from '@juwa/ui';
 import { format } from '@juwa/money';
-import { WELCOME_BONUS } from '@juwa/economy';
+import { RESTRICTED_STATE_MESSAGE, WELCOME_BONUS, isRestrictedState, selectableStates } from '@juwa/economy';
 import { Button, Card, Screen, Txt } from '../components/primitives';
+import { LegalFooter } from '../components/LegalFooter';
+import { StatePicker } from '../components/StatePicker';
 
 /**
  * The age gate.
@@ -28,14 +30,18 @@ export function RegisterScreen({
     username: string;
     dateOfBirth: string;
     country: string;
+    region: string;
   }) => Promise<{ ok: boolean; message?: string }>;
 }) {
   const [username, setUsername] = useState('');
   const [day, setDay] = useState('');
   const [month, setMonth] = useState('');
   const [year, setYear] = useState('');
+  const [region, setRegion] = useState('');
+  const [confirmedAdult, setConfirmedAdult] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const states = useMemo(() => selectableStates(), []);
 
   const dateOfBirth = useMemo(() => {
     if (!/^\d{1,2}$/.test(day) || !/^\d{1,2}$/.test(month) || !/^\d{4}$/.test(year)) return null;
@@ -68,12 +74,31 @@ export function RegisterScreen({
       return;
     }
     if (age !== null && (age < 18 || age > 120)) {
-      setMessage(age < 18 ? 'You must be 18 or over to play Juwa.' : 'Check the year of birth.');
+      setMessage(age < 18 ? 'You must be 18 or over to play.' : 'Check the year of birth.');
+      return;
+    }
+    if (!region) {
+      setMessage('Choose the state you live in.');
+      return;
+    }
+    // Restricted states are absent from the dropdown, so this only fires for a
+    // value that did not come from it. The server checks again regardless.
+    if (isRestrictedState(region)) {
+      setMessage(RESTRICTED_STATE_MESSAGE);
+      return;
+    }
+    if (!confirmedAdult) {
+      setMessage('Please confirm you are 18 or over.');
       return;
     }
 
     setBusy(true);
-    const result = await onRegister({ username: username.trim(), dateOfBirth, country: 'US' });
+    const result = await onRegister({
+      username: username.trim(),
+      dateOfBirth,
+      country: 'US',
+      region,
+    });
     setBusy(false);
     if (!result.ok) setMessage(result.message ?? 'Could not complete registration.');
   };
@@ -139,6 +164,30 @@ export function RegisterScreen({
           ) : null}
         </View>
 
+        <StatePicker states={states} value={region} onChange={setRegion} />
+
+        {/* An explicit affirmation, separate from the date of birth. The date
+            is a fact we check; this is a statement the player makes. Keeping
+            them apart is what makes the record worth anything later. */}
+        <Pressable
+          onPress={() => setConfirmedAdult((on) => !on)}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: confirmedAdult }}
+          accessibilityLabel="I confirm I am 18 or over"
+          style={styles.checkRow}
+        >
+          <View style={[styles.checkbox, confirmedAdult && styles.checkboxOn]}>
+            {confirmedAdult ? (
+              <Txt variant="caption" color={colors.text.inverse}>
+                ✓
+              </Txt>
+            ) : null}
+          </View>
+          <Txt variant="bodySmall" color={colors.text.secondary} style={styles.checkLabel}>
+            I confirm I am 18 or over and that coins have no cash value.
+          </Txt>
+        </Pressable>
+
         {message ? (
           <Txt variant="bodySmall" color={colors.feedback.error}>
             {message}
@@ -149,13 +198,11 @@ export function RegisterScreen({
           label={`Start with ${format(WELCOME_BONUS, 'GC')}`}
           onPress={submit}
           loading={busy}
-          disabled={busy || (age !== null && age < 18)}
+          disabled={busy || (age !== null && age < 18) || !confirmedAdult || !region}
         />
       </Card>
 
-      <Txt variant="caption" color={colors.text.muted} style={styles.notice}>
-        Gold Coins have no cash value and cannot be exchanged for money or prizes.
-      </Txt>
+      <LegalFooter compact />
     </Screen>
   );
 }
@@ -163,6 +210,19 @@ export function RegisterScreen({
 const styles = StyleSheet.create({
   centered: { flexGrow: 1, justifyContent: 'center', maxWidth: 480 },
   card: { gap: spacing.md },
+  checkRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: radius.sm,
+    borderWidth: 2,
+    borderColor: colors.surface.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  checkboxOn: { backgroundColor: colors.neon.cyan, borderColor: colors.neon.cyan },
+  checkLabel: { flex: 1 },
   input: {
     minHeight: layout.minTouchTarget,
     backgroundColor: colors.surface.base,

@@ -25,7 +25,16 @@ import {
   verifyRound,
   type PlayerContext,
 } from '@juwa/server';
-import { WELCOME_BONUS, COIN_PACKS, VIP_TIERS, coinsGranted, tierForXp } from '@juwa/economy';
+import {
+  WELCOME_BONUS,
+  COIN_PACKS,
+  VIP_TIERS,
+  RESTRICTED_STATE_MESSAGE,
+  coinsGranted,
+  isKnownState,
+  isRestrictedState,
+  tierForXp,
+} from '@juwa/economy';
 import { listGames } from '@juwa/engine';
 import { AuthError, bearerToken, verifyJwt } from './jwt.js';
 import { LIMITS, RateLimiter } from './ratelimit.js';
@@ -214,10 +223,11 @@ export function createServer(config: ServerConfig) {
     },
 
     'POST /register': async (ctx) => {
-      const { username, dateOfBirth, country } = ctx.body as {
+      const { username, dateOfBirth, country, region } = ctx.body as {
         username?: string;
         dateOfBirth?: string;
         country?: string;
+        region?: string;
       };
       if (!username || !dateOfBirth) {
         throw new ApiError('username and dateOfBirth are required', 400, 'invalid_input');
@@ -226,9 +236,33 @@ export function createServer(config: ServerConfig) {
         throw new ApiError('dateOfBirth must be YYYY-MM-DD', 400, 'invalid_input');
       }
 
+      // Jurisdiction. `complete_registration` checks this again and is the
+      // real gate — an API is also a client as far as the database is
+      // concerned. Checking here buys a readable message instead of a
+      // check_violation, and stops an obviously bad request at the door.
+      const resolvedCountry = (country ?? 'US').toUpperCase();
+      if (resolvedCountry === 'US') {
+        if (!region) {
+          throw new ApiError('State of residence is required', 400, 'invalid_input');
+        }
+        if (!isKnownState(region)) {
+          throw new ApiError('Unrecognised state', 400, 'invalid_input');
+        }
+        if (isRestrictedState(region)) {
+          throw new ApiError(RESTRICTED_STATE_MESSAGE, 403, 'restricted_region');
+        }
+      }
+
       const { rows } = await config.query<{ username: string; balance: string; age_verified: boolean }>(
-        `select * from complete_registration($1, $2, $3::date, $4, $5)`,
-        [ctx.player.playerId, username, dateOfBirth, country ?? null, WELCOME_BONUS],
+        `select * from complete_registration($1, $2, $3::date, $4, $5, $6)`,
+        [
+          ctx.player.playerId,
+          username,
+          dateOfBirth,
+          resolvedCountry,
+          region ? region.toUpperCase() : null,
+          WELCOME_BONUS,
+        ],
       );
       const row = rows[0]!;
       return {

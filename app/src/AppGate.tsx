@@ -57,7 +57,12 @@ export function AppGate({ children }: { children: React.ReactNode }) {
   }, [api, session]);
 
   const register = useCallback(
-    async (details: { username: string; dateOfBirth: string; country: string }) => {
+    async (details: {
+      username: string;
+      dateOfBirth: string;
+      country: string;
+      region: string;
+    }) => {
       try {
         await api.register(details);
         setRegistered(true);

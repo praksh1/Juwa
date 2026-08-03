@@ -12,9 +12,11 @@
  */
 
 import React from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Path, Stop, G } from 'react-native-svg';
-import { colors } from '@juwa/ui';
+import { colors, radius, spacing } from '@juwa/ui';
+import { APP_NAME, APP_VERSION_LABEL } from '../brand';
+import { Txt } from './primitives';
 
 /**
  * Glyph outlines on a 100-unit em, drawn left to right. Each letter is a single
@@ -38,13 +40,28 @@ const GLYPHS = [
   'M380,84 H408 L412,66 H428 L432,84 H460 L434,8 H406 Z M420,30 L430,58 H410 Z',
 ];
 
-export function Logo({ height = 40 }: { height?: number }) {
+/**
+ * The version lockup.
+ *
+ * Drawn as a badge beside the wordmark rather than as two more glyph paths.
+ * Digits and a full stop would need three new outlines that have to sit
+ * convincingly next to hand-drawn letterforms, and a small type badge is both
+ * more legible at nav size and trivially editable when the number changes —
+ * which, being a version number in a product name, it eventually will.
+ */
+export function Logo({
+  height = 40,
+  showVersion = true,
+}: {
+  height?: number;
+  showVersion?: boolean;
+}) {
   // The glyph box runs 56 → 460 on the x axis with an 8 → 84 cap height; the
   // viewBox adds 4 units of bleed each side for the offset shadow copy.
   const width = height * (412 / 92);
 
   return (
-    <View accessibilityRole="header" accessibilityLabel="Juwa">
+    <View style={styles.lockup} accessibilityRole="header" accessibilityLabel={APP_NAME}>
       <Svg width={width} height={height} viewBox="52 0 412 92">
         <Defs>
           <LinearGradient id="juwa-wordmark" x1="0" y1="0" x2="0" y2="1">
@@ -65,6 +82,30 @@ export function Logo({ height = 40 }: { height?: number }) {
           <Path key={i} d={d} fill="url(#juwa-wordmark)" fillRule="evenodd" />
         ))}
       </Svg>
+
+      {showVersion ? (
+        <View style={[styles.badge, { paddingVertical: Math.max(2, height * 0.06) }]}>
+          <Txt
+            variant="caption"
+            color={colors.gold.default}
+            style={[styles.badgeText, { fontSize: Math.max(9, height * 0.28) }]}
+          >
+            {APP_VERSION_LABEL}
+          </Txt>
+        </View>
+      ) : null}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  lockup: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  badge: {
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.gold.dark,
+    backgroundColor: colors.gold.wash,
+  },
+  badgeText: { letterSpacing: 0.6, fontVariant: ['tabular-nums'] },
+});

@@ -202,7 +202,7 @@ describe('store', { skip: URL_ENV ? false : 'JUWA_TEST_DATABASE_URL not set' }, 
       created.server.close();
     };
 
-    await call('/register', { body: { username: 'buyer', dateOfBirth: '1990-01-01', country: 'US' } });
+    await call('/register', { body: { username: 'buyer', dateOfBirth: '1990-01-01', country: 'US', region: 'CA' } });
   });
 
   after(async () => {
