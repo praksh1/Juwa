@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { colors } from '@juwa/ui';
 import { AuthScreen } from './screens/AuthScreen';
+import { LandingScreen } from './screens/LandingScreen';
 import { RegisterScreen } from './screens/RegisterScreen';
 import { onAuthChange, type Session } from './api/auth';
 import { PlayApiError, createPlayApi } from './api/client';
@@ -9,9 +10,9 @@ import { PurchaseWatcher } from './components/PurchaseWatcher';
 import { notifyBalanceChanged } from './api/usePlayer';
 
 /**
- * Decides which of three worlds the player is in:
+ * Decides which world the player is in:
  *
- *   no session          -> sign up or log in
+ *   no session          -> landing page, then sign up or log in
  *   session, no profile -> the age gate
  *   both                -> the game
  *
@@ -21,6 +22,12 @@ import { notifyBalanceChanged } from './api/usePlayer';
  */
 export function AppGate({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
+  /**
+   * What a logged-out visitor sees. Landing first, always: the previous
+   * behaviour put an email field in front of anyone arriving from an ad, which
+   * asks for something before offering anything.
+   */
+  const [entry, setEntry] = useState<'landing' | 'signup' | 'signin'>('landing');
   const [registered, setRegistered] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const api = React.useRef(createPlayApi()).current;
@@ -73,7 +80,17 @@ export function AppGate({ children }: { children: React.ReactNode }) {
       </View>
     );
   }
-  if (!session) return <AuthScreen />;
+  if (!session) {
+    if (entry === 'landing') {
+      return (
+        <LandingScreen
+          onCreateAccount={() => setEntry('signup')}
+          onSignIn={() => setEntry('signin')}
+        />
+      );
+    }
+    return <AuthScreen initialMode={entry === 'signin' ? 'login' : 'signup'} onBack={() => setEntry('landing')} />;
+  }
   if (registered === null) {
     return (
       <View style={styles.loading}>

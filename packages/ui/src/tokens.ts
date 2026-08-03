@@ -11,47 +11,42 @@
  *
  * WHY THESE CHOICES
  *
- * Dark NAVY background, not neutral black. The frame of a casino app should
- * recede so the games are the brightest thing on screen — bright artwork on a
- * bright background turns to mush. Navy does that job while staying warmer and
- * more playful than the near-black we started with, which read as a betting
- * site rather than as a game.
+ * Near-black with a violet cast, arcade-neon accents. Confident and adult: the
+ * failure mode being avoided is anything that reads as a children's game, so
+ * there is no primary rainbow here and no bouncy pastel.
  *
- * Bright, saturated accents. Juwa is a social casino: the money it makes comes
- * from coin sales, not from anyone's losses, so the app should look like a game
- * and not like a bookmaker. The apps that win this category are closer to a
- * puzzle game than to a Vegas floor.
+ * The chrome recedes and the games carry the colour. Electric cyan is the
+ * interactive accent — ONE glowing element per view, not everywhere, or the
+ * glow stops meaning "press this". Magenta is reserved for bonus and jackpot
+ * moments. Brass, not bright gold, carries currency: it reads as a token rather
+ * than as treasure, which is the correct signal for coins that have no cash
+ * value.
  *
- * Gold as the primary: it reads as premium across every culture we're likely to
- * launch in, and it doesn't collide with the red/green we need for
- * win/loss states. It is a brighter, warmer gold than a luxury brand would use,
- * because it has to hold its own next to magenta and cyan.
- *
- * Green for wins, red for losses — with one deliberate exception noted below.
+ * Green for wins, red for alerts — with one deliberate exception noted below.
  */
 
 export const colors = {
   /** Backgrounds, darkest to lightest. `base` is the app background. */
   surface: {
-    base: '#070C1C',
-    raised: '#111A38',
-    overlay: '#1B274D',
-    border: '#2D3C6E',
+    base: '#08070E',
+    raised: '#13111C',
+    overlay: '#1C1929',
+    border: '#2A2539',
   },
 
   /** Primary brand colour. Buttons, highlights, the logo. */
   gold: {
-    dark: '#A9730A',
-    default: '#FFC53D',
-    light: '#FFE08A',
+    dark: '#7A6425',
+    default: '#C8A44D',
+    light: '#E6CE8C',
     /** For the "big win" glow. */
-    glow: 'rgba(255, 197, 61, 0.45)',
+    glow: 'rgba(200, 164, 77, 0.45)',
     /**
      * A faint tint for highlighting a card without wrecking the contrast of the
      * text on top of it. Using `gold.dark` as a fill here drops muted text below
      * the readable threshold — this is the version that stays legible.
      */
-    wash: 'rgba(255, 197, 61, 0.16)',
+    wash: 'rgba(200, 164, 77, 0.18)',
   },
 
   /**
@@ -60,9 +55,10 @@ export const colors = {
    * and sparingly in the chrome.
    */
   neon: {
+    /** The primary interactive accent. One glowing thing per view. */
+    cyan: '#2FE3D6',
     magenta: '#FF3D8A',
-    cyan: '#22D3EE',
-    violet: '#A855F7',
+    violet: '#8B5CF6',
     lime: '#A3E635',
     orange: '#FF8A3D',
   },
@@ -76,18 +72,23 @@ export const colors = {
    * should be quiet.
    */
   feedback: {
-    win: '#22C55E',
-    winBright: '#4ADE80',
-    loss: '#5A5F80',
-    warning: '#FBBF24',
-    error: '#F87171',
+    win: '#3FD68A',
+    winBright: '#7DEDB4',
+    loss: '#5A5470',
+    warning: '#E0A83C',
+    error: '#FF6B6B',
   },
 
   text: {
-    primary: '#F4F7FF',
-    secondary: '#A9B6D8',
-    muted: '#6E7CA6',
-    inverse: '#070C1C',
+    primary: '#EEEBF4',
+    /**
+     * Sits between `primary` and `muted`. The brief names only two greys, but
+     * a two-step ramp forces every secondary line down to `muted`, which is
+     * below the readable threshold on the raised panels.
+     */
+    secondary: '#A79FBC',
+    muted: '#7B7591',
+    inverse: '#08070E',
   },
 
   /** Roulette and card suits — fixed by the games themselves. */
@@ -132,9 +133,33 @@ export const radius = {
  * heading ate half the lobby — which pushed the games, the only thing a player
  * came for, below the fold.
  */
+/**
+ * The display face: a heavy condensed grotesque, set tight and uppercase.
+ *
+ * The named webfonts are listed first so that dropping the files into the app
+ * later picks them up with no code change. Until then it falls through to
+ * Impact and Haettenschweiler, which ship with Windows and macOS respectively
+ * and are the same genre of letterform. This project cannot fetch a webfont at
+ * build time, and a display face that arrives late is worse than one that was
+ * never promised — the headline reflows in front of the player.
+ */
+export const displayFace =
+  "'Archivo Black', 'Anton', 'Bebas Neue', Impact, 'Haettenschweiler', 'Arial Narrow Bold', sans-serif";
+
+/** Body and UI. Falls through to the platform's own grotesque. */
+export const bodyFace =
+  "'Archivo', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+
 export const typography = {
-  display: { fontSize: 34, lineHeight: 40, fontWeight: '800' },
-  h1: { fontSize: 26, lineHeight: 32, fontWeight: '700' },
+  display: {
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: '900',
+    fontFamily: displayFace,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  h1: { fontSize: 26, lineHeight: 30, fontWeight: '800', fontFamily: displayFace, letterSpacing: 0.4 },
   h2: { fontSize: 21, lineHeight: 27, fontWeight: '700' },
   h3: { fontSize: 17, lineHeight: 23, fontWeight: '600' },
   body: { fontSize: 15, lineHeight: 22, fontWeight: '400' },
@@ -184,7 +209,7 @@ export const motion = {
   slow: 400,
   reelSpin: 2500,
   /** Each reel stops this much later than the one before it. */
-  reelStagger: 220,
+  reelStagger: 270,
   /** When the last reel could complete a big win, slow it down further. */
   nearMissExtension: 1200,
   cardDeal: 300,

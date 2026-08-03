@@ -10,6 +10,7 @@ import { createPlayApi } from '../api/client';
 import { Badge, Button, Card, Screen, SectionHeader, Txt } from '../components/primitives';
 import { GameCard } from '../components/GameCard';
 import { InstallPrompt } from '../components/InstallPrompt';
+import { LegalFooter } from '../components/LegalFooter';
 import {
   CATEGORIES,
   PLAYABLE,
@@ -168,10 +169,7 @@ export function LobbyScreen() {
         <Button label="Verify a round" variant="secondary" onPress={() => {}} />
       </Card>
 
-      <Txt variant="caption" color={colors.text.muted} style={styles.disclosure}>
-        Juwa is a free-to-play social casino. Gold Coins have no cash value and
-        cannot be exchanged for money or prizes.
-      </Txt>
+      <LegalFooter />
     </Screen>
   );
 }

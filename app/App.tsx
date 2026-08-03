@@ -15,6 +15,7 @@ import { WalletScreen } from './src/screens/WalletScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { AppGate } from './src/AppGate';
 import { registerServiceWorker } from './src/pwa';
+import { Ticker } from './src/components/Ticker';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -135,6 +136,9 @@ export default function App() {
     <SafeAreaProvider>
       <NavigationContainer theme={theme}>
         <StatusBar style="light" />
+        {/* Pinned above the navigator so it is present on every screen,
+            including the logged-out landing page. */}
+        <Ticker />
         <AppGate>
           <Tabs />
         </AppGate>

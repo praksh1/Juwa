@@ -3,6 +3,7 @@ import { StyleSheet, TextInput, View } from 'react-native';
 import { colors, layout, radius, spacing, typography } from '@juwa/ui';
 import { Button, Card, Screen, Txt } from '../components/primitives';
 import { Logo } from '../components/Logo';
+import { LegalFooter } from '../components/LegalFooter';
 import { IS_CONFIGURED, signIn, signUp } from '../api/auth';
 
 /**
@@ -13,8 +14,14 @@ import { IS_CONFIGURED, signIn, signUp } from '../api/auth';
  * than a half-created user and a coin balance nobody should have. See
  * `RegisterScreen`.
  */
-export function AuthScreen() {
-  const [mode, setMode] = useState<'login' | 'signup'>('signup');
+export function AuthScreen({
+  initialMode = 'signup',
+  onBack,
+}: {
+  initialMode?: 'login' | 'signup';
+  onBack?: () => void;
+} = {}) {
+  const [mode, setMode] = useState<'login' | 'signup'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -64,6 +71,9 @@ export function AuthScreen() {
         <Txt variant="bodySmall" color={colors.text.secondary}>
           Play for fun. Coins have no cash value.
         </Txt>
+        {onBack ? (
+          <Button label="Back" variant="secondary" onPress={onBack} />
+        ) : null}
       </View>
 
       <Card style={styles.card}>
@@ -127,11 +137,7 @@ export function AuthScreen() {
         </Txt>
       ) : null}
 
-      <Txt variant="caption" color={colors.text.muted} style={styles.notice}>
-        You must be 18 or over. Juwa is a free-to-play social casino: Gold Coins
-        are for entertainment only, have no cash value, and cannot be exchanged
-        for money or prizes.
-      </Txt>
+      <LegalFooter compact />
     </Screen>
   );
 }
