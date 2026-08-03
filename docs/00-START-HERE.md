@@ -99,7 +99,14 @@ project has them from day one rather than "later".
 
 **Book an hour with a lawyer.** Not the big scary gaming-licence process — that's
 off the table now, and since Juwa ships as a website rather than a store app,
-so is app-store compliance. But a solicitor should still confirm three things:
+so is app-store compliance.
+
+[Legal Language](08-legal-language.md) has the clauses social casinos actually
+use, written out, plus a ten-question list to take with you. It is a drafting
+aid, not legal advice — but it means the hour is spent on your specifics rather
+than on explaining what a social casino is.
+
+A solicitor should confirm at minimum:
 
 1. Your age gate (18+ is the sensible default for a casino-themed app).
 2. Your terms of service and privacy policy.
@@ -150,3 +157,4 @@ reason I chose this toolset for you.
 | How does it make money? | [The Coin Economy](05-coin-economy.md) |
 | What happens when I tap SPIN? | [The Play Path](06-the-play-path.md) |
 | How do I put it online? | [Deploying](07-deploying.md) |
+| What do I say to the lawyer? | [Legal Language](08-legal-language.md) |

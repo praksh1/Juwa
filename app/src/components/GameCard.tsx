@@ -30,7 +30,7 @@ export function GameCard({
       disabled={!playable}
       accessibilityRole="button"
       accessibilityLabel={`${game.name}, ${(game.rtp * 100).toFixed(2)} percent return to player${
-        playable ? '' : ', coming soon'
+        playable ? '' : game.multiplayer ? ', multiplayer, coming soon' : ', coming soon'
       }`}
       style={({ pressed }) => [
         styles.wrapper,
@@ -49,7 +49,7 @@ export function GameCard({
           {!playable ? (
             <View style={styles.soon}>
               <Txt variant="caption" color={colors.text.primary}>
-                COMING SOON
+                {game.multiplayer ? 'MULTIPLAYER · SOON' : 'COMING SOON'}
               </Txt>
             </View>
           ) : null}

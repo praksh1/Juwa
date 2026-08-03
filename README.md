@@ -22,6 +22,7 @@ packages/api      HTTP service: auth, rate limiting, the play endpoints.
 packages/ui       Design tokens — colours, type, spacing, motion.
 app/              The web app (PWA). A renderer, nothing more.
 db/migrations/    Postgres schema: ledger, rounds, purchases, play functions.
+                  ALL.sql is the generated paste-into-Supabase version.
 db/test/          Ledger invariants, run against a real Postgres.
 docs/             Tech stack, roadmap, payments & legal, coin economy.
 ```
@@ -49,6 +50,12 @@ To exercise the database rules against a real Postgres:
 PGPORT=5432 db/test/run.sh
 ```
 
+To check a live deployment (safe against production — no secrets, no writes):
+
+```bash
+node scripts/check-deployment.mjs https://api.yourdomain.com https://play.yourdomain.com
+```
+
 ## What's built
 
 | | Status |
@@ -72,6 +79,9 @@ PGPORT=5432 db/test/run.sh
 | Blackjack table — splits, doubles, dealt cards | ✅ **verified in browser** |
 | Sound — synthesised, no audio files | ✅ verified |
 | Roulette table — straight-up and outside bets | ✅ **verified in browser** |
+| Deployment: Dockerfile, Render/Railway/Netlify blueprints | ✅ build verified |
+| Legal drafting aid for the lawyer conversation | ✅ written |
+| Texas Hold'em (multiplayer) | ⬜ parked — single-player only for now |
 | Transaction history from the ledger | ✅ tested |
 | Stripe checkout — signed webhooks, replay-proof | ✅ **verified end to end** |
 

@@ -1,0 +1,44 @@
+# Render blueprint for the Juwa API.
+#
+# In Render: New -> Blueprint -> pick this repository. Everything below is read
+# automatically; you fill in the four secrets it marks `sync: false`, which
+# Render prompts for rather than storing in git.
+services:
+  - type: web
+    name: juwa-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    # Render restarts the service if this stops answering.
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8787
+
+      # Supabase -> Settings -> Database -> Connection string.
+      # Use the POOLER (port 6543), not a direct connection: small instances
+      # open more connections than Postgres will tolerate.
+      - key: DATABASE_URL
+        sync: false
+
+      # Supabase -> Settings -> API -> JWT Settings -> JWT Secret.
+      # Anyone holding this can mint a token for any player. Never in git.
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+
+      # Exactly your web app's origin. Never '*' — credentials are involved.
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+      # The store. Leave all four unset to run without one; checkout then
+      # returns 503, which is what a staging environment should do.
+      # A key WITHOUT a webhook secret is refused at boot: that combination
+      # charges players and never grants coins.
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_SUCCESS_URL
+        sync: false
+      - key: STRIPE_CANCEL_URL
+        sync: false

@@ -30,6 +30,16 @@ export interface GameSummary {
   /** Placeholder art direction until real assets exist. */
   accent: string;
   tag?: 'new' | 'hot' | 'jackpot';
+  /**
+   * Needs other players at the table.
+   *
+   * Juwa is deliberately single-player. Real-time multiplayer is a different
+   * class of problem — persistent sockets, a matchmaking lobby, turn timers,
+   * disconnect handling, and collusion detection — and it only works once
+   * enough people are online at the same time to fill a table. These stay on
+   * the shelf; the tile exists so the category is visible.
+   */
+  multiplayer?: boolean;
 }
 
 export const CATEGORIES: { id: GameCategory | 'all'; label: string }[] = [
@@ -69,8 +79,9 @@ export const GAMES: GameSummary[] = [
     maxBet: 500_000,
     accent: '#DC2626',
   },
-  // Phase 4 placeholders — greyed out in the lobby so the shape of the finished
-  // product is visible from day one.
+  // Not yet built. Greyed out in the lobby so the shape of the finished product
+  // is visible from day one. Each needs an engine plus a screen — see
+  // docs/04-adding-a-game.md.
   {
     id: 'juwa-holdem',
     name: "Texas Hold'em",
@@ -79,7 +90,7 @@ export const GAMES: GameSummary[] = [
     minBet: 200,
     maxBet: 200_000,
     accent: '#8B5CF6',
-    tag: 'new',
+    multiplayer: true,
   },
   {
     id: 'juwa-video-poker',

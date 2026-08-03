@@ -13,7 +13,9 @@
     "typecheck": "npm run build && tsc -p app/tsconfig.json",
     "rtp": "npm run build && node packages/engine/dist/tools/rtp.js",
     "verify": "npm run test && npm run typecheck",
-    "test:db": "npm run build && JUWA_TEST_DATABASE_URL=${JUWA_TEST_DATABASE_URL:-postgres://postgres@localhost:5432/juwa_play} node --test \"packages/server/dist/**/*.test.js\""
+    "test:db": "npm run build && JUWA_TEST_DATABASE_URL=${JUWA_TEST_DATABASE_URL:-postgres://postgres@localhost:5432/juwa_play} node --test \"packages/server/dist/**/*.test.js\"",
+    "migration": "node scripts/build-migration.mjs",
+    "check": "node scripts/check-deployment.mjs"
   },
   "engines": {
     "node": ">=20"

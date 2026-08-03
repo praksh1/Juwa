@@ -102,8 +102,13 @@ placeholders for games whose engines are not written yet.
 
 - [ ] Roulette splits, streets and corners — bets on the lines *between*
       numbers, which need a pinch-zoom felt rather than a tap grid
-- [ ] Texas Hold'em — the big one; needs real-time multiplayer, budget for it
-- [ ] Video poker, baccarat, keno, scratch cards
+- [ ] ~~Texas Hold'em~~ — **parked.** Multiplayer needs persistent sockets, a
+      matchmaking lobby, turn timers, disconnect handling and collusion
+      detection, and it only works once enough people are online at once to fill
+      a table. Juwa is single-player; the tile stays in the lobby marked
+      "MULTIPLAYER · SOON" so the category is visible.
+- [ ] Video poker, baccarat, keno, scratch cards — all single-player, so each
+      is one engine plus one screen
 - [ ] Three to five more slot themes reusing the slot renderer
 
 **How you'll know it worked:** a friend opens the app and plays for twenty
