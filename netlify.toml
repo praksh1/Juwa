@@ -12,9 +12,19 @@
 #   EXPO_PUBLIC_SUPABASE_ANON_KEY /
 
 [build]
-  # No `base`. Juwa is an npm workspace, so the install has to happen at the
-  # repo root — running it inside app/ leaves @juwa/ui and friends unlinked and
-  # the bundle fails with "Unable to resolve @juwa/ui".
+  # No `base`. Juwa is an npm workspace, so the build has to happen at the repo
+  # root — running it inside app/ leaves @juwa/ui and friends unlinked and the
+  # bundle fails with "Unable to resolve @juwa/ui".
+  #
+  # CHECK THIS IN THE NETLIFY UI: Site configuration -> Build & deploy ->
+  # Build settings -> "Base directory" must be EMPTY. Netlify's import wizard
+  # auto-detects app/ and fills it in, and the UI value wins over this file.
+  # When it does, the build breaks twice over:
+  #   - `npm run build:web` resolves to app/package.json's script instead of
+  #     the root one, skipping the shared-package builds;
+  #   - publish becomes app/ + app/dist = "app/app/dist", which never exists.
+  # The first is now caught by app/scripts/ensure-workspace-deps.mjs. The
+  # second can only be fixed by clearing the field.
   command = "npm run build:web"
   publish = "app/dist"
 
