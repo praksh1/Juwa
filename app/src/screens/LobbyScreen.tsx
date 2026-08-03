@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -6,6 +6,7 @@ import { colors, radius, spacing } from '@juwa/ui';
 import { format } from '@juwa/money';
 import { VIP_TIERS, dailyBonus } from '@juwa/economy';
 import { usePlayer } from '../api/usePlayer';
+import { createPlayApi } from '../api/client';
 import { Badge, Button, Card, Screen, SectionHeader, Txt } from '../components/primitives';
 import { GameCard } from '../components/GameCard';
 import { InstallPrompt } from '../components/InstallPrompt';
@@ -35,6 +36,14 @@ export function LobbyScreen() {
   // The real balance, from the server. Never a local guess — see usePlayer.
   const { balance, dailyStreak, vipLevel, claimDaily } = usePlayer();
   const [bonusMessage, setBonusMessage] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
+  const api = React.useRef(createPlayApi()).current;
+
+  useEffect(() => {
+    // Greet the player by the name they chose, not the placeholder left over
+    // from the wireframe.
+    api.getProfile().then((profile) => setUsername(profile.username ?? null)).catch(() => {});
+  }, [api]);
 
   const vip = VIP_TIERS[vipLevel] ?? VIP_TIERS[0]!;
   // The amount shown comes from @juwa/economy, so tuning the economy moves the
@@ -60,7 +69,7 @@ export function LobbyScreen() {
           <Txt variant="caption" color={colors.text.muted}>
             WELCOME BACK
           </Txt>
-          <Txt variant="h2">Alex</Txt>
+          <Txt variant="h2">{username ?? 'Player'}</Txt>
         </View>
 
         <Pressable

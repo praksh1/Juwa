@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, Switch, View } from 'react-native';
 import { colors, spacing } from '@juwa/ui';
 import { Card, Screen, SectionHeader, Txt } from '../components/primitives';
+import { createPlayApi, type Profile } from '../api/client';
 
 /**
  * Profile wireframe.
@@ -33,15 +34,22 @@ function Row({ label, hint, value }: { label: string; hint?: string; value?: str
 }
 
 export function ProfileScreen() {
+  const api = React.useRef(createPlayApi()).current;
+  const [username, setUsername] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    api.getProfile().then((profile: Profile) => setUsername(profile.username ?? null)).catch(() => {});
+  }, [api]);
+
   return (
     <Screen>
       <Card style={styles.identity}>
         <View style={styles.avatar}>
           <Txt variant="h1" color={colors.text.inverse}>
-            A
+            {(username ?? 'P').charAt(0).toUpperCase()}
           </Txt>
         </View>
-        <Txt variant="h2">Alex</Txt>
+        <Txt variant="h2">{username ?? 'Player'}</Txt>
         <Txt variant="bodySmall" color={colors.text.muted}>
           Member since August 2026
         </Txt>

@@ -5,6 +5,8 @@ import { AuthScreen } from './screens/AuthScreen';
 import { RegisterScreen } from './screens/RegisterScreen';
 import { onAuthChange, type Session } from './api/auth';
 import { PlayApiError, createPlayApi } from './api/client';
+import { PurchaseWatcher } from './components/PurchaseWatcher';
+import { notifyBalanceChanged } from './api/usePlayer';
 
 /**
  * Decides which of three worlds the player is in:
@@ -80,10 +82,19 @@ export function AppGate({ children }: { children: React.ReactNode }) {
     );
   }
   if (!registered) return <RegisterScreen onRegister={register} />;
-  return <>{children}</>;
+
+  return (
+    <View style={styles.app}>
+      {children}
+      {/* Above the tabs so a returning payment is confirmed wherever the
+          player lands — Stripe sends them to the site root, not the store. */}
+      <PurchaseWatcher onGranted={notifyBalanceChanged} />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
+  app: { flex: 1 },
   loading: {
     flex: 1,
     backgroundColor: colors.surface.base,

@@ -1,8 +1,8 @@
-import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, spacing } from '@juwa/ui';
-import { format, minor } from '@juwa/money';
+import { format } from '@juwa/money';
 import {
   COIN_PACKS,
   FIRST_PURCHASE_MULTIPLIER,
@@ -10,6 +10,8 @@ import {
   type CoinPack,
 } from '@juwa/economy';
 import { Badge, Card, Screen, SectionHeader, Txt } from '../components/primitives';
+import { PlayApiError, createPlayApi } from '../api/client';
+import { usePlayer } from '../api/usePlayer';
 
 /**
  * The coin store.
@@ -25,18 +27,31 @@ import { Badge, Card, Screen, SectionHeader, Txt } from '../components/primitive
  *      app stores for casino-themed games, and it belongs where a player is
  *      about to spend money rather than buried in a settings page.
  */
-function PackTile({ pack, isFirstPurchase }: { pack: CoinPack; isFirstPurchase: boolean }) {
+function PackTile({
+  pack,
+  isFirstPurchase,
+  busy,
+  onBuy,
+}: {
+  pack: CoinPack;
+  isFirstPurchase: boolean;
+  busy: boolean;
+  onBuy: (pack: CoinPack) => void;
+}) {
   const coins = coinsGranted(pack, isFirstPurchase);
   const highlighted = pack.popular || pack.bestValue;
 
   return (
     <Pressable
       accessibilityRole="button"
+      disabled={busy}
+      onPress={() => onBuy(pack)}
       accessibilityLabel={`${pack.name}, ${format(coins, 'GC')} for ${format(pack.priceUsd, 'USD')}`}
       style={({ pressed }) => [
         styles.tile,
         highlighted && styles.tileHighlighted,
-        { transform: [{ scale: pressed ? 0.98 : 1 }] },
+        busy && styles.tileBusy,
+        { transform: [{ scale: pressed && !busy ? 0.98 : 1 }] },
       ]}
     >
       {highlighted ? (
@@ -72,20 +87,67 @@ function PackTile({ pack, isFirstPurchase }: { pack: CoinPack; isFirstPurchase: 
       </View>
 
       <View style={styles.price}>
-        <Txt variant="h3" color={colors.text.inverse}>
-          {format(pack.priceUsd, 'USD')}
-        </Txt>
+        {busy ? (
+          <ActivityIndicator color={colors.text.inverse} />
+        ) : (
+          <Txt variant="h3" color={colors.text.inverse}>
+            {format(pack.priceUsd, 'USD')}
+          </Txt>
+        )}
       </View>
     </Pressable>
   );
 }
 
 export function StoreScreen() {
-  // Wired to the player's purchase history in Phase 5.
-  const isFirstPurchase = true;
+  const api = React.useRef(createPlayApi()).current;
+  const { balance } = usePlayer();
+  const [isFirstPurchase, setIsFirstPurchase] = useState(false);
+  const [busyPack, setBusyPack] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .getProfile()
+      .then((profile) => setIsFirstPurchase(profile.hasPurchased === false))
+      .catch(() => setIsFirstPurchase(false));
+  }, [api]);
+
+  const buy = useCallback(
+    async (pack: CoinPack) => {
+      setMessage(null);
+      setBusyPack(pack.id);
+      try {
+        const { checkoutUrl } = await api.startCheckout(pack.id);
+        // Stripe's hosted page. Card details never touch our servers.
+        if (typeof window !== 'undefined') window.location.assign(checkoutUrl);
+      } catch (error) {
+        setMessage(
+          error instanceof PlayApiError ? error.message : 'Could not start checkout. Try again.',
+        );
+        setBusyPack(null);
+      }
+    },
+    [api],
+  );
 
   return (
     <Screen>
+      <View style={styles.balanceRow}>
+        <Txt variant="caption" color={colors.text.muted}>
+          BALANCE
+        </Txt>
+        <Txt variant="money" color={colors.gold.default}>
+          {format(balance, 'GC')}
+        </Txt>
+      </View>
+
+      {message ? (
+        <Card style={styles.message}>
+          <Txt variant="bodySmall">{message}</Txt>
+        </Card>
+      ) : null}
+
       {isFirstPurchase ? (
         <Card style={styles.hero}>
           <LinearGradient
@@ -108,7 +170,13 @@ export function StoreScreen() {
         <SectionHeader title="Coin Packs" />
         <View style={styles.grid}>
           {COIN_PACKS.map((pack) => (
-            <PackTile key={pack.id} pack={pack} isFirstPurchase={isFirstPurchase} />
+            <PackTile
+              key={pack.id}
+              pack={pack}
+              isFirstPurchase={isFirstPurchase}
+              busy={busyPack === pack.id}
+              onBuy={buy}
+            />
           ))}
         </View>
       </View>
@@ -154,6 +222,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   disclosure: { backgroundColor: colors.surface.overlay },
+  balanceRow: { alignItems: 'center', gap: 2 },
+  message: { backgroundColor: colors.surface.overlay, borderColor: colors.gold.dark },
+  tileBusy: { opacity: 0.6 },
 });
-
-export const STORE_PLACEHOLDER_BALANCE = minor(1_250_000);

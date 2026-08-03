@@ -69,6 +69,8 @@ export interface Profile {
   username?: string;
   ageVerified?: boolean;
   dailyStreak?: number;
+  /** Drives the one-time first-purchase doubler in the store. */
+  hasPurchased?: boolean;
 }
 
 export interface PlayApi {
@@ -85,6 +87,8 @@ export interface PlayApi {
     country: string;
   }): Promise<{ username: string; balance: number; ageVerified: boolean }>;
   claimDailyBonus(): Promise<{ granted: boolean; coins: number; streakDay: number; balance: number; reason?: string }>;
+  startCheckout(packId: string): Promise<{ purchaseId: string; checkoutUrl: string; coins: number }>;
+  getPurchase(id: string): Promise<{ id: string; status: string; coins: number; packId: string }>;
 }
 
 export class PlayApiError extends Error {
@@ -160,6 +164,19 @@ export class HttpPlayApi implements PlayApi {
       reason?: string;
     }>('/bonus/daily', {});
   }
+
+  startCheckout(packId: string) {
+    return this.request<{ purchaseId: string; checkoutUrl: string; coins: number }>(
+      '/store/checkout',
+      { packId },
+    );
+  }
+
+  getPurchase(id: string) {
+    return this.request<{ id: string; status: string; coins: number; packId: string }>(
+      `/store/purchase?id=${encodeURIComponent(id)}`,
+    );
+  }
 }
 
 // ------------------------------------------------------------------- demo
@@ -190,7 +207,7 @@ export class DemoPlayApi implements PlayApi {
   }
 
   async getProfile(): Promise<Profile> {
-    return { registered: true, username: 'demo', ageVerified: true, dailyStreak: 3 };
+    return { registered: true, username: 'demo', ageVerified: true, dailyStreak: 3, hasPurchased: false };
   }
 
   async register() {
@@ -200,6 +217,19 @@ export class DemoPlayApi implements PlayApi {
   async claimDailyBonus() {
     this.balance += 12_000;
     return { granted: true, coins: 12_000, streakDay: 3, balance: this.balance };
+  }
+
+  async startCheckout(): Promise<never> {
+    // Never fake a payment. A demo that pretends to sell coins is a demo that
+    // hides whether the real thing works.
+    throw new PlayApiError(
+      'The store needs a configured server — set EXPO_PUBLIC_API_URL.',
+      'store_unavailable',
+    );
+  }
+
+  async getPurchase(id: string) {
+    return { id, status: 'pending', coins: 0, packId: '' };
   }
 
   async placeBet(request: { gameId: string; stake: number; idempotencyKey: string }) {

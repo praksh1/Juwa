@@ -32,9 +32,9 @@ static host serves the app.
 ## 1. Supabase
 
 1. Create a project at supabase.com. Pick a region near your players.
-2. Open the SQL editor and run the migrations **in order**:
+2. Open the SQL editor and run every file in `db/migrations/` **in order**:
    `0001_ledger.sql`, `0002_social_economy.sql`, `0003_play.sql`,
-   `0004_accounts.sql`.
+   `0004_accounts.sql`, `0005_purchases.sql`.
 3. Under Authentication → Providers, enable **Email**. Leave "Confirm email"
    on — it costs you a little sign-up friction and saves you a lot of junk
    accounts.
@@ -60,7 +60,18 @@ DATABASE_URL=postgres://...        # Supabase → Settings → Database → conn
 SUPABASE_JWT_SECRET=...            # from step 1
 ALLOWED_ORIGINS=https://play.yourdomain.com
 PORT=8787
+
+# The store. Omit all four to run without one — checkout then returns 503,
+# which is what you want on a staging environment.
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_SUCCESS_URL=https://play.yourdomain.com/
+STRIPE_CANCEL_URL=https://play.yourdomain.com/
 ```
+
+The API refuses to start with a Stripe key but no webhook secret. That
+combination would take players' money and never grant coins — the worst failure
+in the product, and exactly what a hurried deploy produces.
 
 ```bash
 npm ci && npm run build
@@ -115,6 +126,30 @@ thing that ships to production still set to `true`.
 
 ---
 
+## 3b. Stripe
+
+1. Create an account at stripe.com. Selling virtual game currency is ordinary
+   digital goods — say so plainly during onboarding, because "casino" in the
+   business name invites a question you would rather answer up front than have
+   raised after a payout hold.
+2. **Settings → Developers → Webhooks → Add endpoint:**
+   `https://api.yourdomain.com/webhooks/stripe`
+   Subscribe to: `checkout.session.completed`,
+   `checkout.session.async_payment_succeeded`,
+   `checkout.session.async_payment_failed`, `checkout.session.expired`.
+3. Copy the signing secret (`whsec_…`) into `STRIPE_WEBHOOK_SECRET`.
+4. Test with a card number of `4242 4242 4242 4242`, any future expiry, any CVC.
+
+**The webhook is the only thing that grants coins.** The browser returning to
+your success page proves nothing — anyone can visit that URL. If the webhook is
+misconfigured, players will be charged and receive nothing, and you will find out
+from an angry email rather than a graph. Verify it works before taking a real
+payment: Stripe's dashboard shows every delivery attempt and its response.
+
+Prices live in `packages/economy/src/packs.ts`, not in Stripe. The client sends
+a pack **id** and the server looks up the amount, so a modified client cannot
+name its own price.
+
 ## 4. Check it
 
 ```bash
@@ -129,7 +164,9 @@ Then in the browser:
 4. Play a spin; the balance changes.
 5. DevTools → Application: a service worker is running and the manifest is
    valid.
-6. Finally, in Supabase SQL:
+6. Buy a pack with the test card. The coins arrive within a second or two, and
+   Stripe's dashboard shows the webhook returning 200.
+7. Finally, in Supabase SQL:
 
    ```sql
    select currency, sum(amount) from ledger_entries group by currency;  -- 0

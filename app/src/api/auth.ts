@@ -77,6 +77,7 @@ export async function signIn(email: string, password: string): Promise<AuthResul
 export async function signOut(): Promise<void> {
   if (!supabase) {
     demoSession = null;
+    saveDemoSession(null);
     notify();
     return;
   }
@@ -85,6 +86,7 @@ export async function signOut(): Promise<void> {
 
 export async function getSession(): Promise<Session | null> {
   if (!supabase) {
+    if (!demoSession) demoSession = loadDemoSession();
     // Keep the token fresh if it was injected after sign-in.
     const injected = devToken();
     if (demoSession && injected) demoSession = { ...demoSession, accessToken: injected };
@@ -141,7 +143,37 @@ export function onAuthChange(listener: Listener): () => void {
 
 // --------------------------------------------------------------- demo mode
 
-let demoSession: Session | null = null;
+const DEMO_SESSION_KEY = 'juwa.demo-session';
+
+/**
+ * Demo sessions persist in localStorage, exactly as Supabase's do.
+ *
+ * Not cosmetic: any flow that leaves the site and comes back — a payment
+ * redirect being the obvious one — reloads the page. An in-memory session
+ * evaporates there, so the player returns to a sign-up screen instead of their
+ * confirmation, and the bug looks like the payment failed.
+ */
+function loadDemoSession(): Session | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(DEMO_SESSION_KEY);
+    return raw ? (JSON.parse(raw) as Session) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveDemoSession(session: Session | null): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (session) window.localStorage.setItem(DEMO_SESSION_KEY, JSON.stringify(session));
+    else window.localStorage.removeItem(DEMO_SESSION_KEY);
+  } catch {
+    /* private mode — the session simply does not survive a reload */
+  }
+}
+
+let demoSession: Session | null = loadDemoSession();
 
 /**
  * A local-development escape hatch: run the app against a real API without
@@ -174,6 +206,7 @@ function demoSignIn(email: string): AuthResult {
     // rejects it, so demo mode can never look like it authenticated anyone.
     accessToken: injected ?? 'demo-mode-not-a-real-token',
   };
+  saveDemoSession(demoSession);
   notify();
   return { ok: true };
 }

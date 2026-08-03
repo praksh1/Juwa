@@ -35,8 +35,8 @@ never on a device the player controls.
 ```bash
 npm install
 npm run build      # compile shared packages
-npm test           # 70 tests (no database needed)
-npm run test:db    # +38 tests against a real Postgres — bet lifecycle and API
+npm test           # 78 tests (no database needed)
+npm run test:db    # +60 tests against a real Postgres — play, API and payments
 npm run rtp        # simulate 2,000,000 spins, report real payout rates
 npm run economy    # simulate player sessions — how long does a balance last?
 
@@ -69,7 +69,8 @@ PGPORT=5432 db/test/run.sh
 | Design tokens (WCAG AA verified) | ✅ tested |
 | App shell — lobby, store, wallet, profile | ✅ builds & renders |
 | Blackjack / roulette UI, free-spins sequence, sound | ⬜ next |
-| Stripe checkout for coin packs | ⬜ next |
+| Transaction history from the ledger | ⬜ next |
+| Stripe checkout — signed webhooks, replay-proof | ✅ **verified end to end** |
 
 ## Principles
 
@@ -96,6 +97,12 @@ disclosed while it can still predict a future spin.
 **No window where a stake is taken but a payout is lost.** The nonce is claimed
 first (moving no money), the engine runs, and then debit-credit-record happens in
 a single transaction. See [The Play Path](docs/06-the-play-path.md).
+
+**Coins are granted by the webhook, never the redirect.** A success URL is not
+proof of payment — anyone can visit it. Three independent layers stop a replayed
+webhook from paying twice: the provider's event id is a primary key, the purchase
+row is locked and status-checked, and the ledger transfer carries an idempotency
+key.
 
 **Coins are not money, structurally.** `assertRedeemable()` always throws, and a
 database trigger rejects every withdrawal. A cash-out feature written by mistake

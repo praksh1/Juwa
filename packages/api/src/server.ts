@@ -25,10 +25,17 @@ import {
   verifyRound,
   type PlayerContext,
 } from '@juwa/server';
-import { WELCOME_BONUS, COIN_PACKS, VIP_TIERS, tierForXp } from '@juwa/economy';
+import { WELCOME_BONUS, COIN_PACKS, VIP_TIERS, coinsGranted, tierForXp } from '@juwa/economy';
 import { listGames } from '@juwa/engine';
 import { AuthError, bearerToken, verifyJwt } from './jwt.js';
 import { LIMITS, RateLimiter } from './ratelimit.js';
+import {
+  WebhookVerificationError,
+  isPaid,
+  purchaseIdFromEvent,
+  verifyWebhookSignature,
+  type StripeGateway,
+} from './stripe.js';
 
 export interface ServerConfig {
   db: PostgresDb;
@@ -37,6 +44,14 @@ export interface ServerConfig {
   jwtSecret: string;
   /** Origins allowed to call this API. Never '*' — credentials are involved. */
   allowedOrigins: string[];
+  /** Omit to run without a store; the checkout route then returns 503. */
+  stripe?: {
+    gateway: StripeGateway;
+    webhookSecret: string;
+    /** Where Stripe returns the browser. Ours, not the client's. */
+    successUrl: string;
+    cancelUrl: string;
+  };
 }
 
 interface Ctx {
@@ -50,6 +65,17 @@ interface Ctx {
 }
 
 const MAX_BODY_BYTES = 16 * 1024;
+
+async function readRaw(req: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += (chunk as Buffer).length;
+    if (size > MAX_BODY_BYTES) throw new ApiError('Request body too large', 413, 'body_too_large');
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
 
 async function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = [];
@@ -172,7 +198,7 @@ export function createServer(config: ServerConfig) {
     'GET /me': async (ctx) => {
       const { rows } = await config.query<Record<string, unknown>>(
         `select username, registered_at, age_verified_at, self_excluded_until,
-                daily_streak, last_bonus_date
+                daily_streak, last_bonus_date, has_purchased
            from profiles where id = $1`,
         [ctx.player.playerId],
       );
@@ -186,6 +212,7 @@ export function createServer(config: ServerConfig) {
         ageVerified: row['age_verified_at'] !== null,
         selfExcludedUntil: row['self_excluded_until'],
         dailyStreak: row['daily_streak'],
+        hasPurchased: row['has_purchased'],
       };
     },
 
@@ -262,6 +289,76 @@ export function createServer(config: ServerConfig) {
       return verifyRound(config.db, roundId);
     },
 
+    'POST /store/checkout': async (ctx) => {
+      if (!config.stripe) {
+        throw new ApiError('The store is not configured', 503, 'store_unavailable');
+      }
+      await assertCanPlay(config, ctx.player.playerId);
+
+      const { packId } = ctx.body as { packId?: string };
+      if (typeof packId !== 'string') {
+        throw new ApiError('packId is required', 400, 'invalid_input');
+      }
+
+      // The price and coin amount come from OUR catalogue, keyed by an id. The
+      // client names which pack it wants and nothing else — a client that can
+      // send an amount will eventually send 1 cent for the biggest pack.
+      const pack = COIN_PACKS.find((candidate) => candidate.id === packId);
+      if (!pack) throw new ApiError(`Unknown pack: ${packId}`, 404, 'unknown_pack');
+
+      const player = await config.query<{ has_purchased: boolean }>(
+        `select has_purchased from profiles where id = $1`,
+        [ctx.player.playerId],
+      );
+      const isFirstPurchase = player.rows[0]?.has_purchased === false;
+      const coins = coinsGranted(pack, isFirstPurchase);
+
+      const { rows } = await config.query<{ create_pending_purchase: string }>(
+        `select create_pending_purchase($1, $2, 'stripe', $3, $4, $5)`,
+        [ctx.player.playerId, pack.id, pack.priceUsd, coins, isFirstPurchase],
+      );
+      const purchaseId = rows[0]!.create_pending_purchase;
+
+      const session = await config.stripe.gateway.createCheckoutSession({
+        purchaseId,
+        playerId: ctx.player.playerId,
+        packName: `${pack.name} — ${coins.toLocaleString('en-US')} Gold Coins`,
+        coins,
+        priceUsd: pack.priceUsd,
+        // Built from server config, never from the request: an attacker-supplied
+        // return URL turns our checkout into an open redirect.
+        successUrl: `${config.stripe.successUrl}?purchase=${purchaseId}`,
+        cancelUrl: config.stripe.cancelUrl,
+      });
+
+      await config.query(`select attach_provider_txn($1, $2, $3)`, [
+        purchaseId,
+        session.id,
+        session.url,
+      ]);
+
+      return { purchaseId, checkoutUrl: session.url, coins, priceUsd: pack.priceUsd };
+    },
+
+    'GET /store/purchase': async (ctx) => {
+      const purchaseId = ctx.url.searchParams.get('id');
+      if (!purchaseId) throw new ApiError('id is required', 400, 'invalid_input');
+      const { rows } = await config.query<Record<string, unknown>>(
+        `select id, status, coins_granted, price_usd, pack_id
+           from coin_purchases where id = $1 and player_id = $2`,
+        [purchaseId, ctx.player.playerId],
+      );
+      const row = rows[0];
+      if (!row) throw new ApiError('Purchase not found', 404, 'not_found');
+      return {
+        id: row['id'],
+        status: row['status'],
+        coins: Number(row['coins_granted']),
+        priceUsd: Number(row['price_usd']),
+        packId: row['pack_id'],
+      };
+    },
+
     'POST /seed/rotate': async (ctx) => {
       const { clientSeed } = ctx.body as { clientSeed?: string };
       if (clientSeed !== undefined && (typeof clientSeed !== 'string' || clientSeed.length > 64)) {
@@ -301,6 +398,22 @@ export function createServer(config: ServerConfig) {
 
     if (url.pathname === '/health') {
       send(res, 200, { ok: true });
+      return;
+    }
+
+    /**
+     * The Stripe webhook.
+     *
+     * Handled before the JWT check because Stripe has no bearer token — the
+     * signature IS the authentication, and it is strictly stronger: it proves
+     * the body came from Stripe unmodified, which a token could not.
+     *
+     * Never rate limited. Throttling Stripe means dropping payment
+     * notifications, and a dropped notification is a player who paid and got
+     * nothing.
+     */
+    if (url.pathname === '/webhooks/stripe' && req.method === 'POST') {
+      await handleStripeWebhook(config, req, res);
       return;
     }
 
@@ -348,4 +461,110 @@ export function createServer(config: ServerConfig) {
 
 async function assertCanPlay(config: ServerConfig, playerId: string): Promise<void> {
   await config.query(`select assert_can_play($1)`, [playerId]);
+}
+
+/**
+ * Process a Stripe webhook.
+ *
+ * Three layers stop a replayed event from granting coins twice:
+ *
+ *   1. `record_webhook_event` — the provider's event id is a primary key, so a
+ *      redelivery collides and is skipped here.
+ *   2. `complete_coin_purchase` — locks the purchase row and refuses anything
+ *      not still 'pending'.
+ *   3. `post_transfer` — the idempotency key on the ledger transaction itself.
+ *
+ * Any one of them would do. All three are cheap, and the failure they prevent
+ * is handing out coins nobody paid for.
+ *
+ * On an unexpected error we return 500 deliberately, so Stripe retries. The
+ * alternative — swallowing it with a 200 — loses a real payment silently, and a
+ * player who paid and got nothing is the worst outcome in the product.
+ */
+async function handleStripeWebhook(
+  config: ServerConfig,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  if (!config.stripe) {
+    send(res, 503, { message: 'The store is not configured', code: 'store_unavailable' });
+    return;
+  }
+
+  let raw: string;
+  try {
+    raw = await readRaw(req);
+  } catch (error) {
+    const apiError = toApiError(error);
+    send(res, apiError.status, { message: apiError.message, code: apiError.code });
+    return;
+  }
+
+  let event;
+  try {
+    // The RAW body, byte for byte. Re-serialising the parsed object reorders
+    // keys and the signature stops matching.
+    event = verifyWebhookSignature(
+      raw,
+      req.headers['stripe-signature'] as string | undefined,
+      config.stripe.webhookSecret,
+    );
+  } catch (error) {
+    // 400, not 500: the request is bad and retrying it will not help.
+    const message = error instanceof WebhookVerificationError ? error.message : 'Invalid webhook';
+    console.warn('[stripe webhook] rejected:', message);
+    send(res, 400, { message, code: 'invalid_signature' });
+    return;
+  }
+
+  try {
+    const { rows } = await config.query<{ record_webhook_event: boolean }>(
+      `select record_webhook_event($1, 'stripe', $2, $3::jsonb)`,
+      [event.id, event.type, raw],
+    );
+    if (rows[0]?.record_webhook_event === false) {
+      // Seen before. Acknowledge so Stripe stops retrying.
+      send(res, 200, { received: true, duplicate: true });
+      return;
+    }
+
+    const relevant =
+      event.type === 'checkout.session.completed' ||
+      event.type === 'checkout.session.async_payment_succeeded';
+
+    if (relevant && isPaid(event)) {
+      const purchaseId = purchaseIdFromEvent(event);
+      if (!purchaseId) {
+        await config.query(`select mark_webhook_processed($1, $2)`, [
+          event.id,
+          'No purchase id on the event',
+        ]);
+        send(res, 200, { received: true, ignored: 'no purchase id' });
+        return;
+      }
+      const session = event.data.object as { id?: string };
+      await config.query(`select * from complete_coin_purchase($1, $2)`, [
+        purchaseId,
+        session.id ?? null,
+      ]);
+    } else if (
+      event.type === 'checkout.session.expired' ||
+      event.type === 'checkout.session.async_payment_failed'
+    ) {
+      const purchaseId = purchaseIdFromEvent(event);
+      if (purchaseId) {
+        await config.query(`select fail_coin_purchase($1, $2)`, [purchaseId, event.type]);
+      }
+    }
+
+    await config.query(`select mark_webhook_processed($1)`, [event.id]);
+    send(res, 200, { received: true });
+  } catch (error) {
+    console.error('[stripe webhook]', event.id, error);
+    await config
+      .query(`select mark_webhook_processed($1, $2)`, [event.id, String(error)])
+      .catch(() => {});
+    // 500 so Stripe retries. Never swallow a payment.
+    send(res, 500, { message: 'Could not process webhook', code: 'webhook_failed' });
+  }
 }

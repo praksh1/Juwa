@@ -18,6 +18,21 @@ export interface PlayerState {
   error: string | null;
 }
 
+/**
+ * A nudge that the balance changed somewhere else — a purchase confirmed, a
+ * bonus claimed on another screen.
+ *
+ * Every `usePlayer` listens, so one refetch keeps the lobby, the wallet and the
+ * store in agreement. Without it a player who buys coins sees the new balance
+ * on one screen and the old one on the next, which reads as a bug even though
+ * the money is fine.
+ */
+const balanceListeners = new Set<() => void>();
+
+export function notifyBalanceChanged(): void {
+  for (const listener of balanceListeners) listener();
+}
+
 export function usePlayer() {
   const api = useRef<PlayApi>(createPlayApi()).current;
   const [state, setState] = useState<PlayerState>({
@@ -49,6 +64,11 @@ export function usePlayer() {
 
   useEffect(() => {
     void refresh();
+    const listener = () => void refresh();
+    balanceListeners.add(listener);
+    return () => {
+      balanceListeners.delete(listener);
+    };
   }, [refresh]);
 
   const claimDaily = useCallback(async () => {

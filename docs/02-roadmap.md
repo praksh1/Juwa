@@ -113,10 +113,15 @@ See [The Coin Economy](05-coin-economy.md) for the model this implements.
 - [x] Coin packs, bonuses, VIP and bet sizing *(done, `packages/economy`)*
 - [x] Store screen *(done)*
 - [x] Schema: purchases, bonus grants, no-withdrawal guard *(done, migration 0002)*
-- [ ] Apple In-App Purchase + Google Play Billing
-- [ ] Stripe for web purchases (nets ~34% more per sale)
-- [ ] Receipts verified **server-side** — never trust the app's word
-- [ ] Daily bonus + top-up timers wired to the schema
+- [x] Stripe Checkout — hosted page, no card data on our servers *(done)*
+- [x] Signed webhooks, replay-proof three ways *(done, migration 0005)*
+- [x] First-purchase doubler, granted once *(done)*
+- [x] Daily bonus wired to the schema *(done)*
+- [ ] Low-balance top-up timer in the UI (server side is done)
+- [ ] Receipts by email, and a refund path
+
+No Apple or Google billing: Juwa is a website, so all revenue is Stripe at
+~2.9% rather than 15–30%.
 
 No redemption or KYC work: there is no cash-out under the social model.
 
