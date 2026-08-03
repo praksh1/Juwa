@@ -12,12 +12,12 @@
 import { minor } from '@juwa/money';
 import { RngStream } from '../rng.js';
 import { RouletteEngine } from '../games/roulette.js';
-import { SlotsEngine } from '../games/slots.js';
+import { classicSlots } from '../games/slots.js';
 
 const SPINS = Number(process.env['RTP_SPINS'] ?? 2_000_000);
 
 function simulateSlots(spins: number) {
-  const engine = new SlotsEngine();
+  const engine = classicSlots();
   const stake = minor(2000); // $20.00
   let wagered = 0;
   let returned = 0;

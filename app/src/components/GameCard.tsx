@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, shadows, spacing, typography } from '@juwa/ui';
 import { Badge, Txt } from './primitives';
 import { GameArt } from './GameArt';
-import type { GameSummary } from '../api/games';
+import { slotDetails, type GameSummary } from '../api/games';
 
 /**
  * A game tile in the lobby.
@@ -45,7 +45,7 @@ export function GameCard({
     >
       <View style={styles.art}>
         <View style={StyleSheet.absoluteFill}>
-          <GameArt gameId={game.id} accent={game.accent} />
+          <GameArt gameId={game.id} accent={game.accent} theme={slotDetails(game.id)?.theme} />
         </View>
 
         {/* The name sits over the art, so it needs the art dimmed underneath it

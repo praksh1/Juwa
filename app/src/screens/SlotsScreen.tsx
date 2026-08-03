@@ -4,7 +4,9 @@ import { colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
 import { betOptions, suggestedBet } from '@juwa/economy';
 import { Button, Card, Txt } from '../components/primitives';
+import { useRoute } from '@react-navigation/native';
 import { Reel, type ReelPhase } from '../components/Reel';
+import { slotDetails } from '../api/games';
 import { sounds, spinNow, unlock } from '../sound';
 import {
   PlayApiError,
@@ -15,10 +17,6 @@ import {
   USE_DEMO_API,
 } from '../api/client';
 
-const GAME_ID = 'juwa-classic-slots';
-const MIN_BET = minor(20);
-const MAX_BET = minor(50_000);
-const REELS = 5;
 /** Free spins run at this fraction of the base spin duration. */
 const FS_SPEED = 0.45;
 
@@ -46,17 +44,17 @@ const LEAD_IN_SECONDS = 0.04;
  */
 function shouldAnticipate(grid: string[][]): boolean {
   let scatters = 0;
-  for (const column of grid.slice(0, REELS - 1)) {
+  for (const column of grid.slice(0, grid.length - 1)) {
     for (const symbol of column) if (symbol === 'SCATTER') scatters++;
   }
   return scatters >= 2;
 }
 
-const IDLE_GRID: string[][] = Array.from({ length: REELS }, () => [
-  'CHERRY',
-  'BAR',
-  'LEMON',
-]);
+/** What the machine shows before the first spin. */
+function idleGrid(reels: number, rows: number): string[][] {
+  const column = ['CHERRY', 'BAR', 'LEMON'].slice(0, rows);
+  return Array.from({ length: reels }, () => [...column]);
+}
 
 /**
  * The slot machine.
@@ -73,12 +71,34 @@ const IDLE_GRID: string[][] = Array.from({ length: REELS }, () => [
 export function SlotsScreen() {
   const api = useRef<PlayApi>(createPlayApi()).current;
 
+  /**
+   * Which game this is.
+   *
+   * The route name IS the game id — every slot in the catalogue is registered
+   * against this one screen. So the screen is generic: limits, theme and the
+   * published RTP all come from the catalogue entry rather than from constants
+   * that would only ever be right for one game.
+   */
+  const route = useRoute();
+  const gameId = route.name;
+  const details = slotDetails(gameId);
+  const MIN_BET = minor(details?.minBet ?? 20);
+  const MAX_BET = minor(details?.maxBet ?? 50_000);
+  /**
+   * Reel count comes from the catalogue, not a constant. Three of the games are
+   * three-reel classics, and a screen hard-wired to five would render two empty
+   * columns and wait forever for a fifth reel to report that it had stopped.
+   */
+  const REELS = details?.reels ?? 5;
+  const ROWS = details?.rows ?? 3;
+  const IDLE_GRID = useMemo(() => idleGrid(REELS, ROWS), [REELS, ROWS]);
+
   const [balance, setBalance] = useState(minor(0));
   const [bet, setBet] = useState(minor(2_000));
   const [reelPhase, setReelPhase] = useState<ReelPhase>('idle');
   const spinning = reelPhase !== 'idle';
   const [round, setRound] = useState<RoundResponse | null>(null);
-  const [grid, setGrid] = useState<string[][]>(IDLE_GRID);
+  const [grid, setGrid] = useState<string[][]>(() => idleGrid(REELS, ROWS));
   const [error, setError] = useState<string | null>(null);
   const spinToken = useRef(0);
 
@@ -119,12 +139,15 @@ export function SlotsScreen() {
    * booked in advance against the audio clock — it only reports that the last
    * reel has physically settled, which is what the spin sequence waits on.
    */
-  const handleReelLanded = useCallback((index: number) => {
-    if (index === REELS - 1) {
-      landingResolver.current?.();
-      landingResolver.current = null;
-    }
-  }, []);
+  const handleReelLanded = useCallback(
+    (index: number) => {
+      if (index === REELS - 1) {
+        landingResolver.current?.();
+        landingResolver.current = null;
+      }
+    },
+    [REELS],
+  );
 
   const inFreeSpins = phase === 'fs-intro' || phase === 'fs' || phase === 'fs-total';
 
@@ -236,7 +259,7 @@ export function SlotsScreen() {
 
     try {
       const result = await api.placeBet({
-        gameId: GAME_ID,
+        gameId,
         stake: bet,
         // Unique per attempt, so a retry after a timeout is recognised as the
         // same bet rather than charged again.
@@ -333,7 +356,7 @@ export function SlotsScreen() {
         */}
         <View style={styles.rtpPill}>
           <Txt variant="caption" color={colors.text.secondary}>
-            RTP 96.25%
+            RTP {((details?.rtp ?? 0.96) * 100).toFixed(2)}%
           </Txt>
         </View>
       </View>
@@ -345,6 +368,7 @@ export function SlotsScreen() {
             <Reel
               key={i}
               index={i}
+              rows={ROWS}
               phase={reelPhase}
               round={reelRound}
               landFrom={schedule[i]?.from ?? 0}

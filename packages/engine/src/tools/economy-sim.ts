@@ -18,9 +18,9 @@
 import { minor, type Minor } from '@juwa/money';
 import { WELCOME_BONUS, dailyBonus } from '@juwa/economy';
 import { RngStream } from '../rng.js';
-import { SlotsEngine } from '../games/slots.js';
+import { classicSlots } from '../games/slots.js';
 
-const engine = new SlotsEngine();
+const engine = classicSlots();
 const TRIALS = Number(process.env['ECON_TRIALS'] ?? 2_000);
 /**
  * Give up rather than loop forever when a player runs hot.

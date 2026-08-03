@@ -17,7 +17,24 @@
  * In Phase 3 this becomes a `fetch` against the API — the shape stays the same.
  */
 
+import { SLOT_GAMES } from './slot-games.generated';
+
 export type GameCategory = 'slots' | 'table' | 'live' | 'instant' | 'poker';
+
+export interface SlotGame {
+  id: string;
+  name: string;
+  category: 'slots';
+  rtp: number;
+  volatility: 'low' | 'medium' | 'high' | 'very-high';
+  reels: number;
+  rows: number;
+  lines: number;
+  minBet: number;
+  maxBet: number;
+  theme: { primary: string; secondary: string; accent: string };
+  tag?: 'new' | 'hot' | 'mega';
+}
 
 export interface GameSummary {
   id: string;
@@ -50,17 +67,23 @@ export const CATEGORIES: { id: GameCategory | 'all'; label: string }[] = [
   { id: 'instant', label: 'Instant' },
 ];
 
-export const GAMES: GameSummary[] = [
-  {
-    id: 'juwa-classic-slots',
-    name: 'Juwa Classic',
-    category: 'slots',
-    rtp: 0.9625,
-    minBet: 20,
-    maxBet: 50_000,
-    accent: '#D4AF37',
-    tag: 'hot',
-  },
+/**
+ * The slots, generated from the engine catalogue so the lobby cannot advertise
+ * a game the server does not have — or miss one it does.
+ */
+const SLOT_SUMMARIES: GameSummary[] = SLOT_GAMES.map((slot) => ({
+  id: slot.id,
+  name: slot.name,
+  category: 'slots' as const,
+  rtp: slot.rtp,
+  minBet: slot.minBet,
+  maxBet: slot.maxBet,
+  accent: slot.theme.secondary,
+  ...(slot.tag && slot.tag !== 'mega' ? { tag: slot.tag } : {}),
+}));
+
+/** Table and instant games, which are hand-built rather than catalogue-driven. */
+const OTHER_GAMES: GameSummary[] = [
   {
     id: 'juwa-blackjack',
     name: 'Blackjack',
@@ -120,8 +143,21 @@ export const GAMES: GameSummary[] = [
  * whose engines have not been written — each is a file implementing
  * `GameEngine` plus a screen, per docs/04-adding-a-game.md.
  */
-export const PLAYABLE = new Set([
-  'juwa-classic-slots',
+export const GAMES: GameSummary[] = [...SLOT_SUMMARIES, ...OTHER_GAMES];
+
+/** Theme and reel geometry for a slot, or undefined for a non-slot. */
+export function slotDetails(id: string): SlotGame | undefined {
+  return SLOT_GAMES.find((game) => game.id === id);
+}
+
+/**
+ * Games with a shipped renderer.
+ *
+ * Every slot in the catalogue is playable: they share one screen driven by the
+ * game's own config, so there is nothing per-game left to build.
+ */
+export const PLAYABLE = new Set<string>([
+  ...SLOT_GAMES.map((game) => game.id),
   'juwa-blackjack',
   'juwa-roulette-eu',
 ]);

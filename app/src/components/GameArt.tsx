@@ -33,6 +33,9 @@ import Svg, {
   Stop,
 } from 'react-native-svg';
 import { colors } from '@juwa/ui';
+import type { SlotGame } from '../api/games';
+
+type SlotTheme = SlotGame['theme'];
 
 /**
  * Gradient ids are global to the document once react-native-svg renders to real
@@ -322,7 +325,106 @@ function Scratch() {
   );
 }
 
-/** Anything without bespoke art yet. Still branded, never a blank rectangle. */
+/**
+ * Themed art for a catalogue slot.
+ *
+ * Twenty-two of the twenty-three slots have no bespoke drawing, and twenty-two
+ * identical stars would make the lobby look like a placeholder — which is what
+ * a lobby full of one shape IS. So the motif is chosen from the game's id and
+ * painted in the game's own palette: same construction, different result every
+ * time, and a genuinely new theme is a colour triple in the catalogue.
+ *
+ * A hash rather than a random pick, because a tile that changes its picture on
+ * every render is worse than a dull one.
+ */
+function hash(text: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return Math.abs(h);
+}
+
+/**
+ * Six unambiguous silhouettes.
+ *
+ * "Unambiguous" is the whole specification. An earlier set included a horseshoe
+ * and a bell whose outlines, at tile size and with no interior detail, read as
+ * a lower-case "n" and as a blob respectively. A motif that has to be explained
+ * is worse than a plain rectangle, because the player assumes it is meant to be
+ * something and cannot tell what.
+ */
+const MOTIFS = [
+  // Star burst
+  'M50,20 L58,42 L82,42 L62,56 L70,80 L50,66 L30,80 L38,56 L18,42 L42,42 Z',
+  // Gem
+  'M50,84 L20,46 L32,20 H68 L80,46 Z',
+  // Crown
+  'M22,30 L34,42 L50,18 L66,42 L78,30 L73,72 H27 Z',
+  // Ring / coin. Second subpath is the hole, via the even-odd fill rule.
+  'M50,18 A32,32 0 1 1 49.9,18 Z M50,34 A16,16 0 1 0 50.1,34 Z',
+  // Lightning bolt
+  'M58,12 L26,58 H46 L40,88 L74,40 H54 Z',
+  // Spade
+  'M50,14 C76,44 76,64 58,64 C54,64 51,62 50,58 L55,86 H45 L50,58 C49,62 46,64 42,64 C24,64 24,44 50,14 Z',
+];
+
+function ThemedArt({ id, theme }: { id: string; theme: SlotTheme }) {
+  const seed = hash(id);
+  const motif = MOTIFS[seed % MOTIFS.length]!;
+  const rotated = seed % 2 === 0;
+
+  return (
+    <>
+      <Defs>
+        <LinearGradient id={uid(id, 'bg')} x1="0" y1="0" x2="1" y2="1">
+          <Stop offset="0" stopColor={theme.secondary} />
+          <Stop offset="0.65" stopColor={theme.primary} />
+          <Stop offset="1" stopColor="#05070F" />
+        </LinearGradient>
+        <LinearGradient id={uid(id, 'motif')} x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor="#FFFFFF" />
+          <Stop offset="0.35" stopColor={theme.accent} />
+          <Stop offset="1" stopColor={theme.primary} />
+        </LinearGradient>
+      </Defs>
+      <Rect width={100} height={100} fill={`url(#${uid(id, 'bg')})`} />
+      <Circle cx={50} cy={48} r={36} fill="#FFFFFF" opacity={0.1} />
+
+      {/* Scaled about the centre so the motif has margin rather than bleeding
+          off the tile, where the name and badge also have to live. */}
+      {/* Offset shadow copy, so the motif sits on the tile rather than in it. */}
+      <G
+        transform={`translate(2.5,3) translate(50,50) scale(0.82) translate(-50,-50)${
+          rotated ? ' rotate(-8 50 50)' : ''
+        }`}
+        opacity={0.35}
+      >
+        <Path d={motif} fill="#000000" fillRule="evenodd" />
+      </G>
+      <G
+        transform={`translate(50,50) scale(0.82) translate(-50,-50)${
+          rotated ? ' rotate(-8 50 50)' : ''
+        }`}
+      >
+        <Path
+          d={motif}
+          fill={`url(#${uid(id, 'motif')})`}
+          stroke="#1A1206"
+          strokeWidth={2}
+          strokeLinejoin="round"
+          fillRule="evenodd"
+        />
+      </G>
+
+      <Sparkle x={18 + (seed % 9)} y={22} size={5} opacity={0.85} />
+      <Sparkle x={84} y={74 - (seed % 11)} size={4} opacity={0.7} />
+    </>
+  );
+}
+
+/** Anything with neither bespoke nor themed art. Never a blank rectangle. */
 function Fallback({ accent }: { accent: string }) {
   return (
     <>
@@ -348,7 +450,15 @@ const ART: Record<string, () => React.JSX.Element> = {
   'juwa-scratch': Scratch,
 };
 
-export function GameArt({ gameId, accent }: { gameId: string; accent: string }) {
+export function GameArt({
+  gameId,
+  accent,
+  theme,
+}: {
+  gameId: string;
+  accent: string;
+  theme?: SlotTheme;
+}) {
   const Drawing = ART[gameId];
   return (
     <Svg
@@ -357,7 +467,13 @@ export function GameArt({ gameId, accent }: { gameId: string; accent: string }) 
       viewBox="0 0 100 100"
       preserveAspectRatio="xMidYMid slice"
     >
-      {Drawing ? <Drawing /> : <Fallback accent={accent} />}
+      {Drawing ? (
+        <Drawing />
+      ) : theme ? (
+        <ThemedArt id={gameId} theme={theme} />
+      ) : (
+        <Fallback accent={accent} />
+      )}
     </Svg>
   );
 }

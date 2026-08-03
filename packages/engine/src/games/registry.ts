@@ -8,6 +8,11 @@
  *   2. Add one line to `GAMES` below.
  *   3. Build the client-side renderer for it.
  *
+ * Slots skip all three: they share one engine driven by a config object, so a
+ * new slot is an entry in `SLOT_CATALOGUE` and nothing else. That is the whole
+ * point of the catalogue — twenty games cannot each carry their own settlement
+ * bug if none of them carries its own settlement code.
+ *
  * Steps 1 and 2 are hours of work. Step 3 is where the real time goes, which is
  * exactly the right shape: the risky part (money, fairness, settlement) is
  * shared and tested once, and the per-game work is presentation.
@@ -15,7 +20,7 @@
 
 import { BlackjackEngine } from './blackjack.js';
 import { RouletteEngine } from './roulette.js';
-import { SlotsEngine } from './slots.js';
+import { allSlotEngines } from './slots.js';
 import type { GameEngine, GameId } from './types.js';
 
 const GAMES = new Map<GameId, GameEngine<any, any, any>>();
@@ -35,6 +40,6 @@ export function listGames(): GameEngine<any, any, any>[] {
   return [...GAMES.values()];
 }
 
-register(new SlotsEngine());
+for (const slot of allSlotEngines()) register(slot);
 register(new RouletteEngine());
 register(new BlackjackEngine());

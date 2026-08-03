@@ -4,7 +4,7 @@ import { minor } from '@juwa/money';
 import { RngStream } from '../rng.js';
 import { BlackjackEngine, handValue, type Card } from './blackjack.js';
 import { RouletteEngine } from './roulette.js';
-import { SlotsEngine } from './slots.js';
+import { classicSlots } from './slots.js';
 import { getGame, listGames } from './registry.js';
 import { BetLimitError, IllegalActionError, toClientView } from './types.js';
 
@@ -33,7 +33,7 @@ test('client view never carries private state', () => {
 });
 
 test('stakes outside the table limits are rejected', () => {
-  const engine = new SlotsEngine();
+  const engine = classicSlots();
   const rng = () => new RngStream('s', 'c', 1);
   assert.throws(() => engine.init(minor(1), rng()), BetLimitError);
   assert.throws(() => engine.init(minor(999_999_999), rng()), BetLimitError);
@@ -42,7 +42,7 @@ test('stakes outside the table limits are rejected', () => {
 // ---------------------------------------------------------------- slots
 
 test('slots are deterministic for a given seed', () => {
-  const engine = new SlotsEngine();
+  const engine = classicSlots();
   const one = engine.init(STAKE, new RngStream('server', 'client', 42));
   const two = engine.init(STAKE, new RngStream('server', 'client', 42));
   assert.deepEqual(one.public, two.public);
@@ -50,7 +50,7 @@ test('slots are deterministic for a given seed', () => {
 });
 
 test('slots settle immediately and reject actions', () => {
-  const engine = new SlotsEngine();
+  const engine = classicSlots();
   const state = engine.init(STAKE, new RngStream('s', 'c', 1));
   assert.equal(state.status, 'settled');
   assert.deepEqual(state.availableActions, []);
@@ -59,7 +59,7 @@ test('slots settle immediately and reject actions', () => {
 });
 
 test('slots grid is always 5x3 of known symbols', () => {
-  const engine = new SlotsEngine();
+  const engine = classicSlots();
   for (let i = 0; i < 500; i++) {
     const { grid } = engine.init(STAKE, new RngStream('s', 'c', i)).public.baseSpin;
     assert.equal(grid.length, 5);
@@ -70,7 +70,7 @@ test('slots grid is always 5x3 of known symbols', () => {
 test('payout always equals stake times the reported multiplier', () => {
   // If these ever disagree, the ledger and the animation disagree, and one of
   // them is paying out the wrong amount.
-  const engine = new SlotsEngine();
+  const engine = classicSlots();
   for (let i = 0; i < 2000; i++) {
     const state = engine.init(STAKE, new RngStream('s', 'c', i));
     const { stake, payout, multiplier } = state.settlement!;
@@ -82,7 +82,7 @@ test('payout always equals stake times the reported multiplier', () => {
 test('slots RTP holds inside the certified band', () => {
   // The published figure is 96.25%. A change to a reel strip or a paytable
   // entry that moves RTP outside 95–97.5% must fail CI, not ship.
-  const engine = new SlotsEngine();
+  const engine = classicSlots();
   let wagered = 0;
   let returned = 0;
   const spins = 200_000;

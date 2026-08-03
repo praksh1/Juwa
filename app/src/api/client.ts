@@ -22,6 +22,7 @@
  */
 
 import { getAccessToken } from './auth';
+import { SLOT_GAMES } from './slot-games.generated';
 
 export type RoundStatus = 'awaiting-action' | 'settled';
 
@@ -112,6 +113,17 @@ export interface PlayApi {
     idempotencyKey: string;
   }): Promise<RoundResponse>;
   getPurchase(id: string): Promise<{ id: string; status: string; coins: number; packId: string }>;
+}
+
+/** Demo mode plays any slot; the ids come from the same generated list the lobby uses. */
+function isSlotGame(gameId: string): boolean {
+  return SLOT_GAMES.some((game) => game.id === gameId);
+}
+
+/** The grid shape the real server would deal for this game. */
+function slotShape(gameId: string): { reels: number; rows: number } {
+  const game = SLOT_GAMES.find((g) => g.id === gameId);
+  return { reels: game?.reels ?? 5, rows: game?.rows ?? 3 };
 }
 
 export class PlayApiError extends Error {
@@ -266,7 +278,7 @@ export class DemoPlayApi implements PlayApi {
     // Never fake a payment. A demo that pretends to sell coins is a demo that
     // hides whether the real thing works.
     throw new PlayApiError(
-      'The store needs a configured server — set EXPO_PUBLIC_API_URL.',
+      'The store is not available in demo mode.',
       'store_unavailable',
     );
   }
@@ -280,7 +292,7 @@ export class DemoPlayApi implements PlayApi {
     // the device would mean the client deciding card outcomes, which is exactly
     // what the whole architecture exists to prevent.
     throw new PlayApiError(
-      'Blackjack needs a configured server — set EXPO_PUBLIC_API_URL.',
+      'Blackjack is not available in demo mode. Sign in to play it.',
       'server_required',
     );
   }
@@ -303,12 +315,16 @@ export class DemoPlayApi implements PlayApi {
     idempotencyKey: string;
     action?: { type: string; [key: string]: unknown };
   }) {
-    if (request.gameId !== 'juwa-classic-slots') {
-      // Only the slot stub exists. Faking a roulette wheel on the device would
-      // mean the client deciding outcomes, which is the one thing the whole
-      // architecture exists to prevent.
+    // Every slot in the catalogue runs on the stub: they share one engine on
+    // the server, so a demo that only knew the flagship left twenty-two games
+    // in the lobby that could be opened and not played.
+    //
+    // Table games still need the server. Faking a roulette wheel on the device
+    // would mean the client deciding outcomes, which is the one thing the whole
+    // architecture exists to prevent.
+    if (!isSlotGame(request.gameId)) {
       throw new PlayApiError(
-        'This game needs a configured server — set EXPO_PUBLIC_API_URL.',
+        'This game is not available in demo mode. Sign in to play it.',
         'server_required',
       );
     }
@@ -321,17 +337,21 @@ export class DemoPlayApi implements PlayApi {
     // Simulate the round trip so the UI is built against realistic latency.
     await new Promise((resolve) => setTimeout(resolve, 180));
 
-    const grid: string[][] = Array.from({ length: 5 }, () =>
-      Array.from({ length: 3 }, () => weightedSymbol()),
+    // Deal the shape the real server would for this game — three of the
+    // catalogue's slots are three-reel classics, and a stub that always dealt
+    // 5x3 would render two columns the game does not have.
+    const { reels, rows } = slotShape(request.gameId);
+    const grid: string[][] = Array.from({ length: reels }, () =>
+      Array.from({ length: rows }, () => weightedSymbol()),
     );
 
     // A crude payout, purely so win presentation has something to render.
     const lineWins: LineWin[] = [];
-    for (const row of [0, 1, 2]) {
+    for (let row = 0; row < rows; row++) {
       const symbols = grid.map((reel) => reel[row]!);
       const first = symbols[0]!;
       let count = 1;
-      while (count < 5 && (symbols[count] === first || symbols[count] === 'WILD')) count++;
+      while (count < reels && (symbols[count] === first || symbols[count] === 'WILD')) count++;
       if (count >= 3) {
         lineWins.push({ line: row, symbol: first, count, multiplier: count * 4 });
       }

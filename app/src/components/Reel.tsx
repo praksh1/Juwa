@@ -39,7 +39,6 @@ import { spinNow } from '../sound';
 
 const FILLER = ['CHERRY', 'LEMON', 'PLUM', 'BAR', 'BELL', 'SEVEN', 'DIAMOND', 'WILD'];
 const SYMBOL_SIZE = 58;
-const VISIBLE_ROWS = 3;
 /** Symbols in one loop cycle. */
 const LOOP_SYMBOLS = 8;
 /** Decorative symbols that scroll past during the landing deceleration. */
@@ -69,6 +68,12 @@ export interface ReelProps {
   result: string[];
   /** Which reel this is, 0-based. */
   index: number;
+  /**
+   * Visible rows. Not every game is 5x3 — the three-reel classics show a single
+   * row, and a window fixed at three would reveal two filler symbols above the
+   * only one that counts.
+   */
+  rows?: number;
   phase: ReelPhase;
   /** Absolute time on the shared clock at which this reel begins landing. */
   landFrom?: number;
@@ -89,6 +94,7 @@ function randomFiller(count: number): string[] {
 export function Reel({
   result,
   index,
+  rows = 3,
   phase,
   landFrom = 0,
   landDuration = 1,
@@ -171,7 +177,7 @@ export function Reel({
   const resultStart = spinning ? Infinity : landingFiller.length;
 
   return (
-    <View style={styles.window}>
+    <View style={[styles.window, { height: SYMBOL_SIZE * rows }]}>
       <Animated.View style={{ transform: [{ translateY: offset }] }}>
         {strip.map((symbol, i) => {
           const resultRow = i - resultStart;
@@ -194,7 +200,6 @@ export function Reel({
 const styles = StyleSheet.create({
   window: {
     flex: 1,
-    height: SYMBOL_SIZE * VISIBLE_ROWS,
     // The strip is taller than the window; this is what turns it into a window.
     overflow: 'hidden',
     backgroundColor: '#05091A',

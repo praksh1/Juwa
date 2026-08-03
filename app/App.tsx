@@ -15,6 +15,7 @@ import { WalletScreen } from './src/screens/WalletScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { AppGate } from './src/AppGate';
 import { registerServiceWorker } from './src/pwa';
+import { SLOT_GAMES } from './src/api/slot-games.generated';
 import { Ticker } from './src/components/Ticker';
 
 const Tab = createBottomTabNavigator();
@@ -29,11 +30,19 @@ function LobbyStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Games" component={LobbyScreen} />
-      <Stack.Screen
-        name="juwa-classic-slots"
-        component={SlotsScreen}
-        options={{ headerShown: true, title: 'Juwa Classic' }}
-      />
+
+      {/* Every slot in the catalogue gets a route, all pointing at the same
+          screen — it reads which game it is from the route name. Registering
+          only the flagship left twenty-two games advertised in the lobby and
+          unreachable when tapped, which is worse than not shipping them. */}
+      {SLOT_GAMES.map((game) => (
+        <Stack.Screen
+          key={game.id}
+          name={game.id}
+          component={SlotsScreen}
+          options={{ headerShown: true, title: game.name }}
+        />
+      ))}
       <Stack.Screen
         name="juwa-blackjack"
         component={BlackjackScreen}
