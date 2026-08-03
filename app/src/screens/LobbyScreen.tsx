@@ -92,7 +92,10 @@ export function LobbyScreen() {
           was 40% of the first screen and pushed every game below the fold. */}
       <Card style={styles.hero}>
         <LinearGradient
-          colors={[colors.neon.violet, colors.neon.magenta]}
+          // Deep indigo into royal blue, with gold doing the accent work. The
+          // violet-into-magenta version read as a children's game rather than
+          // as a casino — saturated chrome is what makes an app look cheap.
+          colors={['#2A2170', '#1B3A8F']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}

@@ -4,7 +4,7 @@ import { colors, motion, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
 import { betOptions, suggestedBet } from '@juwa/economy';
 import { Button, Card, Txt } from '../components/primitives';
-import { Reel } from '../components/Reel';
+import { Reel, type ReelPhase } from '../components/Reel';
 import { sounds, unlock } from '../sound';
 import {
   PlayApiError,
@@ -45,7 +45,8 @@ export function SlotsScreen() {
 
   const [balance, setBalance] = useState(minor(0));
   const [bet, setBet] = useState(minor(2_000));
-  const [spinning, setSpinning] = useState(false);
+  const [reelPhase, setReelPhase] = useState<ReelPhase>('idle');
+  const spinning = reelPhase !== 'idle';
   const [round, setRound] = useState<RoundResponse | null>(null);
   const [grid, setGrid] = useState<string[][]>(IDLE_GRID);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +72,20 @@ export function SlotsScreen() {
   const [runningWin, setRunningWin] = useState(0);
   // Increments per spin so each reel run is a distinct animation.
   const [reelRound, setReelRound] = useState(0);
+  const [reelSpeed, setReelSpeed] = useState(1);
+  /**
+   * Resolved by the LAST reel's own stop callback. This is the handshake that
+   * keeps the sound and the readout tied to what is actually on screen.
+   */
+  const landingResolver = useRef<(() => void) | null>(null);
+
+  const handleReelLanded = useCallback((index: number) => {
+    sounds.reelStop(index);
+    if (index === REELS - 1) {
+      landingResolver.current?.();
+      landingResolver.current = null;
+    }
+  }, []);
 
   const inFreeSpins = phase === 'fs-intro' || phase === 'fs' || phase === 'fs-total';
 
@@ -122,7 +137,7 @@ export function SlotsScreen() {
     const token = ++spinToken.current;
     setError(null);
     setRound(null);
-    setSpinning(true);
+    setReelPhase('spinning');
     setPhase('base');
     setRunningWin(0);
     setFreeSpinsTotal(0);
@@ -132,10 +147,26 @@ export function SlotsScreen() {
     // round trip. The server's authoritative figure overwrites it below.
     setBalance((current) => minor(current - bet));
 
-    /** Resolves after `ms`, or immediately if a newer spin has superseded us. */
     const wait = (ms: number) =>
       new Promise<void>((resolve) => setTimeout(resolve, ms));
     const superseded = () => token !== spinToken.current;
+
+    /**
+     * Show a grid on the reels and resolve when the last reel physically stops.
+     *
+     * This replaces a `wait(reelSpin + stagger * (REELS - 1))`, which was wrong
+     * in a way that was audible: the timer started when the network replied,
+     * but the reels started on the tap. Every spin was out of step by the
+     * round-trip time, and that time is different every spin.
+     */
+    const landReels = (next: string[][], speedScale: number) =>
+      new Promise<void>((resolve) => {
+        landingResolver.current = resolve;
+        setGrid(next);
+        setReelSpeed(speedScale);
+        setReelRound((n) => n + 1);
+        setReelPhase('landing');
+      });
 
     try {
       const result = await api.placeBet({
@@ -150,12 +181,12 @@ export function SlotsScreen() {
       const state = result.state as SlotsState;
       const spinWin = (multiplier: number) => Math.floor(bet * multiplier);
 
-      // Hold until the reels have finished their run, so the result appears
-      // when the animation lands rather than the instant the network replies.
-      await wait(motion.reelSpin + motion.reelStagger * (REELS - 1));
+      // The reels have been looping since the tap. Land them on the real result
+      // and wait for the last one to physically stop.
+      await landReels(state.baseSpin.grid, 1);
       if (superseded()) return;
 
-      setGrid(state.baseSpin.grid);
+      setReelPhase('idle');
       setRound(result);
       setRunningWin(spinWin(state.baseSpin.totalMultiplier));
 
@@ -174,13 +205,20 @@ export function SlotsScreen() {
         for (let i = 0; i < state.freeSpins.length; i++) {
           const spinResult = state.freeSpins[i]!;
           setFreeSpinIndex(i);
-          setReelRound((n) => n + 1);
-          // Free spins run faster: the tension that earns a slow base spin is
-          // already spent, and a dozen full-length spins is a minute of waiting.
-          await wait((motion.reelSpin + motion.reelStagger * (REELS - 1)) * FS_SPEED);
+
+          // A short loop before each landing, so a free spin still reads as a
+          // spin. The results are already decided — this is presentation.
+          setReelPhase('spinning');
+          sounds.spinStart();
+          await wait(260);
           if (superseded()) return;
 
-          setGrid(spinResult.grid);
+          // Free spins land faster: the tension that earns a slow base spin is
+          // already spent, and a dozen full-length spins is a minute of waiting.
+          await landReels(spinResult.grid, FS_SPEED);
+          if (superseded()) return;
+
+          setReelPhase('idle');
           setRunningWin((won) => won + spinWin(spinResult.totalMultiplier));
           if (spinResult.totalMultiplier > 0) sounds.win();
           await wait(500);
@@ -198,10 +236,10 @@ export function SlotsScreen() {
       // applied once, at the end — otherwise it would jump before the show did.
       setBalance(minor(result.balance));
       setPhase('idle');
-      setSpinning(false);
+      setReelPhase('idle');
     } catch (caught) {
       if (superseded()) return;
-      setSpinning(false);
+      setReelPhase('idle');
       setPhase('idle');
       sounds.error();
       // The optimistic debit never happened as far as the server is concerned.
@@ -235,25 +273,27 @@ export function SlotsScreen() {
       </View>
 
       <Card style={[styles.machine, inFreeSpins && styles.machineBonus]}>
+        <View style={styles.reelBay}>
         <View style={styles.reels}>
           {Array.from({ length: REELS }, (_, i) => (
             <Reel
               key={i}
               index={i}
-              spinning={spinning}
+              phase={reelPhase}
               round={reelRound}
-              speed={phase === 'fs' ? FS_SPEED : 1}
+              speed={reelSpeed}
               result={grid[i] ?? IDLE_GRID[i]!}
               winningRows={winningRows}
-              onStopped={() => sounds.reelStop(i)}
+              onLanded={() => handleReelLanded(i)}
             />
           ))}
+        </View>
         </View>
 
         <View style={styles.readout} accessibilityLiveRegion="polite">
           {phase === 'fs-intro' ? (
             <Txt variant="h3" color={colors.neon.magenta}>
-              🎰 {freeSpinsTotal} FREE SPINS!
+              {freeSpinsTotal} FREE SPINS
             </Txt>
           ) : phase === 'fs' ? (
             <View style={styles.fsRow}>
@@ -361,8 +401,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.surface.border,
   },
-  machine: { gap: spacing.md, borderColor: colors.gold.dark },
+  machine: {
+    gap: spacing.md,
+    borderColor: colors.gold.dark,
+    borderWidth: 2,
+    backgroundColor: '#0B1330',
+  },
   machineBonus: { borderColor: colors.neon.magenta },
+  /**
+   * The reel bay is recessed: darker than the cabinet, with a gold inner rule.
+   * A slot machine's reels sit BEHIND glass, and that inset is most of what
+   * separates a machine from five rectangles in a row.
+   */
+  reelBay: {
+    backgroundColor: '#05091A',
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderColor: colors.gold.dark,
+    padding: spacing.sm,
+  },
   fsRow: { alignItems: 'center', gap: 2 },
   reels: { flexDirection: 'row', gap: spacing.xs },
   readout: { minHeight: 32, alignItems: 'center', justifyContent: 'center' },
