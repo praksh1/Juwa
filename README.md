@@ -68,7 +68,8 @@ PGPORT=5432 db/test/run.sh
 | Playable slot machine with animated reels | ✅ **plays in-browser** |
 | Design tokens (WCAG AA verified) | ✅ tested |
 | App shell — lobby, store, wallet, profile | ✅ builds & renders |
-| Blackjack / roulette UI, free-spins sequence, sound | ⬜ next |
+| Free-spins bonus round with running total | ✅ **verified in browser** |
+| Blackjack / roulette UI, sound | ⬜ next |
 | Transaction history from the ledger | ⬜ next |
 | Stripe checkout — signed webhooks, replay-proof | ✅ **verified end to end** |
 
@@ -143,7 +144,9 @@ and no 15–30% platform fee. A $9.99 coin pack nets $9.40 through Stripe agains
 $6.99 through in-app purchase.
 
 Supabase owns identity and Postgres, `packages/api` owns the game, and any
-static host serves the app. See [Deploying](docs/07-deploying.md).
+static host serves the app. `netlify.toml` and `vercel.json` are committed, so
+it deploys straight from GitHub with no local toolchain — useful for getting it
+onto a phone. See [Deploying](docs/07-deploying.md).
 
 ## The model
 

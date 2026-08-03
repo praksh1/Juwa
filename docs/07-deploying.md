@@ -92,6 +92,29 @@ tolerate.
 
 ## 3. The web app
 
+### Deploying from your phone, with no laptop
+
+`netlify.toml` and `vercel.json` are committed, so the whole thing can be done
+in a browser:
+
+1. Sign in to Netlify (or Vercel) with GitHub.
+2. **Add new site → Import an existing project**, pick this repository.
+3. Build settings are read from `netlify.toml` — leave them alone.
+4. Deploy. A few minutes later you have a URL.
+
+Set **no environment variables** and you get demo mode: every real screen, fake
+spins, no account needed. That is enough to judge how it feels on an actual
+phone, and it needs neither Supabase nor the API.
+
+Add `EXPO_PUBLIC_API_URL` and the two Supabase variables later — in the same web
+UI — and the next deploy becomes the real thing.
+
+Open the URL in Safari, then **Share → Add to Home Screen**. It launches full
+screen with no browser chrome, which is also the only way iOS will ever deliver
+a push notification.
+
+### Building it yourself
+
 ```bash
 cd app
 EXPO_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co \

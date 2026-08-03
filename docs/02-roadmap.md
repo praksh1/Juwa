@@ -75,7 +75,7 @@ hardest part of the UI.
 - [x] Provable fairness end to end — commit, reveal, replay *(done)*
 - [x] Playable slot screen with staggered reel animation *(done)*
 - [ ] Win-line overlay for zig-zag paylines (straight rows highlight today)
-- [ ] Free-spins sequence — the engine awards them; the UI does not yet play them
+- [x] Free-spins sequence — intro, staggered bonus spins, running total *(done)*
 - [ ] Sound: spin loop, reel stops, win stingers
 - [ ] Blackjack and roulette screens (engines and API are already done)
 

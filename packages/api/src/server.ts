@@ -123,6 +123,12 @@ function toApiError(error: unknown): ApiError {
     if (/Insufficient funds/i.test(message)) {
       return new ApiError(message, 402, 'insufficient_funds');
     }
+    // Username collisions are the one duplicate a player can actually fix, so
+    // they get their own message. "Already done" tells them nothing and leaves
+    // them retyping the same name.
+    if (/duplicate key/i.test(message) && /username/i.test(message)) {
+      return new ApiError('That username is taken. Try another.', 409, 'username_taken');
+    }
     if (/duplicate key|already exists/i.test(message)) {
       return new ApiError('Already done', 409, 'conflict');
     }

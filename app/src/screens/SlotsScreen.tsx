@@ -18,6 +18,8 @@ const GAME_ID = 'juwa-classic-slots';
 const MIN_BET = minor(20);
 const MAX_BET = minor(50_000);
 const REELS = 5;
+/** Free spins run at this fraction of the base spin duration. */
+const FS_SPEED = 0.45;
 
 const IDLE_GRID: string[][] = Array.from({ length: REELS }, () => [
   'CHERRY',
@@ -48,6 +50,29 @@ export function SlotsScreen() {
   const [error, setError] = useState<string | null>(null);
   const spinToken = useRef(0);
 
+  /**
+   * Free-spins state.
+   *
+   * The server resolves the entire bonus round in the same request as the base
+   * spin — `state.freeSpins` arrives already decided. So this is pure
+   * presentation: the money is settled, and what remains is showing the player
+   * what they won rather than depositing it silently.
+   *
+   * That matters commercially. The bonus round is roughly one spin in 117 and
+   * is a real slice of the 96.25% RTP. Paying it out without the sequence means
+   * charging players for excitement and not delivering it.
+   */
+  const [phase, setPhase] = useState<
+    'idle' | 'base' | 'fs-intro' | 'fs' | 'fs-total'
+  >('idle');
+  const [freeSpinIndex, setFreeSpinIndex] = useState(0);
+  const [freeSpinsTotal, setFreeSpinsTotal] = useState(0);
+  const [runningWin, setRunningWin] = useState(0);
+  // Increments per spin so each reel run is a distinct animation.
+  const [reelRound, setReelRound] = useState(0);
+
+  const inFreeSpins = phase === 'fs-intro' || phase === 'fs' || phase === 'fs-total';
+
   useEffect(() => {
     let alive = true;
     api
@@ -69,11 +94,18 @@ export function SlotsScreen() {
   const settlement = round?.settlement;
   const slots = round?.state as SlotsState | undefined;
   const winningRows = useMemo(() => {
-    if (spinning || !slots) return [];
+    if (spinning && phase !== 'fs' && phase !== 'fs-total') return [];
+    if (!slots) return [];
+    // During the bonus round the highlight follows whichever free spin is on
+    // screen, not the base spin that triggered it.
+    const source =
+      phase === 'fs' || phase === 'fs-total'
+        ? (slots.freeSpins[freeSpinIndex] ?? slots.baseSpin)
+        : slots.baseSpin;
     // The payline index doubles as a row index for the three straight lines;
     // richer zig-zag highlighting arrives with the win-line overlay.
-    return slots.baseSpin.lineWins.map((win) => win.line).filter((line) => line < 3);
-  }, [slots, spinning]);
+    return source.lineWins.map((win) => win.line).filter((line) => line < 3);
+  }, [slots, spinning, phase, freeSpinIndex]);
 
   const spin = useCallback(async () => {
     if (spinning) return;
@@ -86,10 +118,19 @@ export function SlotsScreen() {
     setError(null);
     setRound(null);
     setSpinning(true);
+    setPhase('base');
+    setRunningWin(0);
+    setFreeSpinsTotal(0);
+    setReelRound((n) => n + 1);
 
     // Optimistic debit so the balance reacts on the tap rather than after the
     // round trip. The server's authoritative figure overwrites it below.
     setBalance((current) => minor(current - bet));
+
+    /** Resolves after `ms`, or immediately if a newer spin has superseded us. */
+    const wait = (ms: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, ms));
+    const superseded = () => token !== spinToken.current;
 
     try {
       const result = await api.placeBet({
@@ -99,23 +140,56 @@ export function SlotsScreen() {
         // same bet rather than charged again.
         idempotencyKey: `${Date.now()}-${token}`,
       });
-      if (token !== spinToken.current) return; // superseded by a newer spin
+      if (superseded()) return;
 
       const state = result.state as SlotsState;
+      const spinWin = (multiplier: number) => Math.floor(bet * multiplier);
 
       // Hold until the reels have finished their run, so the result appears
       // when the animation lands rather than the instant the network replies.
-      const settleAfter = motion.reelSpin + motion.reelStagger * (REELS - 1);
-      setTimeout(() => {
-        if (token !== spinToken.current) return;
-        setGrid(state.baseSpin.grid);
-        setRound(result);
-        setBalance(minor(result.balance));
-        setSpinning(false);
-      }, settleAfter);
-    } catch (caught) {
-      if (token !== spinToken.current) return;
+      await wait(motion.reelSpin + motion.reelStagger * (REELS - 1));
+      if (superseded()) return;
+
+      setGrid(state.baseSpin.grid);
+      setRound(result);
+      setRunningWin(spinWin(state.baseSpin.totalMultiplier));
+
+      if (state.freeSpinsAwarded > 0) {
+        setFreeSpinsTotal(state.freeSpinsAwarded);
+        setPhase('fs-intro');
+        await wait(1_800);
+        if (superseded()) return;
+
+        setPhase('fs');
+        for (let i = 0; i < state.freeSpins.length; i++) {
+          const spinResult = state.freeSpins[i]!;
+          setFreeSpinIndex(i);
+          setReelRound((n) => n + 1);
+          // Free spins run faster: the tension that earns a slow base spin is
+          // already spent, and a dozen full-length spins is a minute of waiting.
+          await wait((motion.reelSpin + motion.reelStagger * (REELS - 1)) * FS_SPEED);
+          if (superseded()) return;
+
+          setGrid(spinResult.grid);
+          setRunningWin((won) => won + spinWin(spinResult.totalMultiplier));
+          await wait(500);
+          if (superseded()) return;
+        }
+
+        setPhase('fs-total');
+        await wait(2_600);
+        if (superseded()) return;
+      }
+
+      // The balance from the server already includes every free spin, so it is
+      // applied once, at the end — otherwise it would jump before the show did.
+      setBalance(minor(result.balance));
+      setPhase('idle');
       setSpinning(false);
+    } catch (caught) {
+      if (superseded()) return;
+      setSpinning(false);
+      setPhase('idle');
       // The optimistic debit never happened as far as the server is concerned.
       setBalance((current) => minor(current + bet));
       setError(
@@ -146,13 +220,15 @@ export function SlotsScreen() {
         </View>
       </View>
 
-      <Card style={styles.machine}>
+      <Card style={[styles.machine, inFreeSpins && styles.machineBonus]}>
         <View style={styles.reels}>
           {Array.from({ length: REELS }, (_, i) => (
             <Reel
               key={i}
               index={i}
               spinning={spinning}
+              round={reelRound}
+              speed={phase === 'fs' ? FS_SPEED : 1}
               result={grid[i] ?? IDLE_GRID[i]!}
               winningRows={winningRows}
             />
@@ -160,7 +236,24 @@ export function SlotsScreen() {
         </View>
 
         <View style={styles.readout} accessibilityLiveRegion="polite">
-          {spinning ? (
+          {phase === 'fs-intro' ? (
+            <Txt variant="h3" color={colors.neon.magenta}>
+              🎰 {freeSpinsTotal} FREE SPINS!
+            </Txt>
+          ) : phase === 'fs' ? (
+            <View style={styles.fsRow}>
+              <Txt variant="bodySmall" color={colors.neon.magenta}>
+                FREE SPIN {freeSpinIndex + 1} of {freeSpinsTotal} · 3× WINS
+              </Txt>
+              <Txt variant="money" color={colors.feedback.winBright}>
+                {format(minor(runningWin), 'GC')}
+              </Txt>
+            </View>
+          ) : phase === 'fs-total' ? (
+            <Txt variant="h3" color={colors.feedback.winBright}>
+              BONUS TOTAL {format(minor(runningWin), 'GC')}
+            </Txt>
+          ) : spinning ? (
             <Txt variant="bodySmall" color={colors.text.muted}>
               Spinning…
             </Txt>
@@ -254,6 +347,8 @@ const styles = StyleSheet.create({
     borderColor: colors.surface.border,
   },
   machine: { gap: spacing.md, borderColor: colors.gold.dark },
+  machineBonus: { borderColor: colors.neon.magenta },
+  fsRow: { alignItems: 'center', gap: 2 },
   reels: { flexDirection: 'row', gap: spacing.xs },
   readout: { minHeight: 32, alignItems: 'center', justifyContent: 'center' },
   betRow: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'center', flexWrap: 'wrap' },

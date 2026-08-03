@@ -55,10 +55,34 @@ export interface ReelProps {
   spinning: boolean;
   /** Rows that form part of a winning line, for the highlight. */
   winningRows?: number[];
+  /**
+   * Multiplier on the spin duration.
+   *
+   * Free spins run at ~0.45 so a run of twelve does not take a full minute.
+   * The anticipation that justifies a slow base spin is already spent by then —
+   * the player knows the bonus is happening and now wants to see the numbers.
+   */
+  speed?: number;
+  /**
+   * Increments once per spin.
+   *
+   * `spinning` alone is not enough to drive a free-spins run: it stays true for
+   * the whole sequence, so the animation effect would fire once and the later
+   * reels would never move. This is what makes each spin a distinct event.
+   */
+  round?: number;
   onStopped?: () => void;
 }
 
-export function Reel({ result, index, spinning, winningRows = [], onStopped }: ReelProps) {
+export function Reel({
+  result,
+  index,
+  spinning,
+  winningRows = [],
+  speed = 1,
+  round = 0,
+  onStopped,
+}: ReelProps) {
   // Rest position is 0, which shows the result. The spin starts the strip
   // displaced downwards so the filler fills the window, then settles back to 0.
   const offset = useRef(new Animated.Value(0)).current;
@@ -81,7 +105,7 @@ export function Reel({ result, index, spinning, winningRows = [], onStopped }: R
 
     // Jump to the top of the filler, then wind down to the result.
     offset.setValue(travel);
-    const duration = motion.reelSpin + index * motion.reelStagger;
+    const duration = (motion.reelSpin + index * motion.reelStagger) * speed;
 
     const animation = Animated.timing(offset, {
       toValue: 0,
@@ -97,7 +121,7 @@ export function Reel({ result, index, spinning, winningRows = [], onStopped }: R
     });
     return () => animation.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spinning, index, travel]);
+  }, [spinning, index, travel, speed, round]);
 
   return (
     <View style={styles.window}>

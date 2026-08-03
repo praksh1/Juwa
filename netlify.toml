@@ -1,0 +1,55 @@
+# Deploy Juwa from GitHub with no laptop involved.
+#
+# In Netlify: Add new site -> Import an existing project -> pick this repo.
+# Everything below is picked up automatically; the only thing to set by hand is
+# environment variables (Site settings -> Environment variables).
+#
+#   EXPO_PUBLIC_API_URL           the Juwa API. Leave UNSET to deploy in demo
+#                                 mode — real screens, fake spins, no account
+#                                 needed. Good enough to judge the feel on a
+#                                 phone.
+#   EXPO_PUBLIC_SUPABASE_URL      \ set both for real accounts
+#   EXPO_PUBLIC_SUPABASE_ANON_KEY /
+
+[build]
+  base = "app"
+  command = "npm run build:web"
+  publish = "app/dist"
+
+[build.environment]
+  # Expo's web export needs a modern Node. Netlify defaults to older.
+  NODE_VERSION = "20"
+  # The workspace has peer-dependency disagreements that npm resolves fine.
+  NPM_FLAGS = "--legacy-peer-deps"
+
+# Single-page app: every path must serve index.html so a refresh on any screen
+# does not 404, and so Stripe can return the browser to /?purchase=...
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# The service worker must never be cached, or a deploy cannot replace it and
+# players stay on an old build indefinitely.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/manifest.json"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
+
+# Bundler output is content-hashed, so it can be cached hard and forever.
+[[headers]]
+  for = "/_expo/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
