@@ -1,11 +1,26 @@
 # Payments & Legal — read this before you build anything else
 
-This is the document that decides whether Juwa is a business or a lawsuit. I've
-put it before the fun parts on purpose.
+> ## ✅ DECIDED: Juwa is a social casino
+> **August 2026.** Gold Coins are bought or earned, spent on play, and never
+> convert back to money. No redemption, no sweepstakes, no gaming licence.
+>
+> **What this settles:**
+> - Payments go through **Apple IAP, Google Play Billing and Stripe** — all of
+>   which permit selling virtual currency. Zelle and Venmo are off the table and
+>   are not needed.
+> - No state gaming licence, no lab certification, no geofencing.
+> - The app stores treat us as an ordinary casino-*themed* game, provided we
+>   state clearly that coins have no cash value.
+>
+> **What still needs a lawyer:** age gating (18+ recommended), the sweepstakes
+> line you must not cross, terms of service, and privacy/data rules. Far
+> cheaper and faster than licensing, but not zero. See §6.
+>
+> The economics of this decision are in [The Coin Economy](05-coin-economy.md).
 
-You asked for Zelle, Venmo, and card payments. I need to give you the real
-answer rather than the one you were hoping for, and then give you a route that
-actually works.
+The rest of this document is the reasoning behind that decision. It is worth
+keeping: it is the answer to "why can't we just take Venmo?", which you will be
+asked again.
 
 ---
 
@@ -138,9 +153,9 @@ with some regularity.
 
 ---
 
-## 5. What I'd actually do
+## 5. Why the social model won
 
-Build the social casino first. Not as a compromise — as strategy:
+Not as a compromise — as strategy:
 
 1. **You can ship it.** Weeks, not years. Real players, real feedback, real
    revenue from coin sales.
@@ -154,11 +169,11 @@ Build the social casino first. Not as a compromise — as strategy:
 4. **It is what the big players did.** Several major real-money operators
    started as social casinos and used the audience as their launch customers.
 
-The one thing I'd ask you to do in parallel, starting now: **talk to a gaming
-attorney.** Not a general startup lawyer — a gaming specialist. A few thousand
-dollars of their time now will save you from building the wrong product for a
-year. I can build you anything you want; I cannot tell you it's legal in your
-state, and you should be suspicious of anyone who says otherwise.
+**Still see a lawyer**, even having chosen the safer model. A social casino is
+far simpler than a licensed operator, but you still need someone to confirm your
+age gating, your terms of service, and — most importantly — that nothing in your
+promotions accidentally crosses into sweepstakes territory. Giving away a real
+prize, even once, changes the legal analysis entirely.
 
 ---
 

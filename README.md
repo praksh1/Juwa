@@ -1,7 +1,11 @@
 # Juwa
 
-A casino-style gaming platform: server-authoritative game engines, provably-fair
-randomness, a double-entry ledger, and a cross-platform app.
+A **social casino**: server-authoritative game engines, provably-fair randomness,
+a double-entry ledger, and a cross-platform app.
+
+Gold Coins are bought or earned, spent on play, and never convert back to money.
+No redemption, no gaming licence — enforced in both the type system and the
+database schema, not just in policy.
 
 **New here and non-technical? Read [docs/00-START-HERE.md](docs/00-START-HERE.md).**
 
@@ -11,26 +15,35 @@ randomness, a double-entry ledger, and a cross-platform app.
 
 ```
 packages/money    Integer-minor-unit money. Shared by server and client.
+packages/economy  Coin packs, bonuses, VIP, bet sizing — the business model.
 packages/engine   Game engines + provably-fair RNG. SERVER ONLY.
 packages/ui       Design tokens — colours, type, spacing, motion.
 app/              Expo app (iOS, Android, web). A renderer, nothing more.
-db/migrations/    Postgres schema: accounts, double-entry ledger, rounds.
-docs/             Tech stack, roadmap, payments & legal, adding a game.
+db/migrations/    Postgres schema: ledger, rounds, purchases, bonuses.
+db/test/          Ledger invariants, run against a real Postgres.
+docs/             Tech stack, roadmap, payments & legal, coin economy.
 ```
 
-The app depends on `@juwa/money` and `@juwa/ui`. It deliberately does **not**
-depend on `@juwa/engine` — game outcomes are computed on the server, never on a
-device the player controls.
+The app depends on `@juwa/money`, `@juwa/economy` and `@juwa/ui`. It deliberately
+does **not** depend on `@juwa/engine` — game outcomes are computed on the server,
+never on a device the player controls.
 
 ## Quick start
 
 ```bash
 npm install
 npm run build      # compile shared packages
-npm test           # 41 tests
+npm test           # 61 tests
 npm run rtp        # simulate 2,000,000 spins, report real payout rates
+npm run economy    # simulate player sessions — how long does a balance last?
 
 cd app && npx expo start    # run on a phone via Expo Go, or press `w` for web
+```
+
+To exercise the database rules against a real Postgres:
+
+```bash
+PGPORT=5432 db/test/run.sh
 ```
 
 ## What's built
@@ -42,10 +55,11 @@ cd app && npx expo start    # run on a phone via Expo Go, or press `w` for web
 | Slots — 5×3, 20 lines, wilds, scatters, free spins | ✅ **96.25% RTP, measured** |
 | Blackjack — 6 decks, splits, doubles, 3:2 | ✅ tested |
 | European roulette — 37 pockets, all bet types | ✅ tested |
-| Double-entry ledger schema + RLS | ✅ written |
+| Double-entry ledger + RLS | ✅ **verified against real Postgres** |
+| Coin economy — packs, bonuses, VIP, bet sizing | ✅ tested |
 | Design tokens (WCAG AA verified) | ✅ tested |
-| App shell — lobby, wallet, profile | ✅ builds & renders |
-| Server API, animations, sound, payments | ⬜ Phase 3+ |
+| App shell — lobby, store, wallet, profile | ✅ builds & renders |
+| Server API, animations, sound, IAP | ⬜ Phase 3+ |
 
 ## Principles
 
@@ -68,15 +82,24 @@ simulation says, and CI fails if it drifts.
 **Fairness is provable.** Server seed committed by hash before play, revealed
 after. Players can recompute any result themselves.
 
+**Coins are not money, structurally.** `assertRedeemable()` always throws, and a
+database trigger rejects every withdrawal. A cash-out feature written by mistake
+fails loudly rather than quietly changing the company's legal position.
+
 ## Testing
 
 ```bash
 npm test
 ```
 
-41 tests covering money arithmetic and rounding, RNG uniformity (chi-square over
+61 tests covering money arithmetic and rounding, RNG uniformity (chi-square over
 3.7M draws), engine determinism, round termination, settlement arithmetic, RTP
-bands, and colour contrast.
+bands, coin-pack pricing invariants, bonus balance, VIP progression, bet sizing,
+and colour contrast.
+
+Plus `db/test/run.sh`, which applies the migrations to a real Postgres and proves
+the ledger refuses overdrafts, double-credits, unbalanced transactions, history
+edits, and withdrawals.
 
 > While building this, the test suite caught a real defect: `RngStream.next()`
 > used a bitwise OR, which coerces to a *signed* 32-bit integer and produced
@@ -84,10 +107,17 @@ bands, and colour contrast.
 > skewed every game that used it. See `rng.ts` and the regression test in
 > `rng.test.ts`.
 
-## Before you take real money
+## The model
 
-Read [docs/03-payments-and-legal.md](docs/03-payments-and-legal.md) first. Zelle,
-Venmo and Stripe all prohibit gambling under their terms, and real-money online
-casino gaming is legal in only a handful of US states, each requiring its own
-licence. There is a workable route — it's in that document — but it starts with a
-gaming attorney, not with code.
+Juwa sells Gold Coins, which are entertainment and have no cash value. That makes
+the store ordinary digital-goods commerce — Apple, Google and Stripe all process
+it happily, and no gaming licence is required.
+
+Revenue is coin sales, not the house edge: coins are free to mint, so the RTP
+earns nothing directly. What it controls is how long a balance lasts, and
+therefore how often a player sees the store. See
+[The Coin Economy](docs/05-coin-economy.md).
+
+Still worth a lawyer's hour: age gating, terms of service, and staying the right
+side of the sweepstakes line. See
+[Payments & Legal](docs/03-payments-and-legal.md).

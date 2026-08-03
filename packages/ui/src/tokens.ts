@@ -38,6 +38,12 @@ export const colors = {
     light: '#F0D97D',
     /** For the "big win" glow. */
     glow: 'rgba(212, 175, 55, 0.45)',
+    /**
+     * A faint tint for highlighting a card without wrecking the contrast of the
+     * text on top of it. Using `gold.dark` as a fill here drops muted text below
+     * the readable threshold — this is the version that stays legible.
+     */
+    wash: 'rgba(212, 175, 55, 0.16)',
   },
 
   /** Secondary accent — used sparingly, for jackpots and premium moments. */

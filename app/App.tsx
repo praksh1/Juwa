@@ -6,6 +6,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, typography } from '@juwa/ui';
 import { LobbyScreen } from './src/screens/LobbyScreen';
+import { StoreScreen } from './src/screens/StoreScreen';
 import { WalletScreen } from './src/screens/WalletScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 
@@ -35,6 +36,7 @@ const theme: Theme = {
 
 const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Lobby: 'game-controller',
+  Store: 'cart',
   Wallet: 'wallet',
   Profile: 'person',
 };
@@ -63,6 +65,7 @@ export default function App() {
           })}
         >
           <Tab.Screen name="Lobby" component={LobbyScreen} />
+          <Tab.Screen name="Store" component={StoreScreen} />
           <Tab.Screen name="Wallet" component={WalletScreen} />
           <Tab.Screen name="Profile" component={ProfileScreen} />
         </Tab.Navigator>

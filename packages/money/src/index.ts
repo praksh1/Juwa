@@ -15,32 +15,70 @@
 /** An integer number of minor units. Branded so a raw `number` can't sneak in. */
 export type Minor = number & { readonly __brand: 'Minor' };
 
-export type CurrencyCode = 'USD' | 'GC' | 'SC';
+/**
+ * Juwa runs the SOCIAL CASINO model (decided 2026-08; see
+ * docs/03-payments-and-legal.md).
+ *
+ * Two currencies, and only two:
+ *
+ *   GC  — Gold Coins. What players wager. Bought with real money or earned
+ *         free, and NEVER convertible back. They are entertainment, like arcade
+ *         tokens, not a balance.
+ *   USD — real money, used solely to price coin packs in the store. Players
+ *         never hold a USD balance in the app.
+ *
+ * There is deliberately no third, redeemable currency. Adding one turns the
+ * product into a sweepstakes casino, which is a different legal animal
+ * requiring counsel, state-by-state analysis, KYC and a redemption processor.
+ * Leaving it out means the store is ordinary digital-goods commerce that Stripe,
+ * Apple and Google will all happily process.
+ */
+export type CurrencyCode = 'USD' | 'GC';
 
 export interface Currency {
   code: CurrencyCode;
-  /** Digits after the decimal point. USD = 2, play-money credits = 0. */
+  /** Digits after the decimal point. USD = 2, coins are whole numbers. */
   decimals: number;
   symbol: string;
-  /** Whether this currency is redeemable for real money. Drives compliance rules. */
+  /**
+   * Whether a player can convert this back into money. Both are `false` and
+   * must stay that way under the social model — this flag is what the
+   * withdrawal path checks before it will do anything.
+   */
   redeemable: boolean;
 }
 
 export const CURRENCIES: Record<CurrencyCode, Currency> = {
-  /** Real money. Only ever enabled in licensed jurisdictions. */
+  /** Store pricing only. Players never hold a USD balance. */
   USD: { code: 'USD', decimals: 2, symbol: '$', redeemable: false },
   /** Gold Coins — pure play money. Purchasable, never redeemable. */
   GC: { code: 'GC', decimals: 0, symbol: 'GC', redeemable: false },
-  /** Sweeps Coins — promotional, redeemable under a sweepstakes model. */
-  SC: { code: 'SC', decimals: 2, symbol: 'SC', redeemable: false },
 };
 
+/** The currency players actually wager. */
+export const PLAY_CURRENCY: CurrencyCode = 'GC';
+
+export class RedemptionError extends Error {}
+
 /**
- * Every currency ships `redeemable: false`. Turning redemption on is a
- * deliberate act that must be paired with a gaming licence and a KYC provider —
- * see docs/03-payments-and-legal.md. It is a one-line change on purpose: the
- * line should be reviewed, not stumbled into.
+ * The single gate every cash-out path must pass through.
+ *
+ * Under the social model this always throws, which is the point: any future
+ * code that tries to pay a player out fails loudly and immediately rather than
+ * quietly shipping a feature that changes the company's legal position. Turning
+ * redemption on is not a code change — it is a licence, a KYC provider and a
+ * redemption processor, and only then this function.
  */
+export function assertRedeemable(code: CurrencyCode): never | void {
+  const currency = CURRENCIES[code];
+  if (!currency.redeemable) {
+    throw new RedemptionError(
+      `${code} is not redeemable. Juwa operates the social casino model: coins ` +
+        `are entertainment and cannot be converted to money. See ` +
+        `docs/03-payments-and-legal.md before changing this.`,
+    );
+  }
+}
 
 export class MoneyError extends Error {}
 

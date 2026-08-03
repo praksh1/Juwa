@@ -5,9 +5,21 @@ a developer. Nothing here assumes you know what any of the words mean.
 
 ---
 
+## The decision that shapes everything
+
+**Juwa is a social casino.** Players buy or earn Gold Coins, play with them, and
+can never turn them back into money — like arcade tokens.
+
+That one sentence is why the project is buildable in months rather than years:
+no gaming licence, no state-by-state geofencing, and Apple, Google and Stripe
+will all happily process coin sales. It also changes where the money comes from,
+which surprises people — see [The Coin Economy](05-coin-economy.md).
+
+---
+
 ## What is actually in this repository
 
-Think of the project as four separate boxes that snap together.
+Think of the project as five separate boxes that snap together.
 
 **1. The rules of the games** — `packages/engine`
 
@@ -36,13 +48,20 @@ they will save you a great deal of pain:
   refuses to save a movement that doesn't balance. This means if your numbers are
   ever wrong you can find out exactly why, instead of guessing.
 
-**3. The look** — `packages/ui`
+**3. The business model** — `packages/economy`
+
+Coin packs and their prices, the daily bonus ladder, VIP tiers, and how big a
+bet to suggest. These are not arbitrary numbers — each one is tuned against a
+simulation and guarded by a test. This is the file you'll want to argue with,
+and that's fine: it's designed to be argued with.
+
+**4. The look** — `packages/ui`
 
 Colours, text sizes, spacing, and how fast things animate. All in one place, so
 when you decide the gold should be richer, it changes everywhere at once instead
 of in forty separate files.
 
-**4. The app** — `app/`
+**5. The app** — `app/`
 
 What players actually see and touch. It is a *renderer*: it shows results and
 plays animations. It never decides anything about money or outcomes.
@@ -64,24 +83,30 @@ You can check the fingerprint matches the one you were given *beforehand* and
 recalculate every result yourself. The house cannot change an outcome after
 seeing your bet, and it can prove it.
 
-**A real bug was caught by the tests while building this.** The random number
-generator had a subtle flaw that made some values come out negative — which would
-have quietly skewed every game in the app. The test suite caught it before it
-went anywhere. That is what the tests are for, and it's why the project has them
-from day one rather than "later".
+**Three real bugs were caught by the tests while building this.** The random
+number generator had a flaw that made some values come out negative, which would
+have quietly skewed every game. The free-coin economy was tuned so generously
+that a player could farm more coins by waiting than by paying $1.99, making the
+cheapest purchase pointless. And a database index was written in a way Postgres
+refuses to accept, which would have failed on the first deploy.
+
+None of those reached anywhere. That is what the tests are for, and it's why the
+project has them from day one rather than "later".
 
 ---
 
-## The one thing I need you to do
+## The one thing I still need you to do
 
-Read [Payments & Legal](03-payments-and-legal.md), then **talk to a gaming
-attorney.**
+**Book an hour with a lawyer.** Not the big scary gaming-licence process — that's
+off the table now — but a solicitor should still confirm three things:
 
-The short version: Zelle, Venmo and Stripe all prohibit gambling in their terms,
-and real-money online casinos are legal in only a handful of US states, each
-requiring a licence that costs a great deal and takes a year or more. There is a
-very good route through this, and it's in that document — but the decision is
-yours and it needs a lawyer, not me.
+1. Your age gate (18+ is the sensible default for a casino-themed app).
+2. Your terms of service and privacy policy.
+3. That none of your promotions accidentally cross into **sweepstakes**
+   territory. Giving away a real prize, even once, changes the legal analysis
+   completely.
+
+Cheap and quick compared with licensing, but not optional.
 
 ---
 
@@ -93,8 +118,9 @@ terminal, from the project folder:
 ```bash
 npm install          # download everything the project needs — once
 npm run build        # compile the shared packages
-npm test             # run all 41 checks
+npm test             # run all 61 checks
 npm run rtp          # simulate two million spins and report real payout rates
+npm run economy      # simulate players — how long does a balance actually last?
 ```
 
 To see the app on your phone:
@@ -120,3 +146,4 @@ reason I chose this toolset for you.
 | What happens when, and how long? | [Roadmap](02-roadmap.md) |
 | Can I take Zelle and Venmo? | [Payments & Legal](03-payments-and-legal.md) |
 | How do we add game number 50? | [Adding a Game](04-adding-a-game.md) |
+| How does it make money? | [The Coin Economy](05-coin-economy.md) |

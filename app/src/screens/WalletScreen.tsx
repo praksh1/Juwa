@@ -7,9 +7,15 @@ import { Button, Card, Screen, SectionHeader, Txt } from '../components/primitiv
 /**
  * Wallet wireframe.
  *
- * The history list is not decoration — it is the player-facing view of the
- * double-entry ledger. Every row here corresponds to a balanced transaction in
- * the database, which is why a support question ("where did my 500 coins go?")
+ * There is no "Redeem" button, and that is the product decision made visible.
+ * Juwa runs the social casino model: coins are bought or earned and spent on
+ * play, and never convert back to money. The second action is "Free Coins" —
+ * the daily bonus and top-up — because in a social casino the free economy is
+ * what keeps players present for the paid one.
+ *
+ * The history list is not decoration: it is the player-facing view of the
+ * double-entry ledger. Every row corresponds to a balanced transaction in the
+ * database, which is why a support question ("where did my 500 coins go?")
  * always has an answer.
  */
 interface Entry {
@@ -41,8 +47,11 @@ export function WalletScreen() {
         </Txt>
         <View style={styles.actions}>
           <Button label="Get Coins" onPress={() => {}} style={styles.action} />
-          <Button label="Redeem" variant="secondary" onPress={() => {}} style={styles.action} />
+          <Button label="Free Coins" variant="secondary" onPress={() => {}} style={styles.action} />
         </View>
+        <Txt variant="caption" color={colors.text.muted} style={styles.noCashValue}>
+          Gold Coins have no cash value and cannot be withdrawn.
+        </Txt>
       </Card>
 
       <View>
@@ -84,4 +93,5 @@ const styles = StyleSheet.create({
   },
   rowDivider: { borderTopWidth: 1, borderTopColor: colors.surface.border },
   rowLeft: { gap: 2, flex: 1 },
+  noCashValue: { marginTop: spacing.md, textAlign: 'center' },
 });

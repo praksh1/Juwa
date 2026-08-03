@@ -8,7 +8,7 @@
     "app"
   ],
   "scripts": {
-    "build": "npm run build --workspace @juwa/money && npm run build --workspace @juwa/ui && npm run build --workspace @juwa/engine",
+    "build": "npm run build --workspace @juwa/money && npm run build --workspace @juwa/economy && npm run build --workspace @juwa/ui && npm run build --workspace @juwa/engine",
     "test": "npm run build && node --test \"packages/*/dist/**/*.test.js\"",
     "typecheck": "npm run build && tsc -p app/tsconfig.json",
     "rtp": "npm run build && node packages/engine/dist/tools/rtp.js",

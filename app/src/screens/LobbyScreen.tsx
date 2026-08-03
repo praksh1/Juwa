@@ -3,6 +3,7 @@ import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
+import { dailyBonus, suggestedBet, tierForXp } from '@juwa/economy';
 import { Badge, Button, Card, Screen, SectionHeader, Txt } from '../components/primitives';
 import { GameCard } from '../components/GameCard';
 import {
@@ -29,6 +30,12 @@ export function LobbyScreen() {
 
   // Placeholder until Phase 2 wires up the real wallet.
   const balance = minor(1_250_000);
+  const streakDay = 3;
+  const vip = tierForXp(3_000_000);
+  // The bonus and the default stake both come from @juwa/economy rather than
+  // being typed in here, so tuning the economy moves the UI with it.
+  const bonus = dailyBonus(streakDay, vip.dailyBonusMultiplier);
+  const defaultBet = suggestedBet(balance, minor(200), minor(50_000));
   const games = useMemo(() => gamesInCategory(category), [category]);
 
   const openGame = (game: GameSummary) => {
@@ -71,12 +78,12 @@ export function LobbyScreen() {
           style={StyleSheet.absoluteFill}
         />
         <View style={styles.heroBody}>
-          <Badge label="daily bonus" color={colors.gold.default} />
+          <Badge label={`day ${streakDay} streak`} color={colors.gold.default} />
           <Txt variant="h1" style={styles.heroTitle}>
-            Collect 50,000 GC
+            Collect {format(bonus, 'GC')}
           </Txt>
           <Txt variant="bodySmall" color={colors.text.secondary}>
-            Your streak resets in 4h 12m
+            {vip.name} bonus applied · resets in 4h 12m
           </Txt>
           <Button label="Collect" onPress={() => {}} style={styles.heroButton} />
         </View>
@@ -130,6 +137,11 @@ export function LobbyScreen() {
         </Txt>
         <Button label="Verify a round" variant="secondary" onPress={() => {}} />
       </Card>
+
+      <Txt variant="caption" color={colors.text.muted} style={styles.disclosure}>
+        Juwa is a free-to-play social casino. Gold Coins have no cash value and
+        cannot be exchanged for money or prizes. Default stake {format(defaultBet, 'GC')}.
+      </Txt>
     </Screen>
   );
 }
@@ -178,4 +190,5 @@ const styles = StyleSheet.create({
   gridRow: { gap: spacing.md },
   fairness: { gap: spacing.md },
   fairnessBody: { marginBottom: spacing.xs },
+  disclosure: { textAlign: 'center' },
 });

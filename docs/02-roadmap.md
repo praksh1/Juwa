@@ -9,18 +9,18 @@ software estimates are optimistic by nature.
 
 ---
 
-## Phase 0 — Decide what you're building *(in parallel, starts today)*
+## Phase 0 — Decide what you're building ✅ *decided August 2026*
 
-Not a coding phase, and the most important one. See
-[Payments & Legal](03-payments-and-legal.md).
+**Juwa is a social casino.** Coins are bought or earned, spent on play, and never
+convert back to money. See [Payments & Legal](03-payments-and-legal.md).
 
-- [ ] Talk to a **gaming attorney** — a specialist, not a general startup lawyer
-- [ ] Decide: social casino, sweepstakes, or licensed real-money
-- [ ] Confirm which states/countries you'll operate in
+- [x] Decide the model — **social casino**
+- [x] Currency model locked to Gold Coins, redemption disabled in code and schema
+- [ ] Lawyer review: age gating, terms of service, the sweepstakes line
 - [ ] Register the company; open a business bank account
 
-**How you'll know it worked:** you can say in one sentence what a player can and
-cannot do with money in your app, and a lawyer has agreed with you in writing.
+**In one sentence:** a player can buy Gold Coins and play with them, and can
+never turn them back into money.
 
 ---
 
@@ -45,15 +45,16 @@ phone and understand every screen without anyone explaining it.
 The money plumbing, with no real money in it yet.
 
 - [x] Double-entry ledger schema *(done, `db/migrations/0001_ledger.sql`)*
-- [x] Money primitives that can't drift *(done, `packages/engine/src/money.ts`)*
+- [x] Money primitives that can't drift *(done, `packages/money`)*
 - [ ] Sign up, log in, password reset
-- [ ] Age gate (18+ / 21+ depending on market)
+- [ ] Age gate (18+ recommended for a casino-themed app)
 - [ ] Wallet screen with balance and transaction history
 - [ ] Test credits so you can play without paying
-- [ ] Responsible-gaming controls: deposit limits, self-exclusion
+- [x] Free economy: welcome, daily streak, top-up *(done, `packages/economy`)*
+- [ ] Responsible-gaming controls: spend limits, self-exclusion
 
-**How you'll know it worked:** you create an account, get 10,000 free coins, and
-every coin you spend shows up in a history you can read.
+**How you'll know it worked:** you create an account, get the 100,000 GC welcome
+bonus, and every coin you spend shows up in a history you can read.
 
 ---
 
@@ -73,7 +74,7 @@ hardest part of the UI.
 - [ ] Free-spins sequence
 
 **How you'll know it worked:** you play a hundred spins on your phone, it feels
-good, and your balance is correct to the cent afterwards.
+good, and your balance is correct to the coin afterwards.
 
 ---
 
@@ -94,16 +95,22 @@ minutes without asking you a single question.
 
 ---
 
-## Phase 5 — Payments *(3–4 weeks)*
+## Phase 5 — The store *(3–4 weeks)*
 
-- [ ] Apple In-App Purchase + Google Play Billing for coin packs
-- [ ] Stripe for web purchases (keeps you off the 30% platform fee)
-- [ ] Purchase receipts verified **server-side** — never trust the app's word
-- [ ] Redemption flow, if the legal answer in Phase 0 allows one
-- [ ] KYC integration (Persona or Veriff) gating any cash-out
+See [The Coin Economy](05-coin-economy.md) for the model this implements.
+
+- [x] Coin packs, bonuses, VIP and bet sizing *(done, `packages/economy`)*
+- [x] Store screen *(done)*
+- [x] Schema: purchases, bonus grants, no-withdrawal guard *(done, migration 0002)*
+- [ ] Apple In-App Purchase + Google Play Billing
+- [ ] Stripe for web purchases (nets ~34% more per sale)
+- [ ] Receipts verified **server-side** — never trust the app's word
+- [ ] Daily bonus + top-up timers wired to the schema
+
+No redemption or KYC work: there is no cash-out under the social model.
 
 **How you'll know it worked:** you buy a coin pack with your own card, the coins
-arrive, and the ledger balances to zero across every account.
+arrive, and `reconcile_balances()` returns no rows.
 
 ---
 
@@ -118,7 +125,7 @@ arrive, and the ledger balances to zero across every account.
       need to answer with the ledger
 
 **How you'll know it worked:** the app is live and you can prove, every morning,
-that every cent is where it should be.
+that every coin is where it should be.
 
 ---
 
@@ -132,12 +139,14 @@ lost — and it's a permanent phase, not a finished one.
 
 ## Honest timeline
 
-| Model | Ship to a real store |
-|---|---|
-| Social casino | **4–6 months** |
-| Sweepstakes | 6–9 months + legal |
-| Licensed real-money | 18–24 months, $1M+ |
+**Social casino: 4–6 months to a live app store listing.** That is the path we
+are on.
 
-The engines, ledger and fairness proof in this repo are shared across all three.
-Nothing you build now is wasted if you change your mind about the model later —
-that's why I built it in this order.
+For context, the roads not taken: sweepstakes would add 2–3 months and
+substantial legal cost; licensed real-money is 18–24 months and $1M+.
+
+The engines, ledger and fairness proof are shared across all three, so nothing
+built so far is wasted if the model ever changes. What *would* change is the
+currency model and the redemption guards — both deliberately concentrated in
+`packages/money` and `db/migrations/0002_social_economy.sql` so the blast radius
+is small and reviewable.
