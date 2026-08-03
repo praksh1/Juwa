@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import { colors, layout, radius, spacing, typography } from '@juwa/ui';
 import { Button, Card, Screen, Txt } from '../components/primitives';
+import { Logo } from '../components/Logo';
 import { IS_CONFIGURED, signIn, signUp } from '../api/auth';
 
 /**
@@ -59,9 +60,7 @@ export function AuthScreen() {
   return (
     <Screen contentStyle={styles.centered}>
       <View style={styles.brand}>
-        <Txt variant="display" color={colors.gold.default}>
-          JUWA
-        </Txt>
+        <Logo height={52} />
         <Txt variant="bodySmall" color={colors.text.secondary}>
           Play for fun. Coins have no cash value.
         </Txt>

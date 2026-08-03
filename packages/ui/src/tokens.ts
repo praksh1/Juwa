@@ -11,13 +11,21 @@
  *
  * WHY THESE CHOICES
  *
- * Dark background: casinos are dark. Gold and neon only read as luxurious
- * against near-black; on white they look cheap. Dark also makes the reels the
- * brightest thing on screen, which is where we want the eye.
+ * Dark NAVY background, not neutral black. The frame of a casino app should
+ * recede so the games are the brightest thing on screen — bright artwork on a
+ * bright background turns to mush. Navy does that job while staying warmer and
+ * more playful than the near-black we started with, which read as a betting
+ * site rather than as a game.
+ *
+ * Bright, saturated accents. Juwa is a social casino: the money it makes comes
+ * from coin sales, not from anyone's losses, so the app should look like a game
+ * and not like a bookmaker. The apps that win this category are closer to a
+ * puzzle game than to a Vegas floor.
  *
  * Gold as the primary: it reads as premium across every culture we're likely to
  * launch in, and it doesn't collide with the red/green we need for
- * win/loss states.
+ * win/loss states. It is a brighter, warmer gold than a luxury brand would use,
+ * because it has to hold its own next to magenta and cyan.
  *
  * Green for wins, red for losses — with one deliberate exception noted below.
  */
@@ -25,32 +33,38 @@
 export const colors = {
   /** Backgrounds, darkest to lightest. `base` is the app background. */
   surface: {
-    base: '#0A0710',
-    raised: '#141020',
-    overlay: '#1E1830',
-    border: '#2A2340',
+    base: '#070C1C',
+    raised: '#111A38',
+    overlay: '#1B274D',
+    border: '#2D3C6E',
   },
 
   /** Primary brand colour. Buttons, highlights, the logo. */
   gold: {
-    dark: '#8C6D1F',
-    default: '#D4AF37',
-    light: '#F0D97D',
+    dark: '#A9730A',
+    default: '#FFC53D',
+    light: '#FFE08A',
     /** For the "big win" glow. */
-    glow: 'rgba(212, 175, 55, 0.45)',
+    glow: 'rgba(255, 197, 61, 0.45)',
     /**
      * A faint tint for highlighting a card without wrecking the contrast of the
      * text on top of it. Using `gold.dark` as a fill here drops muted text below
      * the readable threshold — this is the version that stays legible.
      */
-    wash: 'rgba(212, 175, 55, 0.16)',
+    wash: 'rgba(255, 197, 61, 0.16)',
   },
 
-  /** Secondary accent — used sparingly, for jackpots and premium moments. */
+  /**
+   * Secondary accents. These carry the "playful" half of the design: game
+   * artwork, category badges, jackpot moments. Used at full strength on tiles
+   * and sparingly in the chrome.
+   */
   neon: {
-    magenta: '#FF2E88',
-    cyan: '#00E5FF',
-    violet: '#8B5CF6',
+    magenta: '#FF3D8A',
+    cyan: '#22D3EE',
+    violet: '#A855F7',
+    lime: '#A3E635',
+    orange: '#FF8A3D',
   },
 
   /**
@@ -64,16 +78,16 @@ export const colors = {
   feedback: {
     win: '#22C55E',
     winBright: '#4ADE80',
-    loss: '#7A5560',
-    warning: '#F59E0B',
-    error: '#EF4444',
+    loss: '#5A5F80',
+    warning: '#FBBF24',
+    error: '#F87171',
   },
 
   text: {
-    primary: '#F5F3F7',
-    secondary: '#A79FB8',
-    muted: '#6B6480',
-    inverse: '#0A0710',
+    primary: '#F4F7FF',
+    secondary: '#A9B6D8',
+    muted: '#6E7CA6',
+    inverse: '#070C1C',
   },
 
   /** Roulette and card suits — fixed by the games themselves. */
@@ -112,21 +126,26 @@ export const radius = {
 /**
  * Type scale. Sizes step by roughly 1.25x, which is a standard musical ratio —
  * it gives clear hierarchy without any two sizes looking like a mistake.
+ *
+ * Sized for a PHONE held at arm's length, not for a desktop browser. The first
+ * version of this scale was a third larger, and on a 390pt-wide screen a single
+ * heading ate half the lobby — which pushed the games, the only thing a player
+ * came for, below the fold.
  */
 export const typography = {
-  display: { fontSize: 40, lineHeight: 46, fontWeight: '800' },
-  h1: { fontSize: 30, lineHeight: 36, fontWeight: '700' },
-  h2: { fontSize: 24, lineHeight: 30, fontWeight: '700' },
-  h3: { fontSize: 19, lineHeight: 25, fontWeight: '600' },
-  body: { fontSize: 16, lineHeight: 23, fontWeight: '400' },
-  bodySmall: { fontSize: 14, lineHeight: 20, fontWeight: '400' },
-  caption: { fontSize: 12, lineHeight: 16, fontWeight: '500' },
+  display: { fontSize: 34, lineHeight: 40, fontWeight: '800' },
+  h1: { fontSize: 26, lineHeight: 32, fontWeight: '700' },
+  h2: { fontSize: 21, lineHeight: 27, fontWeight: '700' },
+  h3: { fontSize: 17, lineHeight: 23, fontWeight: '600' },
+  body: { fontSize: 15, lineHeight: 22, fontWeight: '400' },
+  bodySmall: { fontSize: 13, lineHeight: 19, fontWeight: '400' },
+  caption: { fontSize: 11, lineHeight: 15, fontWeight: '600' },
   /**
    * Money is always tabular — digits share a fixed width so a balance ticking
    * from 999 to 1000 doesn't make the whole row jump sideways.
    */
-  money: { fontSize: 18, lineHeight: 24, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  moneyLarge: { fontSize: 32, lineHeight: 38, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  money: { fontSize: 16, lineHeight: 22, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  moneyLarge: { fontSize: 27, lineHeight: 33, fontWeight: '800', fontVariant: ['tabular-nums'] },
 } as const;
 
 export const shadows = {

@@ -1,19 +1,25 @@
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { colors, radius, shadows, spacing } from '@juwa/ui';
+import { colors, radius, shadows, spacing, typography } from '@juwa/ui';
 import { Badge, Txt } from './primitives';
+import { GameArt } from './GameArt';
 import type { GameSummary } from '../api/games';
 
 /**
  * A game tile in the lobby.
  *
- * The art is a gradient placeholder keyed off the game's accent colour. Real
- * key art replaces it later — the point of Phase 1 is to get the layout,
- * hierarchy and information density right before anyone pays an illustrator.
+ * The tile is the advert. A player picks what to play from about a centimetre
+ * of colour and shape, so the art fills the tile and the name sits on top of it
+ * rather than in a separate strip underneath — that strip cost a fifth of the
+ * tile's height and carried two lines of small grey text.
  *
- * RTP is shown on every tile. Most casino apps bury it. Showing it is a trust
- * signal, it costs nothing, and in several markets it is required anyway.
+ * RTP is deliberately NOT on the face any more. It was the second thing on
+ * every tile, in a lobby where the whole job is to make six games look
+ * different from each other, and "97.30%" makes them all look the same. It is a
+ * genuine trust signal, so it moves to the game screen and stays in the
+ * accessibility label, where a player who wants it can find it and a player who
+ * doesn't isn't reading a spreadsheet.
  */
 export function GameCard({
   game,
@@ -34,18 +40,28 @@ export function GameCard({
       }`}
       style={({ pressed }) => [
         styles.wrapper,
-        { transform: [{ scale: pressed ? 0.97 : 1 }], opacity: playable ? 1 : 0.5 },
+        { transform: [{ scale: pressed ? 0.96 : 1 }], opacity: playable ? 1 : 0.62 },
       ]}
     >
       <View style={styles.art}>
+        <View style={StyleSheet.absoluteFill}>
+          <GameArt gameId={game.id} accent={game.accent} />
+        </View>
+
+        {/* The name sits over the art, so it needs the art dimmed underneath it
+            or a light drawing will swallow white text. */}
         <LinearGradient
-          colors={[game.accent, colors.surface.overlay]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+          colors={['transparent', 'rgba(7, 12, 28, 0.55)', 'rgba(7, 12, 28, 0.94)']}
+          locations={[0.45, 0.72, 1]}
           style={StyleSheet.absoluteFill}
+          pointerEvents="none"
         />
-        <View style={styles.artOverlay}>
-          {game.tag ? <Badge label={game.tag} color={game.accent} /> : <View />}
+
+        <View style={styles.overlay}>
+          <View style={styles.topRow}>
+            {game.tag ? <Badge label={game.tag} color={game.accent} /> : <View />}
+          </View>
+
           {!playable ? (
             <View style={styles.soon}>
               <Txt variant="caption" color={colors.text.primary}>
@@ -53,16 +69,11 @@ export function GameCard({
               </Txt>
             </View>
           ) : null}
-        </View>
-      </View>
 
-      <View style={styles.meta}>
-        <Txt variant="bodySmall" numberOfLines={1}>
-          {game.name}
-        </Txt>
-        <Txt variant="caption" color={colors.text.muted}>
-          RTP {(game.rtp * 100).toFixed(2)}%
-        </Txt>
+          <Txt variant="bodySmall" numberOfLines={1} style={styles.name}>
+            {game.name}
+          </Txt>
+        </View>
       </View>
     </Pressable>
   );
@@ -71,7 +82,7 @@ export function GameCard({
 const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     backgroundColor: colors.surface.raised,
     borderWidth: 1,
     borderColor: colors.surface.border,
@@ -79,23 +90,31 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   art: {
-    aspectRatio: 1,
-    justifyContent: 'flex-end',
+    aspectRatio: 0.92,
   },
-  artOverlay: {
+  overlay: {
     flex: 1,
     padding: spacing.sm,
     justifyContent: 'space-between',
   },
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+  },
   soon: {
     alignSelf: 'center',
-    backgroundColor: 'rgba(10, 7, 16, 0.75)',
+    backgroundColor: 'rgba(7, 12, 28, 0.82)',
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    borderRadius: radius.sm,
+    borderRadius: radius.pill,
   },
-  meta: {
-    padding: spacing.sm,
-    gap: 2,
+  name: {
+    fontWeight: '700',
+    // A hard shadow rather than a soft one: at 13pt a blurred shadow just makes
+    // the text look smudged.
+    textShadowColor: 'rgba(0,0,0,0.85)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+    lineHeight: typography.bodySmall.lineHeight,
   },
 });

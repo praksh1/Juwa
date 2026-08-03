@@ -88,22 +88,26 @@ export function LobbyScreen() {
         </Pressable>
       </View>
 
+      {/* The bonus is a strip, not a billboard. As a full-width stacked card it
+          was 40% of the first screen and pushed every game below the fold. */}
       <Card style={styles.hero}>
         <LinearGradient
-          colors={[colors.neon.violet, colors.surface.raised]}
+          colors={[colors.neon.violet, colors.neon.magenta]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
         <View style={styles.heroBody}>
-          <Badge label={`day ${dailyStreak} streak`} color={colors.gold.default} />
-          <Txt variant="h1" style={styles.heroTitle}>
-            Collect {format(bonus, 'GC')}
-          </Txt>
-          <Txt variant="bodySmall" color={colors.text.secondary}>
-            {bonusMessage ?? `${vip.name} bonus applied`}
-          </Txt>
-          <Button label="Collect" onPress={collect} style={styles.heroButton} />
+          <View style={styles.heroText}>
+            <Badge label={`day ${dailyStreak} streak`} color={colors.gold.default} />
+            <Txt variant="h2" style={styles.heroTitle}>
+              Collect {format(bonus, 'GC')}
+            </Txt>
+            <Txt variant="caption" color={colors.text.primary} style={styles.heroSub}>
+              {bonusMessage ?? `${vip.name} bonus applied`}
+            </Txt>
+          </View>
+          <Button label="Collect" onPress={collect} />
         </View>
       </Card>
 
@@ -133,10 +137,10 @@ export function LobbyScreen() {
         })}
       </ScrollView>
 
-      <InstallPrompt />
-
-      <SectionHeader title={category === 'all' ? 'All Games' : 'Games'} action="See all" />
-
+      {/* Games come before everything optional. They were the fourth block on
+          the screen, behind a bonus card, the category chips and an install
+          nag — so the one thing a player opened the app to do required a
+          scroll. */}
       <FlatList
         data={games}
         keyExtractor={(item) => item.id}
@@ -148,6 +152,9 @@ export function LobbyScreen() {
           <GameCard game={item} playable={PLAYABLE.has(item.id)} onPress={openGame} />
         )}
       />
+
+      {/* Asked for after the player has seen what they'd be installing. */}
+      <InstallPrompt />
 
       <Card style={styles.fairness}>
         <Txt variant="h3">Provably Fair</Txt>
@@ -193,12 +200,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   hero: { overflow: 'hidden', padding: 0 },
-  heroBody: { padding: spacing.xl, gap: spacing.sm },
-  heroTitle: { marginTop: spacing.xs },
-  heroButton: { alignSelf: 'flex-start', marginTop: spacing.md },
+  heroBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+  heroText: { flex: 1, gap: spacing.xs, alignItems: 'flex-start' },
+  heroTitle: { marginTop: 2 },
+  heroSub: { opacity: 0.85 },
   chipRow: { gap: spacing.sm, paddingRight: spacing.lg },
   chip: {
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radius.pill,
     backgroundColor: colors.surface.raised,
