@@ -3,14 +3,35 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, type Theme } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, typography } from '@juwa/ui';
 import { LobbyScreen } from './src/screens/LobbyScreen';
+import { SlotsScreen } from './src/screens/SlotsScreen';
 import { StoreScreen } from './src/screens/StoreScreen';
 import { WalletScreen } from './src/screens/WalletScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 
 const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator();
+
+/**
+ * The lobby is a stack so tapping a game pushes the game screen over it. The
+ * tab bar stays visible underneath, which is what players expect from a casino
+ * app — leaving a game is always one tap.
+ */
+function LobbyStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Games" component={LobbyScreen} />
+      <Stack.Screen
+        name="juwa-classic-slots"
+        component={SlotsScreen}
+        options={{ headerShown: true, title: 'Juwa Classic' }}
+      />
+    </Stack.Navigator>
+  );
+}
 
 /**
  * Navigation theme, driven entirely by our design tokens so the chrome around
@@ -64,7 +85,7 @@ export default function App() {
             ),
           })}
         >
-          <Tab.Screen name="Lobby" component={LobbyScreen} />
+          <Tab.Screen name="Lobby" component={LobbyStack} />
           <Tab.Screen name="Store" component={StoreScreen} />
           <Tab.Screen name="Wallet" component={WalletScreen} />
           <Tab.Screen name="Profile" component={ProfileScreen} />

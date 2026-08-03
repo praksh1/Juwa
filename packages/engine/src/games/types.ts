@@ -13,7 +13,18 @@
  *     the injected RngStream. This is what makes outcomes reproducible — we can
  *     replay any historical bet from its seeds and prove what happened.
  *
- *  2. SERVER-SIDE ONLY. Engines run on the server. The client is a renderer: it
+ *  2. RANDOMNESS IS DRAWN UP FRONT. A multi-step engine must materialise
+ *     everything random it will ever need during `init`, into `private` state.
+ *     Blackjack shuffles the whole 312-card shoe immediately and `hit` merely
+ *     pops from it.
+ *
+ *     This is not stylistic. Between two HTTP requests the round is a row in a
+ *     database; when `act` runs, the server rebuilds the RNG stream from the
+ *     same (seed, nonce) and therefore replays the SAME sequence `init` already
+ *     consumed. An engine that drew fresh values inside `act` would silently
+ *     deal the same cards again.
+ *
+ *  3. SERVER-SIDE ONLY. Engines run on the server. The client is a renderer: it
  *     receives an outcome and animates it. A client that computes its own
  *     results is a client a player can patch to always win. The mobile app
  *     imports the *types* from this package, never the resolution logic.

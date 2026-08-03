@@ -147,3 +147,4 @@ reason I chose this toolset for you.
 | Can I take Zelle and Venmo? | [Payments & Legal](03-payments-and-legal.md) |
 | How do we add game number 50? | [Adding a Game](04-adding-a-game.md) |
 | How does it make money? | [The Coin Economy](05-coin-economy.md) |
+| What happens when I tap SPIN? | [The Play Path](06-the-play-path.md) |

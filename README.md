@@ -17,9 +17,10 @@ database schema, not just in policy.
 packages/money    Integer-minor-unit money. Shared by server and client.
 packages/economy  Coin packs, bonuses, VIP, bet sizing — the business model.
 packages/engine   Game engines + provably-fair RNG. SERVER ONLY.
+packages/server   Play handlers: bet lifecycle, settlement, fairness proofs.
 packages/ui       Design tokens — colours, type, spacing, motion.
 app/              Expo app (iOS, Android, web). A renderer, nothing more.
-db/migrations/    Postgres schema: ledger, rounds, purchases, bonuses.
+db/migrations/    Postgres schema: ledger, rounds, purchases, play functions.
 db/test/          Ledger invariants, run against a real Postgres.
 docs/             Tech stack, roadmap, payments & legal, coin economy.
 ```
@@ -33,7 +34,8 @@ never on a device the player controls.
 ```bash
 npm install
 npm run build      # compile shared packages
-npm test           # 61 tests
+npm test           # 61 tests (no database needed)
+npm run test:db    # +14 tests against a real Postgres — the full bet lifecycle
 npm run rtp        # simulate 2,000,000 spins, report real payout rates
 npm run economy    # simulate player sessions — how long does a balance last?
 
@@ -57,9 +59,12 @@ PGPORT=5432 db/test/run.sh
 | European roulette — 37 pockets, all bet types | ✅ tested |
 | Double-entry ledger + RLS | ✅ **verified against real Postgres** |
 | Coin economy — packs, bonuses, VIP, bet sizing | ✅ tested |
+| Play API — bet → settle → credit, atomic | ✅ **tested against real Postgres** |
+| Provable fairness end to end (commit, reveal, replay) | ✅ tested |
+| Playable slot machine with animated reels | ✅ **plays in-browser** |
 | Design tokens (WCAG AA verified) | ✅ tested |
 | App shell — lobby, store, wallet, profile | ✅ builds & renders |
-| Server API, animations, sound, IAP | ⬜ Phase 3+ |
+| Blackjack / roulette UI, sound, IAP | ⬜ next |
 
 ## Principles
 
@@ -80,7 +85,12 @@ and reports what the games actually pay. The published figure is whatever the
 simulation says, and CI fails if it drifts.
 
 **Fairness is provable.** Server seed committed by hash before play, revealed
-after. Players can recompute any result themselves.
+after. Players can recompute any result themselves — and the live seed is never
+disclosed while it can still predict a future spin.
+
+**No window where a stake is taken but a payout is lost.** The nonce is claimed
+first (moving no money), the engine runs, and then debit-credit-record happens in
+a single transaction. See [The Play Path](docs/06-the-play-path.md).
 
 **Coins are not money, structurally.** `assertRedeemable()` always throws, and a
 database trigger rejects every withdrawal. A cash-out feature written by mistake
@@ -97,9 +107,14 @@ npm test
 bands, coin-pack pricing invariants, bonus balance, VIP progression, bet sizing,
 and colour contrast.
 
-Plus `db/test/run.sh`, which applies the migrations to a real Postgres and proves
-the ledger refuses overdrafts, double-credits, unbalanced transactions, history
-edits, and withdrawals.
+`npm run test:db` adds 14 more against a real Postgres — the whole bet lifecycle,
+overdraw refusal, replay protection, private-state leakage, and the commit-reveal
+fairness proof. They skip cleanly when no database is configured. The last one
+asserts that after every bet, bonus and blackjack hand in the suite, the ledger
+still sums to exactly zero and no cached balance has drifted.
+
+`db/test/run.sh` additionally proves the schema itself refuses overdrafts,
+unbalanced transactions, history edits, and withdrawals.
 
 > While building this, the test suite caught a real defect: `RngStream.next()`
 > used a bitwise OR, which coerces to a *signed* 32-bit integer and produced

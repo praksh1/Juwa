@@ -102,12 +102,14 @@ export const GAMES: GameSummary[] = [
   },
 ];
 
-/** Games with a shipped engine. The rest render as "coming soon". */
-export const PLAYABLE = new Set([
-  'juwa-classic-slots',
-  'juwa-blackjack',
-  'juwa-roulette-eu',
-]);
+/**
+ * Games with a shipped *renderer*.
+ *
+ * Blackjack and roulette have finished, tested engines and are fully playable
+ * through the API — they simply have no UI yet, so the lobby still shows them
+ * as coming soon. Adding one is a screen, not a game.
+ */
+export const PLAYABLE = new Set(['juwa-classic-slots']);
 
 export function gamesInCategory(category: GameCategory | 'all'): GameSummary[] {
   return category === 'all' ? GAMES : GAMES.filter((g) => g.category === category);

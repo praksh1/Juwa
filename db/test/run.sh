@@ -22,7 +22,8 @@ psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -q \
 psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$DB" -q -v ON_ERROR_STOP=1 \
   -f "$HERE/supabase_shim.sql" \
   -f "$HERE/../migrations/0001_ledger.sql" \
-  -f "$HERE/../migrations/0002_social_economy.sql"
+  -f "$HERE/../migrations/0002_social_economy.sql" \
+  -f "$HERE/../migrations/0003_play.sql"
 
 echo "migrations applied cleanly"
 psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$DB" -f "$HERE/ledger_invariants.sql"

@@ -68,10 +68,19 @@ hardest part of the UI.
 - [x] Blackjack engine *(done)*
 - [x] European roulette engine *(done)*
 - [x] Provably-fair RNG *(done)*
-- [ ] Server endpoints: place bet → settle → credit wallet
-- [ ] Slot reel animation with Skia — spin, stagger, anticipation, win lines
-- [ ] Sound: spin loop, reel stops, win stingers, big-win fanfare
-- [ ] Free-spins sequence
+- [x] Server endpoints: place bet → settle → credit wallet *(done, `packages/server`)*
+- [x] Atomic play functions + replay protection *(done, migration 0003)*
+- [x] Provable fairness end to end — commit, reveal, replay *(done)*
+- [x] Playable slot screen with staggered reel animation *(done)*
+- [ ] Win-line overlay for zig-zag paylines (straight rows highlight today)
+- [ ] Free-spins sequence — the engine awards them; the UI does not yet play them
+- [ ] Sound: spin loop, reel stops, win stingers
+- [ ] Blackjack and roulette screens (engines and API are already done)
+
+Reel animation uses React Native's built-in `Animated` with the native driver
+rather than Skia. It is a transform on one view and runs at 60fps; Skia earns
+its complexity when we add shaders and particles to the win presentation, not
+before.
 
 **How you'll know it worked:** you play a hundred spins on your phone, it feels
 good, and your balance is correct to the coin afterwards.
@@ -84,8 +93,8 @@ Now the architecture pays off. Each new game is one file implementing
 `GameEngine`, one line in the registry, and a renderer — see
 [Adding a game](04-adding-a-game.md).
 
-- [ ] Blackjack UI (engine is done)
-- [ ] Roulette UI (engine is done)
+- [ ] Blackjack UI (engine and API are done — needs a screen)
+- [ ] Roulette UI (engine and API are done — needs a screen)
 - [ ] Texas Hold'em — the big one; needs real-time multiplayer, budget for it
 - [ ] Video poker, baccarat, keno, scratch cards
 - [ ] Three to five more slot themes reusing the slot renderer

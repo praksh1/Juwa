@@ -1,0 +1,24 @@
+{
+  "name": "@juwa/server",
+  "version": "0.1.0",
+  "description": "Server-side play handlers: bet lifecycle, settlement, fairness proofs.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": "./dist/index.js" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test \"dist/**/*.test.js\""
+  },
+  "dependencies": {
+    "@juwa/economy": "*",
+    "@juwa/engine": "*",
+    "@juwa/money": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/pg": "^8.11.10",
+    "pg": "^8.13.1",
+    "typescript": "^5.6.3"
+  }
+}

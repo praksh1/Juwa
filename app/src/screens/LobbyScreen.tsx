@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useNavigation } from '@react-navigation/native';
 import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, spacing } from '@juwa/ui';
@@ -26,6 +27,7 @@ import {
  * structure and hierarchy agreed before anyone commissions illustration.
  */
 export function LobbyScreen() {
+  const navigation = useNavigation<{ navigate: (screen: string) => void }>();
   const [category, setCategory] = useState<GameCategory | 'all'>('all');
 
   // Placeholder until Phase 2 wires up the real wallet.
@@ -39,9 +41,9 @@ export function LobbyScreen() {
   const games = useMemo(() => gamesInCategory(category), [category]);
 
   const openGame = (game: GameSummary) => {
-    // Phase 3 navigates to the game screen. For now the wireframe just proves
-    // the tile is reachable and correctly disabled for unshipped games.
-    console.log(`open ${game.id}`);
+    // Only games with a shipped renderer are reachable; the rest render as
+    // "coming soon" and are not pressable.
+    navigation.navigate(game.id);
   };
 
   return (
