@@ -1,0 +1,26 @@
+{
+  "name": "@juwa/api",
+  "version": "0.1.0",
+  "description": "HTTP service: auth, rate limiting, and the play endpoints.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": "./dist/index.js" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "test": "npm run build && node --test \"dist/**/*.test.js\""
+  },
+  "dependencies": {
+    "@juwa/economy": "*",
+    "@juwa/engine": "*",
+    "@juwa/money": "*",
+    "@juwa/server": "*",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/pg": "^8.11.10",
+    "typescript": "^5.6.3"
+  }
+}

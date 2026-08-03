@@ -11,6 +11,8 @@ import { SlotsScreen } from './src/screens/SlotsScreen';
 import { StoreScreen } from './src/screens/StoreScreen';
 import { WalletScreen } from './src/screens/WalletScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
+import { AppGate } from './src/AppGate';
+import { registerServiceWorker } from './src/pwa';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -63,10 +65,16 @@ const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 };
 
 export default function App() {
+  // Registers the offline shell. No-op off the web.
+  React.useEffect(() => {
+    registerServiceWorker();
+  }, []);
+
   return (
     <SafeAreaProvider>
       <NavigationContainer theme={theme}>
         <StatusBar style="light" />
+        <AppGate>
         <Tab.Navigator
           screenOptions={({ route }) => ({
             headerShown: false,
@@ -90,6 +98,7 @@ export default function App() {
           <Tab.Screen name="Wallet" component={WalletScreen} />
           <Tab.Screen name="Profile" component={ProfileScreen} />
         </Tab.Navigator>
+        </AppGate>
       </NavigationContainer>
     </SafeAreaProvider>
   );

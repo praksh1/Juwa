@@ -98,7 +98,8 @@ project has them from day one rather than "later".
 ## The one thing I still need you to do
 
 **Book an hour with a lawyer.** Not the big scary gaming-licence process — that's
-off the table now — but a solicitor should still confirm three things:
+off the table now, and since Juwa ships as a website rather than a store app,
+so is app-store compliance. But a solicitor should still confirm three things:
 
 1. Your age gate (18+ is the sensible default for a casino-themed app).
 2. Your terms of service and privacy policy.
@@ -148,3 +149,4 @@ reason I chose this toolset for you.
 | How do we add game number 50? | [Adding a Game](04-adding-a-game.md) |
 | How does it make money? | [The Coin Economy](05-coin-economy.md) |
 | What happens when I tap SPIN? | [The Play Path](06-the-play-path.md) |
+| How do I put it online? | [Deploying](07-deploying.md) |

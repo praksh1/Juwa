@@ -20,4 +20,22 @@ config.resolver.nodeModulesPaths = [
 ];
 config.resolver.disableHierarchicalLookup = true;
 
+/**
+ * Optional dependencies we deliberately do not ship.
+ *
+ * @supabase/supabase-js has an optional hook for OpenTelemetry tracing. Metro
+ * resolves imports statically, so it fails the build over a package we never
+ * intend to install — there is no tracing backend in a browser, and shipping
+ * the API to every player would be dead weight in the bundle.
+ *
+ * Resolving it to `empty` is the supported way to say "this import is real but
+ * intentionally absent".
+ */
+const STUBBED = new Set(['@opentelemetry/api']);
+
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (STUBBED.has(moduleName)) return { type: 'empty' };
+  return context.resolveRequest(context, moduleName, platform);
+};
+
 module.exports = config;

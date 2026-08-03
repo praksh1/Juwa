@@ -46,9 +46,11 @@ The money plumbing, with no real money in it yet.
 
 - [x] Double-entry ledger schema *(done, `db/migrations/0001_ledger.sql`)*
 - [x] Money primitives that can't drift *(done, `packages/money`)*
-- [ ] Sign up, log in, password reset
-- [ ] Age gate (18+ recommended for a casino-themed app)
-- [ ] Wallet screen with balance and transaction history
+- [x] Sign up, log in via Supabase Auth *(done)*
+- [x] Age gate — 18+, enforced in the database *(done, migration 0004)*
+- [x] Wallet and lobby reading the real server balance *(done)*
+- [ ] Password reset and email change
+- [ ] Transaction history from the ledger (the list is still placeholder data)
 - [ ] Test credits so you can play without paying
 - [x] Free economy: welcome, daily streak, top-up *(done, `packages/economy`)*
 - [ ] Responsible-gaming controls: spend limits, self-exclusion
@@ -129,7 +131,9 @@ arrive, and `reconcile_balances()` returns no rows.
 - [ ] Security review and penetration test
 - [ ] Monitoring, alerting, on-call
 - [ ] Nightly ledger reconciliation (`reconcile_balances()`) with alerts
-- [ ] App Store and Play Store submissions, with the compliance paperwork
+- [x] PWA — manifest, offline shell, install prompt *(done)*
+- [ ] Custom domain, HTTPS, SPA fallback — see [Deploying](07-deploying.md)
+- [ ] Web push for the daily bonus (weaker on iOS unless installed)
 - [ ] Support tooling — someone will email you about a missing $5, and you'll
       need to answer with the ledger
 

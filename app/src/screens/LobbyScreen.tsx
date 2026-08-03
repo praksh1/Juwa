@@ -3,10 +3,12 @@ import { useNavigation } from '@react-navigation/native';
 import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, spacing } from '@juwa/ui';
-import { format, minor } from '@juwa/money';
-import { dailyBonus, suggestedBet, tierForXp } from '@juwa/economy';
+import { format } from '@juwa/money';
+import { VIP_TIERS, dailyBonus } from '@juwa/economy';
+import { usePlayer } from '../api/usePlayer';
 import { Badge, Button, Card, Screen, SectionHeader, Txt } from '../components/primitives';
 import { GameCard } from '../components/GameCard';
+import { InstallPrompt } from '../components/InstallPrompt';
 import {
   CATEGORIES,
   PLAYABLE,
@@ -30,14 +32,19 @@ export function LobbyScreen() {
   const navigation = useNavigation<{ navigate: (screen: string) => void }>();
   const [category, setCategory] = useState<GameCategory | 'all'>('all');
 
-  // Placeholder until Phase 2 wires up the real wallet.
-  const balance = minor(1_250_000);
-  const streakDay = 3;
-  const vip = tierForXp(3_000_000);
-  // The bonus and the default stake both come from @juwa/economy rather than
-  // being typed in here, so tuning the economy moves the UI with it.
-  const bonus = dailyBonus(streakDay, vip.dailyBonusMultiplier);
-  const defaultBet = suggestedBet(balance, minor(200), minor(50_000));
+  // The real balance, from the server. Never a local guess — see usePlayer.
+  const { balance, dailyStreak, vipLevel, claimDaily } = usePlayer();
+  const [bonusMessage, setBonusMessage] = useState<string | null>(null);
+
+  const vip = VIP_TIERS[vipLevel] ?? VIP_TIERS[0]!;
+  // The amount shown comes from @juwa/economy, so tuning the economy moves the
+  // UI with it rather than leaving a stale number on screen.
+  const bonus = dailyBonus(Math.max(1, dailyStreak + 1), vip.dailyBonusMultiplier);
+
+  const collect = async () => {
+    const result = await claimDaily();
+    setBonusMessage(result.granted ? null : (result.reason ?? 'Come back tomorrow'));
+  };
   const games = useMemo(() => gamesInCategory(category), [category]);
 
   const openGame = (game: GameSummary) => {
@@ -80,14 +87,14 @@ export function LobbyScreen() {
           style={StyleSheet.absoluteFill}
         />
         <View style={styles.heroBody}>
-          <Badge label={`day ${streakDay} streak`} color={colors.gold.default} />
+          <Badge label={`day ${dailyStreak} streak`} color={colors.gold.default} />
           <Txt variant="h1" style={styles.heroTitle}>
             Collect {format(bonus, 'GC')}
           </Txt>
           <Txt variant="bodySmall" color={colors.text.secondary}>
-            {vip.name} bonus applied · resets in 4h 12m
+            {bonusMessage ?? `${vip.name} bonus applied`}
           </Txt>
-          <Button label="Collect" onPress={() => {}} style={styles.heroButton} />
+          <Button label="Collect" onPress={collect} style={styles.heroButton} />
         </View>
       </Card>
 
@@ -117,6 +124,8 @@ export function LobbyScreen() {
         })}
       </ScrollView>
 
+      <InstallPrompt />
+
       <SectionHeader title={category === 'all' ? 'All Games' : 'Games'} action="See all" />
 
       <FlatList
@@ -142,7 +151,7 @@ export function LobbyScreen() {
 
       <Txt variant="caption" color={colors.text.muted} style={styles.disclosure}>
         Juwa is a free-to-play social casino. Gold Coins have no cash value and
-        cannot be exchanged for money or prizes. Default stake {format(defaultBet, 'GC')}.
+        cannot be exchanged for money or prizes.
       </Txt>
     </Screen>
   );

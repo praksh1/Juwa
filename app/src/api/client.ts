@@ -11,7 +11,8 @@
  * and its payouts are not the certified 96.25% RTP — it does not run the real
  * slot maths at all. Nothing about it is a game you could ship. It exists so
  * that reel timing and win presentation can be worked on without standing up
- * Postgres, and `USE_DEMO_API` must be false in any build that reaches a player.
+ * Postgres. It is selected only when EXPO_PUBLIC_API_URL is unset, so a
+ * configured build can never accidentally ship it.
  *
  * NOTE ON TYPES: these mirror the contract in `@juwa/server`. The app cannot
  * import that package, because it pulls in `@juwa/engine` — and an engine on the
@@ -19,6 +20,8 @@
  * boundary; a shared types-only package would remove it and is worth doing once
  * the contract stops moving.
  */
+
+import { getAccessToken } from './auth';
 
 export type RoundStatus = 'awaiting-action' | 'settled';
 
@@ -61,6 +64,13 @@ export interface RoundResponse {
   fairness: { serverSeedHash: string; clientSeed: string; nonce: number };
 }
 
+export interface Profile {
+  registered: boolean;
+  username?: string;
+  ageVerified?: boolean;
+  dailyStreak?: number;
+}
+
 export interface PlayApi {
   getBalance(): Promise<{ balance: number; dailyStreak: number; vipLevel: number }>;
   placeBet(request: {
@@ -68,6 +78,13 @@ export interface PlayApi {
     stake: number;
     idempotencyKey: string;
   }): Promise<RoundResponse>;
+  getProfile(): Promise<Profile>;
+  register(details: {
+    username: string;
+    dateOfBirth: string;
+    country: string;
+  }): Promise<{ username: string; balance: number; ageVerified: boolean }>;
+  claimDailyBonus(): Promise<{ granted: boolean; coins: number; streakDay: number; balance: number; reason?: string }>;
 }
 
 export class PlayApiError extends Error {
@@ -82,15 +99,21 @@ export class PlayApiError extends Error {
 export class HttpPlayApi implements PlayApi {
   constructor(
     private readonly baseUrl: string,
-    private readonly getToken: () => string | null,
+    private readonly getToken: () => Promise<string | null>,
   ) {}
 
   private async request<T>(path: string, body?: unknown): Promise<T> {
-    const token = this.getToken();
+    // Fetched per request rather than cached: Supabase rotates the access token
+    // roughly hourly, and a stale one becomes a mystery 401 mid-session.
+    const token = await this.getToken();
+
     const response = await fetch(`${this.baseUrl}${path}`, {
       method: body ? 'POST' : 'GET',
       headers: {
         'Content-Type': 'application/json',
+        // The player's timezone, so the daily bonus turns over at their
+        // midnight rather than the server's.
+        'X-UTC-Offset': String(-new Date().getTimezoneOffset()),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
@@ -115,6 +138,27 @@ export class HttpPlayApi implements PlayApi {
 
   placeBet(request: { gameId: string; stake: number; idempotencyKey: string }) {
     return this.request<RoundResponse>('/bet', request);
+  }
+
+  getProfile() {
+    return this.request<Profile>('/me');
+  }
+
+  register(details: { username: string; dateOfBirth: string; country: string }) {
+    return this.request<{ username: string; balance: number; ageVerified: boolean }>(
+      '/register',
+      details,
+    );
+  }
+
+  claimDailyBonus() {
+    return this.request<{
+      granted: boolean;
+      coins: number;
+      streakDay: number;
+      balance: number;
+      reason?: string;
+    }>('/bonus/daily', {});
   }
 }
 
@@ -143,6 +187,19 @@ export class DemoPlayApi implements PlayApi {
 
   async getBalance() {
     return { balance: this.balance, dailyStreak: 3, vipLevel: 2 };
+  }
+
+  async getProfile(): Promise<Profile> {
+    return { registered: true, username: 'demo', ageVerified: true, dailyStreak: 3 };
+  }
+
+  async register() {
+    return { username: 'demo', balance: this.balance, ageVerified: true };
+  }
+
+  async claimDailyBonus() {
+    this.balance += 12_000;
+    return { granted: true, coins: 12_000, streakDay: 3, balance: this.balance };
   }
 
   async placeBet(request: { gameId: string; stake: number; idempotencyKey: string }) {
@@ -196,14 +253,18 @@ export class DemoPlayApi implements PlayApi {
 }
 
 /**
- * Flip to false and set EXPO_PUBLIC_API_URL to run against the real server.
- * Left true here so `npx expo start` works immediately after a clone.
+ * Demo mode is no longer a flag anyone has to remember to flip — it is simply
+ * what happens when the app has not been told where the server is. Configure
+ * EXPO_PUBLIC_API_URL and the real client is used automatically.
+ *
+ * This matters: a hard-coded boolean is exactly the kind of thing that ships to
+ * production still set to `true`.
  */
-export const USE_DEMO_API = true;
+const API_URL = process.env['EXPO_PUBLIC_API_URL'];
+
+export const USE_DEMO_API = !API_URL;
 
 export function createPlayApi(): PlayApi {
-  if (USE_DEMO_API) return new DemoPlayApi();
-  const baseUrl = process.env['EXPO_PUBLIC_API_URL'];
-  if (!baseUrl) throw new Error('EXPO_PUBLIC_API_URL is required when USE_DEMO_API is false');
-  return new HttpPlayApi(baseUrl, () => null);
+  if (!API_URL) return new DemoPlayApi();
+  return new HttpPlayApi(API_URL, getAccessToken);
 }

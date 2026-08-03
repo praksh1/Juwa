@@ -21,7 +21,15 @@
     },
     "web": {
       "bundler": "metro",
-      "output": "single"
+      "output": "single",
+      "themeColor": "#0A0710",
+      "backgroundColor": "#0A0710",
+      "shortName": "Juwa",
+      "description": "A free-to-play social casino. Gold Coins have no cash value.",
+      "display": "standalone",
+      "orientation": "portrait",
+      "startUrl": "/",
+      "lang": "en"
     }
   }
 }

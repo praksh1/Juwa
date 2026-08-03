@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { colors, spacing } from '@juwa/ui';
 import { format, minor, type Minor } from '@juwa/money';
 import { Button, Card, Screen, SectionHeader, Txt } from '../components/primitives';
+import { usePlayer } from '../api/usePlayer';
 
 /**
  * Wallet wireframe.
@@ -34,7 +35,7 @@ const HISTORY: Entry[] = [
 ];
 
 export function WalletScreen() {
-  const balance = minor(1_250_000);
+  const { balance } = usePlayer();
 
   return (
     <Screen>

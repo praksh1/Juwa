@@ -18,8 +18,9 @@ packages/money    Integer-minor-unit money. Shared by server and client.
 packages/economy  Coin packs, bonuses, VIP, bet sizing — the business model.
 packages/engine   Game engines + provably-fair RNG. SERVER ONLY.
 packages/server   Play handlers: bet lifecycle, settlement, fairness proofs.
+packages/api      HTTP service: auth, rate limiting, the play endpoints.
 packages/ui       Design tokens — colours, type, spacing, motion.
-app/              Expo app (iOS, Android, web). A renderer, nothing more.
+app/              The web app (PWA). A renderer, nothing more.
 db/migrations/    Postgres schema: ledger, rounds, purchases, play functions.
 db/test/          Ledger invariants, run against a real Postgres.
 docs/             Tech stack, roadmap, payments & legal, coin economy.
@@ -34,8 +35,8 @@ never on a device the player controls.
 ```bash
 npm install
 npm run build      # compile shared packages
-npm test           # 61 tests (no database needed)
-npm run test:db    # +14 tests against a real Postgres — the full bet lifecycle
+npm test           # 70 tests (no database needed)
+npm run test:db    # +38 tests against a real Postgres — bet lifecycle and API
 npm run rtp        # simulate 2,000,000 spins, report real payout rates
 npm run economy    # simulate player sessions — how long does a balance last?
 
@@ -60,11 +61,15 @@ PGPORT=5432 db/test/run.sh
 | Double-entry ledger + RLS | ✅ **verified against real Postgres** |
 | Coin economy — packs, bonuses, VIP, bet sizing | ✅ tested |
 | Play API — bet → settle → credit, atomic | ✅ **tested against real Postgres** |
+| HTTP service — Supabase JWT auth, rate limiting, CORS | ✅ tested |
+| Sign-up, log-in, and an 18+ age gate | ✅ **verified end to end in a browser** |
+| PWA — manifest, offline shell, install prompt | ✅ verified |
 | Provable fairness end to end (commit, reveal, replay) | ✅ tested |
 | Playable slot machine with animated reels | ✅ **plays in-browser** |
 | Design tokens (WCAG AA verified) | ✅ tested |
 | App shell — lobby, store, wallet, profile | ✅ builds & renders |
-| Blackjack / roulette UI, sound, IAP | ⬜ next |
+| Blackjack / roulette UI, free-spins sequence, sound | ⬜ next |
+| Stripe checkout for coin packs | ⬜ next |
 
 ## Principles
 
@@ -107,11 +112,13 @@ npm test
 bands, coin-pack pricing invariants, bonus balance, VIP progression, bet sizing,
 and colour contrast.
 
-`npm run test:db` adds 14 more against a real Postgres — the whole bet lifecycle,
-overdraw refusal, replay protection, private-state leakage, and the commit-reveal
-fairness proof. They skip cleanly when no database is configured. The last one
-asserts that after every bet, bonus and blackjack hand in the suite, the ledger
-still sums to exactly zero and no cached balance has drifted.
+`npm run test:db` adds 38 more against a real Postgres — the whole bet lifecycle,
+overdraw refusal, replay protection, private-state leakage, the commit-reveal
+fairness proof, and the HTTP layer over real sockets: JWT forgery and the
+`alg:none` attack, CORS, rate limiting, the age gate, and self-exclusion. They
+skip cleanly when no database is configured. Two of them assert that after every
+bet, bonus and hand in the suite, the ledger still sums to exactly zero and no
+cached balance has drifted.
 
 `db/test/run.sh` additionally proves the schema itself refuses overdrafts,
 unbalanced transactions, history edits, and withdrawals.
@@ -121,6 +128,15 @@ unbalanced transactions, history edits, and withdrawals.
 > negative "probabilities" whenever the leading byte was ≥ 128. It would have
 > skewed every game that used it. See `rng.ts` and the regression test in
 > `rng.test.ts`.
+
+## Deploying
+
+Juwa is a **website** — no Apple or Google developer account, no store review,
+and no 15–30% platform fee. A $9.99 coin pack nets $9.40 through Stripe against
+$6.99 through in-app purchase.
+
+Supabase owns identity and Postgres, `packages/api` owns the game, and any
+static host serves the app. See [Deploying](docs/07-deploying.md).
 
 ## The model
 
