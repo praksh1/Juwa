@@ -121,7 +121,7 @@ GitHub repo; it reads `railway.json`. Anything else that takes a container works
 too.
 
 ```bash
-DATABASE_URL=postgres://...        # Supabase → Settings → Database → connection string
+DATABASE_URL=postgres://...        # Supabase → "Connect" button in the top bar
 SUPABASE_JWT_SECRET=...            # from step 1
 ALLOWED_ORIGINS=https://play.yourdomain.com
 PORT=8787
@@ -152,6 +152,14 @@ never be possible to discover that in production.
 **Use the connection pooler** (port 6543) rather than a direct connection.
 Serverless and small instances open more connections than Postgres will
 tolerate.
+
+Supabase moved the connection strings off the Database settings page and behind
+the **Connect** button in the dashboard's top bar, next to the project and
+branch names. Settings → Database now holds the password, pool size and network
+rules — not the string. Under Connect, take the **Transaction pooler** string
+(the one ending `:6543/postgres`) and replace the literal `[YOUR-PASSWORD]`
+placeholder, square brackets included, with the database password. The string
+Supabase shows you will not connect until you do.
 
 ---
 
