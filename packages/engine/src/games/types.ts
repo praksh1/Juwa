@@ -77,6 +77,23 @@ export interface RoundState<TPublic = unknown, TPrivate = unknown> {
   availableActions: string[];
   /** Present once and only once, when status === 'settled'. */
   settlement?: Settlement;
+  /**
+   * Operator policy that altered this round, recorded with it.
+   *
+   * NEVER set by an engine — engines are pure and know nothing about operator
+   * configuration. It is written by the play path when a ceiling actually bit,
+   * and exists so that a round which paid less than the paytable says can be
+   * explained a year later, to support, to an auditor, or to a player who
+   * recomputed the round from the revealed seed and got a different number.
+   *
+   * Absent means nothing was applied, which is the overwhelming majority.
+   */
+  appliedConfig?: {
+    /** The payout ceiling in coins, after multiplying by the stake. */
+    maxWinCeiling: number;
+    /** What the engine would have paid without the ceiling. */
+    uncappedPayout: number;
+  };
 }
 
 export interface BetLimits {

@@ -413,11 +413,13 @@ export function createServer(config: ServerConfig) {
 
       // Operator configuration, read per bet. A round already in flight settles
       // on the terms it started on; only NEW spins see a change.
-      assertBetAllowed(await gameConfigs.get(gameId), gameId, stake);
+      const gameConfig = await gameConfigs.get(gameId);
+      assertBetAllowed(gameConfig, gameId, stake);
 
       return placeBet(config.db, ctx.player, {
         gameId,
         stake,
+        maxWinMultiplier: gameConfig.maxWinMultiplier,
         // A client that forgets to send one still gets replay protection, it
         // just cannot benefit from retrying the exact same request.
         idempotencyKey: idempotencyKey ?? randomUUID(),

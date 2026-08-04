@@ -153,18 +153,29 @@ export async function placeBet(
   try {
     if (state.status === 'settled') {
       const settlement = state.settlement!;
+      // The operator's ceiling, applied to the ENGINE's answer rather than
+      // inside it. The engine stays pure and replayable: anyone verifying this
+      // round recomputes the same raw outcome, and the cap that was in force is
+      // recorded alongside it rather than hidden in the arithmetic.
+      const capped = capPayout(settlement.stake, settlement.payout, request.maxWinMultiplier);
+      // ONE state, used for both the record and the reply. Capping only the
+      // stored copy paid the ceiling but told the player they had won the
+      // uncapped figure — a balance that disagrees with the win on screen is
+      // worse than no cap at all, because it looks like theft.
+      const settled = withCapRecord(state, capped);
+
       const { roundId, balance } = await db.playInstantRound({
         playerId: ctx.playerId,
         gameId: engine.id,
         seedPairId: seed.seedPairId,
         nonce: seed.nonce,
         stake: settlement.stake,
-        payout: settlement.payout,
+        payout: capped.payout,
         currency: ctx.currency,
-        state,
+        state: settled,
         idempotencyKey: request.idempotencyKey,
       });
-      return clientRound(roundId, engine.id, state, balance, fairness);
+      return clientRound(roundId, engine.id, settled, balance, fairness);
     }
 
     const { roundId, balance } = await db.openRound({
@@ -264,6 +275,46 @@ export async function act(
   });
 
   return clientRound(request.roundId, stored.gameId, after, balance, fairness);
+}
+
+/**
+ * Apply an operator ceiling to a payout.
+ *
+ * Rounds DOWN, never below zero. A cap that rounds up pays more than was
+ * configured, which is the one direction a cap must never fail in.
+ */
+export function capPayout(
+  stake: number,
+  payout: number,
+  maxWinMultiplier: number | null | undefined,
+): { payout: number; capped: boolean; ceiling: number | null } {
+  if (maxWinMultiplier == null) return { payout, capped: false, ceiling: null };
+  const ceiling = Math.max(0, Math.floor(stake * maxWinMultiplier));
+  if (payout <= ceiling) return { payout, capped: false, ceiling };
+  return { payout: ceiling, capped: true, ceiling };
+}
+
+/**
+ * Record the cap in the stored round.
+ *
+ * Without this, a round that paid less than the paytable says looks like a
+ * settlement bug forever after — to support, to an auditor, and to the player
+ * recomputing it from the revealed seed. The snapshot is what makes a capped
+ * round explainable a year later.
+ */
+function withCapRecord(
+  state: RoundState<unknown, unknown>,
+  capped: { payout: number; capped: boolean; ceiling: number | null },
+): RoundState<unknown, unknown> {
+  if (!capped.capped) return state;
+  return {
+    ...state,
+    settlement: { ...state.settlement!, payout: minor(capped.payout) },
+    appliedConfig: {
+      maxWinCeiling: capped.ceiling!,
+      uncappedPayout: state.settlement!.payout,
+    },
+  };
 }
 
 /** Sum the stakes across every hand — blackjack splits create more than one. */

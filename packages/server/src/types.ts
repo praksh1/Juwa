@@ -31,6 +31,14 @@ export interface PlaceBetRequest {
   idempotencyKey: string;
   /** Bet layout for games that need one before the wheel turns (roulette). */
   action?: { type: string; [key: string]: unknown };
+  /**
+   * Operator ceiling on this round's payout, as a multiple of the stake.
+   *
+   * Passed in per bet rather than read here, because policy belongs to the
+   * caller and the engine must stay pure — an engine that consulted a database
+   * could not be replayed to verify a past round.
+   */
+  maxWinMultiplier?: number | null;
 }
 
 export interface ActRequest {

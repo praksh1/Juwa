@@ -324,6 +324,30 @@ anyone else in.
 
 ---
 
+## Scaling, honestly
+
+The API is stateless in the way that matters — no session state, no round state,
+nothing a second instance would miss. Add instances behind a load balancer and
+they will all behave identically.
+
+**One exception, stated plainly: rate limiting is per instance.** Each process
+keeps its own token buckets in memory, so the spin limit of 10 with 2/second
+refill becomes 10 × N with N instances. That is fine while you run one or two;
+past that a determined script gets N times the throughput it should. The fix
+when you need it is a shared counter in Redis, and it is a contained change —
+`packages/api/src/ratelimit.ts` is the only file that knows how buckets are
+stored.
+
+Game configuration is cached in memory for 30 seconds with a shared in-flight
+refresh, so a burst of spins after expiry makes one query rather than one per
+spin. An operator change invalidates it immediately on the instance that made
+the change and within 30 seconds everywhere else.
+
+Both indexes the spin volume needs are in place: `game_rounds (player_id,
+created_at)` for a player's history, and `game_rounds (game_id, settled_at)`
+for the operator dashboard, which otherwise scans the largest table in the
+system on every page load.
+
 ## 5. Before real players
 
 - [ ] **Nightly reconciliation.** Alert if `reconcile_balances()` returns
