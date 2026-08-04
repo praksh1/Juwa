@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
 import { betOptions, suggestedBet } from '@juwa/economy';
@@ -8,6 +8,10 @@ import { useRoute } from '@react-navigation/native';
 import { Reel, type ReelPhase } from '../components/Reel';
 import { slotDetails } from '../api/games';
 import { sounds, spinNow, unlock } from '../sound';
+import { winTier, rollUpDuration, type WinTier } from '../motion';
+import { CoinCounter } from '../components/CoinCounter';
+import { CoinBurst } from '../components/CoinBurst';
+import { WinOverlay, useCabinetShake } from '../components/WinOverlay';
 import {
   PlayApiError,
   createPlayApi,
@@ -120,6 +124,14 @@ export function SlotsScreen() {
   const [freeSpinIndex, setFreeSpinIndex] = useState(0);
   const [freeSpinsTotal, setFreeSpinsTotal] = useState(0);
   const [runningWin, setRunningWin] = useState(0);
+  /**
+   * The same figure as `runningWin`, readable from inside the spin closure.
+   *
+   * The bonus round accumulates across an await-driven loop, and reading the
+   * state variable there returns whatever it was when the closure was created
+   * — zero — so the final celebration would be sized off nothing.
+   */
+  const runningWinRef = useRef(0);
   // Increments per spin so each reel run is a distinct animation.
   const [reelRound, setReelRound] = useState(0);
   /**
@@ -133,6 +145,35 @@ export function SlotsScreen() {
    * keeps the sound and the readout tied to what is actually on screen.
    */
   const landingResolver = useRef<(() => void) | null>(null);
+
+  /**
+   * The celebration.
+   *
+   * Kept separate from `settlement` because the two have different lifetimes:
+   * the settled figure stays on screen until the next spin, while the dimming,
+   * the burst and the overlay run once and stop. Driving both from one value
+   * left the grid dimmed indefinitely after any win.
+   */
+  const [celebration, setCelebration] = useState<{ tier: WinTier; amount: number; round: number }>({
+    tier: 'none',
+    amount: 0,
+    round: 0,
+  });
+  const celebrationRound = useRef(0);
+  const shake = useCabinetShake(celebration.tier, celebration.round);
+
+  const celebrate = useCallback((payout: number, stake: number) => {
+    const tier = winTier(payout, stake);
+    if (tier === 'none') return;
+
+    celebrationRound.current += 1;
+    setCelebration({ tier, amount: payout, round: celebrationRound.current });
+
+    if (tier === 'mega') sounds.megaWin();
+    else if (tier === 'big') sounds.bigWin();
+    else if (tier === 'burst') sounds.coins(8);
+    else sounds.win();
+  }, []);
 
   /**
    * The reel's own stop callback. It no longer plays the sound — that was
@@ -202,7 +243,9 @@ export function SlotsScreen() {
     setReelPhase('spinning');
     setPhase('base');
     setRunningWin(0);
+    runningWinRef.current = 0;
     setFreeSpinsTotal(0);
+    setCelebration({ tier: 'none', amount: 0, round: celebrationRound.current });
     setReelRound((n) => n + 1);
 
     // Optimistic debit so the balance reacts on the tap rather than after the
@@ -277,11 +320,12 @@ export function SlotsScreen() {
 
       setReelPhase('idle');
       setRound(result);
-      setRunningWin(spinWin(state.baseSpin.totalMultiplier));
+      const baseTotal = spinWin(state.baseSpin.totalMultiplier);
+      setRunningWin(baseTotal);
+      runningWinRef.current = baseTotal;
 
       const baseWin = spinWin(state.baseSpin.totalMultiplier);
-      if (baseWin >= bet * 10) sounds.bigWin();
-      else if (baseWin > 0) sounds.win();
+      celebrate(baseWin, bet);
 
       if (state.freeSpinsAwarded > 0) {
         setFreeSpinsTotal(state.freeSpinsAwarded);
@@ -308,15 +352,16 @@ export function SlotsScreen() {
           if (superseded()) return;
 
           setReelPhase('idle');
-          setRunningWin((won) => won + spinWin(spinResult.totalMultiplier));
-          if (spinResult.totalMultiplier > 0) sounds.win();
+          const freeWin = spinWin(spinResult.totalMultiplier);
+          runningWinRef.current += freeWin;
+          setRunningWin(runningWinRef.current);
+          celebrate(freeWin, bet);
           await wait(500);
           if (superseded()) return;
         }
 
         setPhase('fs-total');
-        sounds.bigWin();
-        sounds.coins(8);
+        celebrate(runningWinRef.current, bet);
         await wait(2_600);
         if (superseded()) return;
       }
@@ -337,7 +382,7 @@ export function SlotsScreen() {
         caught instanceof PlayApiError ? caught.message : 'Something went wrong. Try again.',
       );
     }
-  }, [api, balance, bet, spinning]);
+  }, [api, balance, bet, spinning, celebrate]);
 
   return (
     <View style={styles.screen}>
@@ -362,6 +407,7 @@ export function SlotsScreen() {
       </View>
 
       <Card style={[styles.machine, inFreeSpins && styles.machineBonus]}>
+        <Animated.View style={{ transform: [{ translateX: shake }] }}>
         <View style={styles.reelBay}>
         <View style={styles.reels}>
           {Array.from({ length: REELS }, (_, i) => (
@@ -375,11 +421,21 @@ export function SlotsScreen() {
               landDuration={schedule[i]?.duration ?? 1}
               result={grid[i] ?? IDLE_GRID[i]!}
               winningRows={winningRows}
+              // Dimming needs something to contrast AGAINST. A scatter win
+              // pays from anywhere on the grid and produces no winning line,
+              // so dimming on payout alone turned the whole machine dark and
+              // highlighted nothing.
+              celebrating={celebration.tier !== 'none' && winningRows.length > 0}
               onLanded={() => handleReelLanded(i)}
             />
           ))}
         </View>
+
+        {/* Coins are thrown from the centre of the reels, above the symbols
+            but below anything a player can press. */}
+        <CoinBurst tier={celebration.tier} round={celebration.round} />
         </View>
+        </Animated.View>
 
         <View style={styles.readout} accessibilityLiveRegion="polite">
           {phase === 'fs-intro' ? (
@@ -408,10 +464,24 @@ export function SlotsScreen() {
               {error}
             </Txt>
           ) : settlement && settlement.payout > 0 ? (
-            <Txt variant="h3" color={colors.feedback.winBright}>
-              WIN {format(minor(settlement.payout), 'GC')}
-              {settlement.multiplier >= 10 ? '  🔥' : ''}
-            </Txt>
+            // While the overlay is up it owns the figure. Two counters rolling
+            // to the same total at slightly different rates reads as a bug.
+            <View
+              style={[
+                styles.winRow,
+                (celebration.tier === 'big' || celebration.tier === 'mega') && styles.hidden,
+              ]}
+            >
+              <Txt variant="caption" color={colors.text.muted}>
+                WIN
+              </Txt>
+              <CoinCounter
+                amount={settlement.payout}
+                tier={celebration.tier}
+                color={colors.feedback.winBright}
+                variant="money"
+              />
+            </View>
           ) : settlement ? (
             <Txt variant="bodySmall" color={colors.text.muted}>
               No win — spin again
@@ -422,6 +492,12 @@ export function SlotsScreen() {
             </Txt>
           )}
         </View>
+        <WinOverlay
+          tier={celebration.tier}
+          amount={celebration.amount}
+          round={celebration.round}
+          onDone={() => setCelebration((c) => ({ ...c, tier: 'none' }))}
+        />
       </Card>
 
       <View style={styles.betRow}>
@@ -494,6 +570,7 @@ const styles = StyleSheet.create({
   },
   machine: {
     gap: spacing.md,
+    overflow: 'hidden',
     borderColor: colors.gold.dark,
     borderWidth: 2,
     backgroundColor: '#0B1330',
@@ -506,12 +583,15 @@ const styles = StyleSheet.create({
    */
   reelBay: {
     backgroundColor: '#05091A',
+    overflow: 'hidden',
     borderRadius: radius.md,
     borderWidth: 2,
     borderColor: colors.gold.dark,
     padding: spacing.sm,
   },
   fsRow: { alignItems: 'center', gap: 2 },
+  winRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  hidden: { opacity: 0 },
   reels: { flexDirection: 'row', gap: spacing.xs },
   readout: { minHeight: 32, alignItems: 'center', justifyContent: 'center' },
   betRow: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'center', flexWrap: 'wrap' },

@@ -239,6 +239,16 @@ export const sounds = {
     noise({ when, duration, gain: 0.05, frequency: 1200, q: 0.6, type: 'bandpass' });
   },
 
+  /**
+   * One tick of the coin counter.
+   *
+   * Very short and very quiet: this fires a dozen times a second during a
+   * roll-up, and anything with a tail turns into a buzz rather than a count.
+   */
+  tick(): void {
+    tone(1800 + Math.random() * 300, { type: 'square', duration: 0.02, gain: 0.06 });
+  },
+
   /** A modest win: a short major third. */
   win(): void {
     tone(523.25, { type: 'triangle', duration: 0.12, gain: 0.35 });
@@ -252,6 +262,22 @@ export const sounds = {
       tone(freq, { type: 'triangle', at: i * 0.09, duration: 0.3, gain: 0.34 });
       tone(freq * 2, { type: 'sine', at: i * 0.09, duration: 0.22, gain: 0.1 });
     });
+  },
+
+  /**
+   * A mega win: the big-win arpeggio extended up two octaves.
+   *
+   * Built from the same notes rather than a new motif, so the biggest moment
+   * sounds like more of the thing the player already associates with winning
+   * instead of like a different machine.
+   */
+  megaWin(): void {
+    const notes = [523.25, 659.25, 783.99, 1046.5, 1318.5, 1567.98, 2093];
+    notes.forEach((freq, i) => {
+      tone(freq, { type: 'triangle', at: i * 0.085, duration: 0.42, gain: 0.32 });
+      tone(freq * 2, { type: 'sine', at: i * 0.085, duration: 0.3, gain: 0.09 });
+    });
+    tone(130.81, { type: 'sawtooth', duration: 0.9, gain: 0.16, sweepTo: 523.25 });
   },
 
   /** Coins landing. Deliberately metallic and slightly detuned. */

@@ -26,6 +26,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, StyleSheet, View } from 'react-native';
 import { colors, spacing, typography } from '@juwa/ui';
 import { Txt } from './primitives';
+import { usePrefersReducedMotion } from '../motion';
 
 const MESSAGES = [
   'Coins are play money — no cash value, ever',
@@ -38,20 +39,6 @@ const MESSAGES = [
 
 /** Pixels per second. Slow enough to read a whole message as it passes. */
 const SPEED = 42;
-
-/** Honours the OS "reduce motion" setting on web. */
-function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    if (Platform.OS !== 'web' || typeof window === 'undefined' || !window.matchMedia) return;
-    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setReduced(query.matches);
-    const listen = (event: MediaQueryListEvent) => setReduced(event.matches);
-    query.addEventListener('change', listen);
-    return () => query.removeEventListener('change', listen);
-  }, []);
-  return reduced;
-}
 
 export function Ticker() {
   const offset = useRef(new Animated.Value(0)).current;

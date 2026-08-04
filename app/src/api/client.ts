@@ -356,15 +356,49 @@ export class DemoPlayApi implements PlayApi {
         lineWins.push({ line: row, symbol: first, count, multiplier: count * 4 });
       }
     }
-    const totalMultiplier = lineWins.reduce((sum, w) => sum + w.multiplier, 0) / 20;
+    const baseMultiplier = lineWins.reduce((sum, w) => sum + w.multiplier, 0) / 20;
+
+    /**
+     * The bonus round, occasionally.
+     *
+     * The stub used to hard-code `freeSpinsAwarded: 0`, which made the entire
+     * free-spins sequence unreachable without a server — so the most elaborate
+     * part of the presentation could never be seen, demonstrated or checked.
+     * One spin in twelve is far more often than the real 1-in-117, because the
+     * point of the demo is to exercise the path rather than to model the game.
+     */
+    const scatterCount = Math.random() < 1 / 12 ? 3 : 0;
+    const freeSpinsAwarded = scatterCount >= 3 ? 8 : 0;
+    const freeSpins = Array.from({ length: freeSpinsAwarded }, () => {
+      const fsGrid: string[][] = Array.from({ length: reels }, () =>
+        Array.from({ length: rows }, () => weightedSymbol()),
+      );
+      const multiplier = (Math.random() < 0.45 ? Math.random() * 6 : 0);
+      return {
+        grid: fsGrid,
+        lineWins: [] as LineWin[],
+        scatterCount: 0,
+        scatterMultiplier: 0,
+        totalMultiplier: multiplier,
+      };
+    });
+
+    const totalMultiplier =
+      baseMultiplier + freeSpins.reduce((sum, spin) => sum + spin.totalMultiplier, 0);
     const payout = Math.floor(request.stake * totalMultiplier);
 
     this.balance = this.balance - request.stake + payout;
 
     const state: SlotsState = {
-      baseSpin: { grid, lineWins, scatterCount: 0, scatterMultiplier: 0, totalMultiplier },
-      freeSpins: [],
-      freeSpinsAwarded: 0,
+      baseSpin: {
+        grid,
+        lineWins,
+        scatterCount,
+        scatterMultiplier: 0,
+        totalMultiplier: baseMultiplier,
+      },
+      freeSpins,
+      freeSpinsAwarded,
       totalMultiplier,
     };
 

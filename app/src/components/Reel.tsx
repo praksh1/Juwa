@@ -81,6 +81,12 @@ export interface ReelProps {
   landDuration?: number;
   /** Rows that form part of a winning line, for the highlight. */
   winningRows?: number[];
+  /**
+   * True once a win is being celebrated. Losing symbols dim so the winning
+   * ones stand out — showing what DIDN'T pay at full strength is why players
+   * miss small wins entirely on a busy grid.
+   */
+  celebrating?: boolean;
   /** Increments once per spin, so each spin is a distinct animation. */
   round?: number;
   /** Fires when this reel physically stops. */
@@ -99,6 +105,7 @@ export function Reel({
   landFrom = 0,
   landDuration = 1,
   winningRows = [],
+  celebrating = false,
   round = 0,
   onLanded,
 }: ReelProps) {
@@ -181,14 +188,26 @@ export function Reel({
       <Animated.View style={{ transform: [{ translateY: offset }] }}>
         {strip.map((symbol, i) => {
           const resultRow = i - resultStart;
-          const highlighted =
+          const onWinningLine =
             phase === 'idle' && resultRow >= 0 && winningRows.includes(resultRow);
+          // Only dim once there is something to dim FOR. Outside a celebration
+          // every symbol is equal, and a permanently faded grid just looks
+          // broken.
+          const dimmed = celebrating && phase === 'idle' && resultRow >= 0 && !onWinningLine;
+
           return (
             <View
               key={`${symbol}-${i}`}
-              style={[styles.cell, highlighted && styles.cellWinning]}
+              style={[
+                styles.cell,
+                onWinningLine && styles.cellWinning,
+                dimmed && styles.cellDimmed,
+              ]}
             >
-              <SlotSymbol name={symbol} size={SYMBOL_SIZE - 12} />
+              <SlotSymbol
+                name={symbol}
+                size={onWinningLine ? SYMBOL_SIZE - 4 : SYMBOL_SIZE - 12}
+              />
             </View>
           );
         })}
@@ -215,5 +234,14 @@ const styles = StyleSheet.create({
   cellWinning: {
     backgroundColor: colors.gold.wash,
     borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.gold.default,
+    // A glow rather than a hard edge: the payline should look lit from behind.
+    shadowColor: colors.gold.default,
+    shadowOpacity: 0.9,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
   },
+  /** ~20% opacity, per the brief. Enough to read, far enough back to ignore. */
+  cellDimmed: { opacity: 0.2 },
 });
