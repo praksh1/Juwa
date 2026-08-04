@@ -9,7 +9,7 @@
  *
  *   node app/scripts/finalize-web.mjs <dist-dir>
  */
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -93,26 +93,32 @@ if (!existsSync(resolve(dist, 'sw.js'))) {
 // ---------------------------------------------------------------- portability
 
 /**
- * Emit `_redirects` and `_headers` into the build itself.
+ * Emit `_headers` into the build itself.
  *
  * These rules already exist in `netlify.toml`, which means they exist only on
  * Netlify. Moving the site — because build minutes ran out, or a free tier
- * changed, or a better host appeared — silently drops all of them, and the
- * failures are quiet and awful: a refresh on any screen 404s, the service
- * worker gets cached so a deploy can never replace it, and the clickjacking
- * and MIME-sniffing headers vanish without a single error anywhere.
+ * changed — silently drops them, and the failures are quiet and awful: the
+ * service worker gets cached so a deploy can never replace it, and the
+ * clickjacking and MIME-sniffing headers vanish without a single error
+ * anywhere. Written into `dist/`, they travel with the artefact instead.
  *
- * Written into `dist/` instead, the rules travel with the artefact. Cloudflare
- * Pages and Netlify both read these files, and Netlify's own config still wins
- * where the two overlap — the contents are kept identical so it cannot matter.
+ * NO `_redirects` IS WRITTEN, and that is deliberate.
+ *
+ * The obvious single-page-app rule — `/*  /index.html  200` — is REJECTED by
+ * Cloudflare, and correctly: its asset server already strips `/index` and
+ * `.html` from incoming paths, so the rewritten path re-enters the same rule
+ * and loops. The deploy fails outright rather than shipping it.
+ *
+ * SPA fallback is therefore left to each host's own setting, and all three
+ * committed here already do it:
+ *
+ *   wrangler.jsonc   assets.not_found_handling = "single-page-application"
+ *   netlify.toml     [[redirects]] /* -> /index.html 200
+ *   vercel.json      rewrites /(.*) -> /index.html
+ *
+ * A fourth host would need the same one-line setting. That is a smaller risk
+ * than a file which deploys everywhere and breaks one of them.
  */
-const REDIRECTS = [
-  '# Single-page app: every path serves index.html, so a refresh on any screen',
-  '# does not 404 and Stripe can return the browser to /?purchase=...',
-  '# Static files that exist are served first — this only catches what is left.',
-  '/*  /index.html  200',
-  '',
-].join('\n');
 
 const HEADERS = [
   '# The service worker must never be cached, or a deploy cannot replace it and',
@@ -134,6 +140,15 @@ const HEADERS = [
   '',
 ].join('\n');
 
-writeFileSync(resolve(dist, '_redirects'), REDIRECTS);
 writeFileSync(resolve(dist, '_headers'), HEADERS);
-console.log('wrote _redirects and _headers so the build is not tied to one host');
+
+// A stale _redirects from an earlier build would still be deployed, and
+// Cloudflare would still reject it. Incremental builds reuse the output
+// directory, so removing the writer is not the same as removing the file.
+const staleRedirects = resolve(dist, '_redirects');
+if (existsSync(staleRedirects)) {
+  rmSync(staleRedirects);
+  console.log('removed a stale _redirects — Cloudflare rejects its SPA rule as a loop');
+}
+
+console.log('wrote _headers so cache and security rules are not tied to one host');
