@@ -89,3 +89,51 @@ if (!existsSync(resolve(dist, 'sw.js'))) {
   console.error('sw.js is missing from the build');
   process.exit(1);
 }
+
+// ---------------------------------------------------------------- portability
+
+/**
+ * Emit `_redirects` and `_headers` into the build itself.
+ *
+ * These rules already exist in `netlify.toml`, which means they exist only on
+ * Netlify. Moving the site — because build minutes ran out, or a free tier
+ * changed, or a better host appeared — silently drops all of them, and the
+ * failures are quiet and awful: a refresh on any screen 404s, the service
+ * worker gets cached so a deploy can never replace it, and the clickjacking
+ * and MIME-sniffing headers vanish without a single error anywhere.
+ *
+ * Written into `dist/` instead, the rules travel with the artefact. Cloudflare
+ * Pages and Netlify both read these files, and Netlify's own config still wins
+ * where the two overlap — the contents are kept identical so it cannot matter.
+ */
+const REDIRECTS = [
+  '# Single-page app: every path serves index.html, so a refresh on any screen',
+  '# does not 404 and Stripe can return the browser to /?purchase=...',
+  '# Static files that exist are served first — this only catches what is left.',
+  '/*  /index.html  200',
+  '',
+].join('\n');
+
+const HEADERS = [
+  '# The service worker must never be cached, or a deploy cannot replace it and',
+  '# players stay on an old build indefinitely.',
+  '/sw.js',
+  '  Cache-Control: no-cache, no-store, must-revalidate',
+  '',
+  '/manifest.json',
+  '  Cache-Control: public, max-age=3600',
+  '',
+  '# Bundler output is content-hashed, so it can be cached hard and forever.',
+  '/_expo/*',
+  '  Cache-Control: public, max-age=31536000, immutable',
+  '',
+  '/*',
+  '  X-Content-Type-Options: nosniff',
+  '  X-Frame-Options: DENY',
+  '  Referrer-Policy: strict-origin-when-cross-origin',
+  '',
+].join('\n');
+
+writeFileSync(resolve(dist, '_redirects'), REDIRECTS);
+writeFileSync(resolve(dist, '_headers'), HEADERS);
+console.log('wrote _redirects and _headers so the build is not tied to one host');
