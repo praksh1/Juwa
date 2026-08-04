@@ -36,8 +36,19 @@ import {
   tierForXp,
 } from '@juwa/economy';
 import { listGames } from '@juwa/engine';
-import { AuthError, bearerToken, verifyJwt } from './jwt.js';
+import { AuthError, bearerToken, optionalBearerToken, verifyJwt } from './jwt.js';
 import { LIMITS, RateLimiter } from './ratelimit.js';
+import {
+  AdminAuthError,
+  listAudit,
+  listGameAdmin,
+  operatorForToken,
+  operatorLogin,
+  operatorLogout,
+  updateGameConfig,
+} from './admin.js';
+import { GameConfigCache, assertBetAllowed } from './game-config.js';
+import { ADMIN_CONSOLE_HTML } from './admin-console.js';
 import {
   WebhookVerificationError,
   isPaid,
@@ -120,6 +131,13 @@ function send(res: ServerResponse, status: number, payload: unknown, extra: Reco
 function toApiError(error: unknown): ApiError {
   if (error instanceof ApiError) return error;
   if (error instanceof AuthError) return new ApiError(error.message, 401, 'unauthenticated');
+  if (error instanceof AdminAuthError) return new ApiError(error.message, 401, 'admin_unauthenticated');
+  if (error instanceof Error && error.name === 'GameDisabledError') {
+    return new ApiError(error.message, 403, 'game_disabled');
+  }
+  if (error instanceof Error && error.name === 'StakeOutOfRangeError') {
+    return new ApiError(error.message, 400, 'stake_out_of_range');
+  }
   if (error instanceof Error) {
     const message = error.message;
     if (/Registration is not complete/i.test(message)) {
@@ -148,6 +166,92 @@ function toApiError(error: unknown): ApiError {
   return new ApiError('Internal error', 500, 'internal');
 }
 
+/**
+ * Operator routes.
+ *
+ * Deliberately not in the `routes` table: everything there assumes a
+ * `PlayerContext`, and an operator does not have one.
+ */
+async function handleAdmin(
+  config: ServerConfig,
+  gameConfigs: GameConfigCache,
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+): Promise<void> {
+  const route = `${req.method} ${url.pathname}`;
+
+  // The console itself. Static, self-contained, and served from the API rather
+  // than the player app so no operator code ever reaches a player's device.
+  if (route === 'GET /admin') {
+    res.writeHead(200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      // Never cache the console: an operator on a stale build could be looking
+      // at fields the server no longer honours.
+      'Cache-Control': 'no-store',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'no-referrer',
+    }).end(ADMIN_CONSOLE_HTML);
+    return;
+  }
+
+  const body =
+    req.method === 'POST' || req.method === 'PATCH' ? await readBody(req) : {};
+  const token = optionalBearerToken(req.headers.authorization);
+
+  try {
+    if (route === 'POST /admin/login') {
+      const { email, password, code } = body as Record<string, string>;
+      if (!email || !password || !code) {
+        throw new ApiError('email, password and code are required', 400, 'invalid_input');
+      }
+      send(res, 200, await operatorLogin(config, email, password, code));
+      return;
+    }
+
+    if (route === 'POST /admin/logout') {
+      if (token) await operatorLogout(config, token);
+      send(res, 200, { ok: true });
+      return;
+    }
+
+    // Everything below needs a live operator session.
+    const operator = await operatorForToken(config, token);
+
+    if (route === 'GET /admin/games') {
+      const engines = listGames().map((game) => ({
+        id: game.id,
+        name: game.name,
+        rtp: game.rtp,
+        limits: { min: game.limits.min, max: game.limits.max },
+      }));
+      send(res, 200, { operator, games: await listGameAdmin(config, engines) });
+      return;
+    }
+
+    if (req.method === 'PATCH' && url.pathname.startsWith('/admin/games/')) {
+      const gameId = decodeURIComponent(url.pathname.slice('/admin/games/'.length));
+      await updateGameConfig(config, operator, gameId, body as Record<string, never>);
+      // The play path caches configuration for half a minute; an operator who
+      // just disabled a game should not have to wait for that to expire.
+      gameConfigs.invalidate();
+      send(res, 200, { ok: true });
+      return;
+    }
+
+    if (route === 'GET /admin/audit') {
+      const limit = Number(url.searchParams.get('limit') ?? 100);
+      send(res, 200, { entries: await listAudit(config, limit) });
+      return;
+    }
+
+    send(res, 404, { message: 'Not found', code: 'no_route' });
+  } catch (error) {
+    const api = toApiError(error);
+    send(res, api.status, { message: api.message, code: api.code });
+  }
+}
+
 export function createServer(config: ServerConfig) {
   const limiters = {
     bet: new RateLimiter(LIMITS.bet.capacity, LIMITS.bet.refillPerSecond),
@@ -155,6 +259,8 @@ export function createServer(config: ServerConfig) {
     read: new RateLimiter(LIMITS.read.capacity, LIMITS.read.refillPerSecond),
     register: new RateLimiter(LIMITS.register.capacity, LIMITS.register.refillPerSecond),
   };
+
+  const gameConfigs = new GameConfigCache(config);
 
   const sweeper = setInterval(() => {
     for (const limiter of Object.values(limiters)) limiter.sweep();
@@ -304,6 +410,11 @@ export function createServer(config: ServerConfig) {
       if (typeof gameId !== 'string' || typeof stake !== 'number') {
         throw new ApiError('gameId and stake are required', 400, 'invalid_input');
       }
+
+      // Operator configuration, read per bet. A round already in flight settles
+      // on the terms it started on; only NEW spins see a change.
+      assertBetAllowed(await gameConfigs.get(gameId), gameId, stake);
+
       return placeBet(config.db, ctx.player, {
         gameId,
         stake,
@@ -491,6 +602,20 @@ export function createServer(config: ServerConfig) {
      */
     if (url.pathname === '/webhooks/stripe' && req.method === 'POST') {
       await handleStripeWebhook(config, req, res);
+      return;
+    }
+
+    /**
+     * The operator panel.
+     *
+     * Handled before the player JWT check because operators do not have one —
+     * they authenticate against their own table with their own session token.
+     * Running them through the player path would mean one of two bad things:
+     * either a Supabase token grants operator access, or operator access is a
+     * flag on a player row.
+     */
+    if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
+      await handleAdmin(config, gameConfigs, req, res, url);
       return;
     }
 

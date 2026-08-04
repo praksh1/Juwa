@@ -112,6 +112,20 @@ export function verifyJwt(token: string, secret: string, now = Date.now()): JwtC
   return claims;
 }
 
+/**
+ * The same, but absent is not an error.
+ *
+ * Player routes require a token, so `bearerToken` throwing is right there. The
+ * operator login route is reached WITHOUT one by definition, and turning a
+ * missing header into an exception on the way to sign-in produces a confusing
+ * 401 before the credentials have even been read.
+ */
+export function optionalBearerToken(header: string | undefined): string | undefined {
+  if (!header) return undefined;
+  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
+  return match ? match[1]! : undefined;
+}
+
 /** Pull a bearer token out of an Authorization header. */
 export function bearerToken(header: string | undefined): string {
   if (!header) throw new AuthError('Missing Authorization header');

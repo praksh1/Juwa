@@ -244,6 +244,42 @@ Prices live in `packages/economy/src/packs.ts`, not in Stripe. The client sends
 a pack **id** and the server looks up the amount, so a modified client cannot
 name its own price.
 
+## 3c. The operator panel
+
+The panel lives at **`https://api.yourdomain.com/admin`** — on the API, not on
+the player site. No operator code, field name or endpoint is ever shipped to a
+player's device.
+
+Create the first account on the server, once:
+
+```bash
+DATABASE_URL=postgres://... node packages/api/dist/create-operator.js you@yourdomain.com
+```
+
+It prints a generated password and an `otpauth://` URI. The password is shown
+**once**; put the URI into an authenticator app. There is deliberately no
+sign-up form — an endpoint that mints operators is an endpoint that mints
+attackers, and this account can disable every game you have.
+
+What the panel can change: whether a game is enabled, a ceiling on any single
+round's payout, and bet limits. Changes apply to **new spins only** — a round
+already in flight settles on the terms it started on.
+
+What it cannot change is **return to player**, and there is no field for it.
+RTP here emerges from the reel strips and the paytable, it is measured by
+simulation, and it is published so a player can check it. What the panel shows
+instead is the measured figure beside the **observed** one. When those two
+disagree over a few thousand spins, the deployed code is not the code that was
+measured — which is the single most useful thing this screen can tell you.
+
+Every change writes an audit row from a **database trigger**: who, what field,
+old value, new value, when. It cannot be forgotten by application code and
+cannot be edited afterwards. A change made directly in psql still appears,
+attributed to nobody.
+
+Staff who leave should be **disabled**, not deleted — the audit trail has to
+outlive the account, and the database will refuse the delete to enforce that.
+
 ## 4. Check it
 
 ```bash
