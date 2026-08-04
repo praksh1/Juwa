@@ -15,6 +15,9 @@
  * possible, but only when someone writes them down on purpose.
  */
 
+import { rootCertificates } from 'node:tls';
+import { SUPABASE_ROOT_CA_2021, isSupabaseHost } from './supabase-ca.js';
+
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '', '0.0.0.0']);
 
 /** Postgres URLs may carry an IPv6 literal in brackets; strip them to compare. */
@@ -31,8 +34,8 @@ function hostOf(connectionString: string): string {
 export type SslDecision =
   /** Hand nothing to `pg` — either it is local, or the URL already said what to do. */
   | { readonly kind: 'defer'; readonly reason: string }
-  /** Verified TLS, optionally against a CA the operator supplied. */
-  | { readonly kind: 'verify'; readonly ca?: string };
+  /** Verified TLS, optionally against an extra CA, named so it can be logged. */
+  | { readonly kind: 'verify'; readonly ca?: string; readonly caSource?: string };
 
 /**
  * Decide how a connection string should be secured.
@@ -59,8 +62,19 @@ export function decideSsl(
     return { kind: 'defer', reason: `local host (${host || 'unparsed'})` };
   }
 
+  // An explicitly supplied CA always wins: it is how a self-hosted Supabase,
+  // a different provider, or a rotated root gets handled without a code change.
   const ca = env['DATABASE_CA_CERT'];
-  return ca ? { kind: 'verify', ca } : { kind: 'verify' };
+  if (ca) return { kind: 'verify', ca, caSource: 'DATABASE_CA_CERT' };
+
+  // Supabase signs with its own root, which no platform trust store carries.
+  // Shipping that root is what keeps verification on instead of pushing every
+  // deployment towards sslmode=no-verify.
+  if (isSupabaseHost(host)) {
+    return { kind: 'verify', ca: SUPABASE_ROOT_CA_2021, caSource: 'bundled Supabase root' };
+  }
+
+  return { kind: 'verify' };
 }
 
 /**
@@ -74,14 +88,16 @@ export function decideSsl(
 export function sslOptionFor(
   connectionString: string,
   env: Record<string, string | undefined> = process.env,
-): { ssl: { rejectUnauthorized: true; ca?: string } } | Record<string, never> {
+): { ssl: { rejectUnauthorized: true; ca?: string[] } } | Record<string, never> {
   const decision = decideSsl(connectionString, env);
   if (decision.kind === 'defer') return {};
-  return {
-    ssl: decision.ca
-      ? { rejectUnauthorized: true, ca: decision.ca }
-      : { rejectUnauthorized: true },
-  };
+  if (!decision.ca) return { ssl: { rejectUnauthorized: true } };
+
+  // The extra root is ADDED to the platform's trust store, not substituted for
+  // it. Passing `ca` to Node replaces the defaults outright, so omitting these
+  // would break the moment a provider moved to a publicly trusted certificate —
+  // a change nobody would announce and everybody would experience as an outage.
+  return { ssl: { rejectUnauthorized: true, ca: [...rootCertificates, decision.ca] } };
 }
 
 /**

@@ -180,6 +180,15 @@ never be possible to discover that in production.
 Serverless and small instances open more connections than Postgres will
 tolerate.
 
+Supabase signs its Postgres certificates with its own private CA, which no
+platform trust store carries, so a first deploy fails with `self-signed
+certificate in certificate chain`. The usual answer to that is to disable
+verification; instead the root itself is committed at
+`packages/api/src/supabase-ca.ts` (provenance and SHA-256 in the header) and
+offered alongside the platform's own roots for `*.supabase.co` and
+`*.supabase.com` hosts. Nothing to configure. `DATABASE_CA_CERT` overrides it
+for a self-hosted Supabase, another provider, or a rotated root.
+
 Supabase moved the connection strings off the Database settings page and behind
 the **Connect** button in the dashboard's top bar, next to the project and
 branch names. Settings → Database now holds the password, pool size and network

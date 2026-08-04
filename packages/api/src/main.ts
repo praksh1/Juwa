@@ -25,7 +25,7 @@ const ssl = decideSsl(databaseUrl);
 console.log(
   ssl.kind === 'defer'
     ? `Database TLS: left to the connection string — ${ssl.reason}.`
-    : `Database TLS: required and verified${ssl.ca ? ' against DATABASE_CA_CERT' : ''}.`,
+    : `Database TLS: required and verified${ssl.caSource ? `, trusting ${ssl.caSource}` : ''}.`,
 );
 
 const pool = new Pool({
