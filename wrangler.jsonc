@@ -1,0 +1,31 @@
+{
+  // Cloudflare deployment for the Juwa web app.
+  //
+  // Cloudflare's dashboard now creates a WORKER for a connected repository
+  // rather than a Pages project, and a Worker has no "build output directory"
+  // field — it deploys whatever `npx wrangler deploy` finds, and without this
+  // file that is nothing. The build succeeds, the deploy succeeds, and the site
+  // is empty.
+  //
+  // This is a static site: there is no `main`, because there is no Worker
+  // script. Everything served is a file the Expo export produced.
+  //
+  // ⚠️ The API does NOT live here. It is a long-running container (see
+  // Dockerfile) because the rate limiters in packages/api/src/server.ts hold
+  // their buckets in memory — on Workers, where each request may get a fresh
+  // isolate, the limits on /bet and /register silently stop applying. That is a
+  // security control, not a performance tweak.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "juwa",
+  "compatibility_date": "2025-04-01",
+
+  "assets": {
+    "directory": "app/dist",
+
+    // Single-page app: any path that is not a real file serves index.html, so
+    // refreshing on /games or returning from Stripe with /?purchase=... does
+    // not 404. `dist/_redirects` says the same thing for hosts that read it;
+    // this is the setting Workers actually obeys.
+    "not_found_handling": "single-page-application"
+  }
+}
