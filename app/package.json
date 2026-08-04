@@ -9,7 +9,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "build:web": "node scripts/ensure-workspace-deps.mjs && expo export --platform web --output-dir dist && node scripts/finalize-web.mjs dist",
+    "build:web": "node scripts/ensure-workspace-deps.mjs && expo export --platform web --output-dir dist --clear && node scripts/finalize-web.mjs dist",
     "icons": "node scripts/make-icons.mjs"
   },
   "dependencies": {

@@ -8,6 +8,48 @@ import { LegalFooter } from '../components/LegalFooter';
 import { StatePicker } from '../components/StatePicker';
 
 /**
+ * One segment of the date of birth.
+ *
+ * ⚠️ DEFINED AT MODULE SCOPE, AND IT HAS TO BE.
+ *
+ * This lived inside RegisterScreen, which meant every render produced a new
+ * function — a new component TYPE as far as React is concerned. React cannot
+ * know it is the same component, so it unmounted the input and mounted a fresh
+ * one on every keystroke, and the browser dropped focus with it.
+ *
+ * The symptom is precise and baffling: you type "1", the field takes it, and
+ * the caret vanishes. Typing the second "1" does nothing until you tap back in,
+ * so entering a date of birth means eight taps instead of one. It looks like a
+ * mobile keyboard quirk rather than a bug, which is why it survived to a real
+ * user's first sign-up.
+ */
+const DateBox = ({
+  value,
+  onChange,
+  placeholder,
+  length,
+  label,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  placeholder: string;
+  length: number;
+  label: string;
+}) => (
+  <TextInput
+    style={[styles.input, styles.dateBox, length === 4 && styles.yearBox]}
+    placeholder={placeholder}
+    placeholderTextColor={colors.text.muted}
+    keyboardType="number-pad"
+    inputMode="numeric"
+    maxLength={length}
+    value={value}
+    onChangeText={(next) => onChange(next.replace(/\D/g, ''))}
+    accessibilityLabel={label}
+  />
+);
+
+/**
  * The age gate.
  *
  * Deliberately a separate step from creating the account. Two reasons:
@@ -102,32 +144,6 @@ export function RegisterScreen({
     setBusy(false);
     if (!result.ok) setMessage(result.message ?? 'Could not complete registration.');
   };
-
-  const DateBox = ({
-    value,
-    onChange,
-    placeholder,
-    length,
-    label,
-  }: {
-    value: string;
-    onChange: (next: string) => void;
-    placeholder: string;
-    length: number;
-    label: string;
-  }) => (
-    <TextInput
-      style={[styles.input, styles.dateBox, length === 4 && styles.yearBox]}
-      placeholder={placeholder}
-      placeholderTextColor={colors.text.muted}
-      keyboardType="number-pad"
-      inputMode="numeric"
-      maxLength={length}
-      value={value}
-      onChangeText={(next) => onChange(next.replace(/\D/g, ''))}
-      accessibilityLabel={label}
-    />
-  );
 
   return (
     <Screen contentStyle={styles.centered}>

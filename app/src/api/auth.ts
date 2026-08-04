@@ -41,6 +41,18 @@ export const supabase: SupabaseClient | null = IS_CONFIGURED
     })
   : null;
 
+/**
+ * Where a confirmation email should send the player back to.
+ *
+ * The live origin, not a configured constant: one build is served from a
+ * workers.dev address, a netlify.app address and eventually a real domain, and
+ * a hard-coded value would be wrong on two of the three.
+ */
+function emailRedirectTo(): string | null {
+  if (typeof window === 'undefined') return null;
+  return window.location.origin || null;
+}
+
 export interface Session {
   userId: string;
   email: string | null;
@@ -86,7 +98,21 @@ export async function signUp(email: string, password: string): Promise<AuthResul
   // always — a DNS failure can reject instead, and an uncaught rejection here
   // leaves the button spinning with nothing on screen at all.
   try {
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      // Without this Supabase uses the "Site URL" configured in its dashboard,
+      // which defaults to http://localhost:3000 — so the confirmation email
+      // sends a real player to a blank page on their own device. The account is
+      // created and confirmed, but the link appears broken, and the fix is
+      // buried in a dashboard the person who hit it cannot see.
+      //
+      // Sending the current origin means the link always returns to whichever
+      // deployment the player actually signed up on. The redirect target still
+      // has to be allow-listed in Supabase (Authentication -> URL
+      // Configuration), which is what stops this being an open redirect.
+      ...(emailRedirectTo() ? { options: { emailRedirectTo: emailRedirectTo()! } } : {}),
+    });
     if (error) return { ok: false, message: friendly(error.message) };
     // With email confirmation on, there is no session until the link is clicked.
     return { ok: true, needsEmailConfirmation: !data.session };

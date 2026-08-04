@@ -186,10 +186,15 @@ for (const name of URL_VARS) {
     continue;
   }
 
-  if (parsed.protocol !== 'https:') {
+  // http is fine for loopback and only for loopback. Browsers exempt localhost
+  // from mixed-content blocking, and a local development build genuinely does
+  // talk to http://localhost — rejecting it outright made this check impossible
+  // to work with, which is how a check gets deleted rather than fixed.
+  const loopback = ['localhost', '127.0.0.1', '[::1]', '::1'].includes(parsed.hostname);
+  if (parsed.protocol !== 'https:' && !loopback) {
     configProblems.push(
-      `${name} uses ${parsed.protocol}// — must be https://, or browsers will ` +
-        `block it as mixed content.`,
+      `${name} uses ${parsed.protocol}// on ${parsed.hostname} — must be https://. ` +
+        `A browser on an https page refuses to load it, and the request never leaves.`,
     );
   }
   if (raw !== value) {
