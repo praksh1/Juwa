@@ -165,11 +165,29 @@ function asNetworkError(error: unknown): PlayApiError {
 
 // ------------------------------------------------------------------- http
 
+/**
+ * Strip anything that would corrupt the path when a route is appended.
+ *
+ * Every route below starts with `/`, so a base URL ending in one produces
+ * `https://host//balance` — which most servers 404. Copying a URL out of a
+ * dashboard is how it gets a trailing slash, and the result is an app that is
+ * configured correctly, looks correctly configured, and cannot reach anything.
+ * Surrounding whitespace goes too; a copy-paste on a phone picks it up
+ * constantly and it survives into the deployed bundle invisibly.
+ */
+export function normaliseBaseUrl(url: string): string {
+  return url.trim().replace(/\/+$/, '');
+}
+
 export class HttpPlayApi implements PlayApi {
+  private readonly baseUrl: string;
+
   constructor(
-    private readonly baseUrl: string,
+    baseUrl: string,
     private readonly getToken: () => Promise<string | null>,
-  ) {}
+  ) {
+    this.baseUrl = normaliseBaseUrl(baseUrl);
+  }
 
   private async request<T>(path: string, body?: unknown): Promise<T> {
     // Fetched per request rather than cached: Supabase rotates the access token
@@ -501,7 +519,10 @@ export class DemoPlayApi implements PlayApi {
  * This matters: a hard-coded boolean is exactly the kind of thing that ships to
  * production still set to `true`.
  */
-const API_URL = process.env['EXPO_PUBLIC_API_URL'];
+// Normalised BEFORE the emptiness test, not after. A variable set to a single
+// space is truthy, so the raw check would pick the real client and hand it an
+// empty base URL — demo mode refused for a value that points nowhere.
+const API_URL = normaliseBaseUrl(process.env['EXPO_PUBLIC_API_URL'] ?? '');
 
 export const USE_DEMO_API = !API_URL;
 
