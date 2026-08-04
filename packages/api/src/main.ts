@@ -11,6 +11,7 @@ import { createServer } from './server.js';
 import { LiveStripeGateway } from './stripe.js';
 import { CERT_FAILURE_ADVICE, decideSsl, isCertificateError, sslOptionFor } from './db-ssl.js';
 import { describeProblems, parseAllowedOrigins } from './origins.js';
+import { JwksCache, jwksUrlForSupabase } from './jwks.js';
 
 function required(name: string): string {
   const value = process.env[name];
@@ -93,10 +94,42 @@ if (parsedOrigins.problems.length > 0) {
 const allowedOrigins = parsedOrigins.origins;
 console.log(`Accepting browser requests from: ${allowedOrigins.join(', ')}`);
 
+/**
+ * Where session tokens come from.
+ *
+ * Supabase signs new projects' tokens with a private key and publishes the
+ * public half; older projects use a shared secret. Either is enough to start,
+ * both is fine, neither is refused — a service that cannot verify a single
+ * token should not pretend to be running.
+ */
+const legacySecret = process.env['SUPABASE_JWT_SECRET'];
+const supabaseUrl = process.env['SUPABASE_URL']?.trim().replace(/\/+$/, '');
+const jwks = supabaseUrl ? new JwksCache(jwksUrlForSupabase(supabaseUrl)) : undefined;
+
+if (!legacySecret && !jwks) {
+  console.error(
+    'No way to verify session tokens.\n\n' +
+      'Set SUPABASE_URL (recommended — projects now sign with a published key,\n' +
+      'and tokens arrive as ES256), or SUPABASE_JWT_SECRET for a project still\n' +
+      'using the legacy shared secret. Setting both is fine.\n\n' +
+      'SUPABASE_URL looks like https://<project>.supabase.co',
+  );
+  process.exit(1);
+}
+console.log(
+  `Token verification: ${[
+    jwks ? `published keys from ${supabaseUrl}` : null,
+    legacySecret ? 'legacy shared secret' : null,
+  ]
+    .filter(Boolean)
+    .join(' and ')}.`,
+);
+
 const { server } = createServer({
   db: new PostgresDb(pool),
   query: (sql, params) => pool.query(sql, params as unknown[]) as never,
-  jwtSecret: required('SUPABASE_JWT_SECRET'),
+  ...(legacySecret ? { jwtSecret: legacySecret } : {}),
+  ...(jwks ? { jwks } : {}),
   allowedOrigins,
   ...(stripe ? { stripe } : {}),
 });

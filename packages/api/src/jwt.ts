@@ -14,7 +14,8 @@
  * tokens is a dependency that can be compromised into accepting them.
  */
 
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual, verify as cryptoVerify } from 'node:crypto';
+import { ASYMMETRIC_ALGORITHMS, JwksError, type JwksCache } from './jwks.js';
 
 export interface JwtClaims {
   /** The Supabase user id. This is the player id everywhere in Juwa. */
@@ -110,6 +111,115 @@ export function verifyJwt(token: string, secret: string, now = Date.now()): JwtC
   }
 
   return claims;
+}
+
+/** Claims validation shared by both verification paths. */
+function readClaims(payloadPart: string, now: number): JwtClaims {
+  let claims: JwtClaims;
+  try {
+    claims = JSON.parse(base64UrlDecode(payloadPart).toString('utf8'));
+  } catch {
+    throw new AuthError('Malformed token payload');
+  }
+  if (!claims.sub || typeof claims.sub !== 'string') throw new AuthError('Token has no subject');
+  if (typeof claims.exp !== 'number' || claims.exp * 1000 <= now) {
+    throw new AuthError('Token has expired');
+  }
+  return claims;
+}
+
+export interface VerifyOptions {
+  /** The legacy shared secret. Only ever used for HS256. */
+  secret?: string;
+  /** Published public keys. Only ever used for ES256 and RS256. */
+  jwks?: JwksCache;
+  now?: number;
+}
+
+/**
+ * Verify a token signed either way.
+ *
+ * Supabase used to hand out HS256 tokens signed with a secret both sides hold.
+ * New projects sign with a private key and publish the public half, so tokens
+ * arrive as ES256 and a server that only knows HS256 rejects every real login.
+ * Both must work: existing deployments still use the legacy secret, and new
+ * ones cannot.
+ *
+ * THE ALGORITHM STILL DOES NOT COME FROM THE TOKEN.
+ *
+ * It selects a path, and each path is pinned to one kind of key. HS256 can only
+ * ever reach the shared secret; ES256 and RS256 can only ever reach a published
+ * public key. Nothing routes a public key into the HMAC branch, which is the
+ * forgery this design exists to prevent: an attacker who signs `alg: HS256`
+ * using the public key as the secret gets checked against the real secret and
+ * fails. `alg: none` matches no path at all.
+ */
+export async function verifyJwtWithKeys(
+  token: string,
+  options: VerifyOptions,
+): Promise<JwtClaims> {
+  const now = options.now ?? Date.now();
+  const parts = token.split('.');
+  if (parts.length !== 3) throw new AuthError('Malformed token');
+  const [headerPart, payloadPart, signaturePart] = parts as [string, string, string];
+
+  let header: { alg?: string; kid?: string };
+  try {
+    header = JSON.parse(base64UrlDecode(headerPart).toString('utf8'));
+  } catch {
+    throw new AuthError('Malformed token header');
+  }
+
+  const signingInput = Buffer.from(`${headerPart}.${payloadPart}`);
+  const signature = base64UrlDecode(signaturePart);
+
+  if (header.alg === 'HS256') {
+    if (!options.secret) {
+      throw new AuthError('This token is signed with a shared secret, which is not configured');
+    }
+    const expected = createHmac('sha256', options.secret).update(signingInput).digest();
+    // Constant time, so response timing cannot be used to forge a signature
+    // byte by byte.
+    if (expected.length !== signature.length || !timingSafeEqual(expected, signature)) {
+      throw new AuthError('Invalid token signature');
+    }
+    return readClaims(payloadPart, now);
+  }
+
+  if (!ASYMMETRIC_ALGORITHMS.has(header.alg ?? '')) {
+    throw new AuthError(`Unsupported token algorithm: ${header.alg}`);
+  }
+  if (!options.jwks) {
+    throw new AuthError(
+      'This token is signed with a published key, but no key source is configured',
+    );
+  }
+
+  // A token naming a key nobody publishes is a bad token, not a broken server:
+  // it is what a forgery and a very stale session both look like, and it must
+  // cost a 401 rather than a 500 with a stack trace. A provider that cannot be
+  // REACHED is the opposite — the token may be perfectly good — so that error
+  // is left alone to surface as a server fault.
+  let key;
+  try {
+    key = await options.jwks.keyFor(header.kid);
+  } catch (error) {
+    if (error instanceof JwksError && error.kind === 'unknown-key') {
+      throw new AuthError('Token was signed with an unrecognised key');
+    }
+    throw error;
+  }
+
+  // ECDSA signatures in a JWT are the raw r‖s pair. Node's default is DER, and
+  // reading one as the other rejects every valid signature — which would look
+  // exactly like a wrong key.
+  const verified =
+    header.alg === 'ES256'
+      ? cryptoVerify('sha256', signingInput, { key, dsaEncoding: 'ieee-p1363' }, signature)
+      : cryptoVerify('sha256', signingInput, key, signature);
+
+  if (!verified) throw new AuthError('Invalid token signature');
+  return readClaims(payloadPart, now);
 }
 
 /**

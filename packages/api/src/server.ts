@@ -36,7 +36,8 @@ import {
   tierForXp,
 } from '@juwa/economy';
 import { listGames } from '@juwa/engine';
-import { AuthError, bearerToken, optionalBearerToken, verifyJwt } from './jwt.js';
+import { AuthError, bearerToken, optionalBearerToken, verifyJwtWithKeys } from './jwt.js';
+import type { JwksCache } from './jwks.js';
 import { LIMITS, RateLimiter } from './ratelimit.js';
 import {
   AdminAuthError,
@@ -61,7 +62,10 @@ export interface ServerConfig {
   db: PostgresDb;
   /** Raw SQL access, for the few reads that are not worth a Db method. */
   query: <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<{ rows: T[] }>;
-  jwtSecret: string;
+  /** Legacy shared secret. Optional now that projects sign asymmetrically. */
+  jwtSecret?: string;
+  /** Published public keys, for ES256/RS256 tokens. */
+  jwks?: JwksCache;
   /** Origins allowed to call this API. Never '*' — credentials are involved. */
   allowedOrigins: string[];
   /** Omit to run without a store; the checkout route then returns 503. */
@@ -629,7 +633,10 @@ export function createServer(config: ServerConfig) {
     }
 
     try {
-      const claims = verifyJwt(bearerToken(req.headers.authorization), config.jwtSecret);
+      const claims = await verifyJwtWithKeys(bearerToken(req.headers.authorization), {
+        ...(config.jwtSecret ? { secret: config.jwtSecret } : {}),
+        ...(config.jwks ? { jwks: config.jwks } : {}),
+      });
       const player: PlayerContext = { playerId: claims.sub, currency: 'GC' };
 
       const limit = limiterFor(route).check(`${claims.sub}:${route}`);

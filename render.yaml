@@ -37,8 +37,17 @@ services:
       - key: DATABASE_URL
         sync: false
 
-      # Supabase -> Settings -> API -> JWT Settings -> JWT Secret.
-      # Anyone holding this can mint a token for any player. Never in git.
+      # How session tokens are verified. Set SUPABASE_URL; new Supabase
+      # projects sign with a private key and publish the public half, so
+      # tokens arrive as ES256 and a shared secret cannot check them.
+      # Looks like https://<project>.supabase.co
+      - key: SUPABASE_URL
+        sync: false
+
+      # Only for a project still on the legacy shared secret
+      # (Settings -> API -> JWT Settings). Anyone holding this can mint a
+      # token for any player, so never in git. Leave unset if SUPABASE_URL is
+      # set and the project signs asymmetrically.
       - key: SUPABASE_JWT_SECRET
         sync: false
 
