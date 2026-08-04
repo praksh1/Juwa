@@ -2,16 +2,17 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, spacing } from '@juwa/ui';
-import { format } from '@juwa/money';
+import { format, minor } from '@juwa/money';
 import {
   COIN_PACKS,
   FIRST_PURCHASE_MULTIPLIER,
   coinsGranted,
   type CoinPack,
 } from '@juwa/economy';
-import { Badge, Card, Screen, SectionHeader, Txt } from '../components/primitives';
+import { Badge, Button, Card, Screen, SectionHeader, Txt } from '../components/primitives';
+import { LegalFooter } from '../components/LegalFooter';
 import { PlayApiError, createPlayApi } from '../api/client';
-import { usePlayer } from '../api/usePlayer';
+import { notifyBalanceChanged, usePlayer } from '../api/usePlayer';
 
 /**
  * The coin store.
@@ -105,6 +106,37 @@ export function StoreScreen() {
   const [isFirstPurchase, setIsFirstPurchase] = useState(false);
   const [busyPack, setBusyPack] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [topUpBusy, setTopUpBusy] = useState(false);
+  const [topUpNote, setTopUpNote] = useState<string | null>(null);
+
+  /**
+   * The free top-up.
+   *
+   * Always on screen, never behind a condition. "No purchase necessary" is a
+   * claim the footer makes on every page, and a button that only appears when
+   * the server happens to feel generous does not support it. When a claim is
+   * refused the server says why, and that reason is shown — a disabled control
+   * with no explanation reads as broken.
+   */
+  const claimTopUp = useCallback(async () => {
+    setTopUpNote(null);
+    setTopUpBusy(true);
+    try {
+      const result = await api.claimTopUp();
+      setTopUpNote(
+        result.granted
+          ? `${format(minor(result.coins), 'GC')} added to your balance.`
+          : (result.reason ?? 'Not available right now. Try again shortly.'),
+      );
+      if (result.granted) notifyBalanceChanged();
+    } catch (error) {
+      setTopUpNote(
+        error instanceof PlayApiError ? error.message : 'Could not add coins. Try again.',
+      );
+    } finally {
+      setTopUpBusy(false);
+    }
+  }, [api]);
 
   useEffect(() => {
     api
@@ -181,20 +213,52 @@ export function StoreScreen() {
         </View>
       </View>
 
+      <Card style={styles.topUp}>
+        <View style={styles.topUpText}>
+          <Txt variant="h3">Out of coins?</Txt>
+          <Txt variant="bodySmall" color={colors.text.secondary}>
+            Take some free ones. You never have to buy anything to play.
+          </Txt>
+          {topUpNote ? (
+            <Txt variant="caption" color={colors.neon.cyan}>
+              {topUpNote}
+            </Txt>
+          ) : null}
+        </View>
+        <Button
+          label="Free coins"
+          variant="secondary"
+          onPress={claimTopUp}
+          loading={topUpBusy}
+          disabled={topUpBusy}
+        />
+      </Card>
+
       <Card style={styles.disclosure}>
-        <Txt variant="caption" color={colors.text.muted}>
-          Juwa is a free-to-play social casino. Gold Coins are for entertainment
-          only. They have no cash value, cannot be exchanged for money or prizes,
-          and purchasing them does not constitute gambling. Practice or success at
-          social casino gaming does not imply future success at real-money
-          gambling.
+        {/* Only what the footer does NOT already say. The footer carries the
+            no-cash-value wording on every page; repeating it here left two
+            near-identical paragraphs stacked on top of each other, which is how
+            a disclosure stops being read. */}
+        <Txt variant="caption" color={colors.text.secondary}>
+          Buying coins is not gambling and buys no chance of winning money.
+          Practice or success at social casino gaming does not imply future
+          success at real-money gambling.
         </Txt>
       </Card>
+
+      <LegalFooter />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  topUp: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    borderColor: colors.neon.cyan,
+  },
+  topUpText: { flex: 1, gap: 2 },
   hero: { overflow: 'hidden', padding: 0 },
   heroBody: { padding: spacing.xl, gap: spacing.sm },
   grid: { gap: spacing.md },

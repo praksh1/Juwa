@@ -104,6 +104,11 @@ export interface PlayApi {
     region: string;
   }): Promise<{ username: string; balance: number; ageVerified: boolean }>;
   claimDailyBonus(): Promise<{ granted: boolean; coins: number; streakDay: number; balance: number; reason?: string }>;
+  /**
+   * The free top-up. No purchase is ever necessary to play, and this is the
+   * mechanism that makes that true rather than a sentence in a footer.
+   */
+  claimTopUp(): Promise<{ granted: boolean; coins: number; balance: number; reason?: string }>;
   startCheckout(packId: string): Promise<{ purchaseId: string; checkoutUrl: string; coins: number }>;
   getHistory(before?: string): Promise<{ entries: HistoryEntry[]; nextBefore: string | null }>;
   /** Continue a multi-step round: hit, stand, double, split. */
@@ -205,6 +210,13 @@ export class HttpPlayApi implements PlayApi {
     }>('/bonus/daily', {});
   }
 
+  claimTopUp() {
+    return this.request<{ granted: boolean; coins: number; balance: number; reason?: string }>(
+      '/bonus/topup',
+      {},
+    );
+  }
+
   startCheckout(packId: string) {
     return this.request<{ purchaseId: string; checkoutUrl: string; coins: number }>(
       '/store/checkout',
@@ -272,6 +284,22 @@ export class DemoPlayApi implements PlayApi {
   async claimDailyBonus() {
     this.balance += 12_000;
     return { granted: true, coins: 12_000, streakDay: 3, balance: this.balance };
+  }
+
+  async claimTopUp() {
+    // The stub mirrors the server's rules rather than always saying yes, so the
+    // "why can't I claim?" path is visible during UI work instead of only in
+    // production.
+    if (this.balance >= 2_000) {
+      return {
+        granted: false,
+        coins: 0,
+        balance: this.balance,
+        reason: 'Top-ups are for when you are running low.',
+      };
+    }
+    this.balance += 2_500;
+    return { granted: true, coins: 2_500, balance: this.balance };
   }
 
   async startCheckout(): Promise<never> {

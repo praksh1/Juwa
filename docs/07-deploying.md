@@ -227,6 +227,12 @@ thing that ships to production still set to `true`.
    `checkout.session.async_payment_failed`, `checkout.session.expired`.
 3. Copy the signing secret (`whsec_…`) into `STRIPE_WEBHOOK_SECRET`.
 4. Test with a card number of `4242 4242 4242 4242`, any future expiry, any CVC.
+5. **Apple Pay and Google Pay** need no code. Checkout enables them
+   automatically because we deliberately do not send `payment_method_types` —
+   naming card explicitly would turn the wallets off. Google Pay then works
+   immediately; Apple Pay additionally requires registering your domain under
+   **Settings → Payments → Payment method domains**, or the button silently
+   never appears on iPhones and nothing tells you why.
 
 **The webhook is the only thing that grants coins.** The browser returning to
 your success page proves nothing — anyone can visit that URL. If the webhook is
