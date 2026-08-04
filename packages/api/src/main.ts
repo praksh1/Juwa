@@ -10,6 +10,7 @@ import { PostgresDb } from '@juwa/server';
 import { createServer } from './server.js';
 import { LiveStripeGateway } from './stripe.js';
 import { CERT_FAILURE_ADVICE, decideSsl, isCertificateError, sslOptionFor } from './db-ssl.js';
+import { describeProblems, parseAllowedOrigins } from './origins.js';
 
 function required(name: string): string {
   const value = process.env[name];
@@ -75,11 +76,28 @@ const stripe = stripeKey
 
 if (!stripe) console.warn('Stripe is not configured — the store will return 503.');
 
+/**
+ * Refuse to start on an origin list that cannot match anything.
+ *
+ * A wrong entry here produces the least debuggable failure in the system: the
+ * API is healthy, /health returns 200, every log is clean, and the player is
+ * told the server is unreachable. The browser makes that decision privately —
+ * the request never even arrives — so no amount of reading server logs finds
+ * it, and the configured value looks correct to anyone who checks it.
+ */
+const parsedOrigins = parseAllowedOrigins(required('ALLOWED_ORIGINS'));
+if (parsedOrigins.problems.length > 0) {
+  console.error(describeProblems(parsedOrigins.problems));
+  process.exit(1);
+}
+const allowedOrigins = parsedOrigins.origins;
+console.log(`Accepting browser requests from: ${allowedOrigins.join(', ')}`);
+
 const { server } = createServer({
   db: new PostgresDb(pool),
   query: (sql, params) => pool.query(sql, params as unknown[]) as never,
   jwtSecret: required('SUPABASE_JWT_SECRET'),
-  allowedOrigins: required('ALLOWED_ORIGINS').split(',').map((origin) => origin.trim()),
+  allowedOrigins,
   ...(stripe ? { stripe } : {}),
 });
 
