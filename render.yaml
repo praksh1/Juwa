@@ -15,9 +15,17 @@ services:
       - key: PORT
         value: 8787
 
-      # Supabase -> Settings -> Database -> Connection string.
-      # Use the POOLER (port 6543), not a direct connection: small instances
-      # open more connections than Postgres will tolerate.
+      # Supabase -> the "Connect" button in the dashboard's top bar. It is no
+      # longer on the Database settings page, which now holds only the
+      # password, pool size and network rules.
+      #
+      # Take the TRANSACTION POOLER string (port 6543), not a direct
+      # connection: small instances open more connections than Postgres will
+      # tolerate. Replace the literal [YOUR-PASSWORD] placeholder, brackets
+      # included, with the database password.
+      #
+      # TLS is required and verified automatically for any non-local host —
+      # see packages/api/src/db-ssl.ts. No sslmode needed here.
       - key: DATABASE_URL
         sync: false
 

@@ -9,6 +9,7 @@ import { Pool } from 'pg';
 import { PostgresDb } from '@juwa/server';
 import { createServer } from './server.js';
 import { LiveStripeGateway } from './stripe.js';
+import { CERT_FAILURE_ADVICE, decideSsl, isCertificateError, sslOptionFor } from './db-ssl.js';
 
 function required(name: string): string {
   const value = process.env[name];
@@ -19,9 +20,28 @@ function required(name: string): string {
   return value;
 }
 
+const databaseUrl = required('DATABASE_URL');
+const ssl = decideSsl(databaseUrl);
+console.log(
+  ssl.kind === 'defer'
+    ? `Database TLS: left to the connection string — ${ssl.reason}.`
+    : `Database TLS: required and verified${ssl.ca ? ' against DATABASE_CA_CERT' : ''}.`,
+);
+
 const pool = new Pool({
-  connectionString: required('DATABASE_URL'),
+  connectionString: databaseUrl,
   max: Number(process.env['PG_POOL_MAX'] ?? 10),
+  ...sslOptionFor(databaseUrl),
+});
+
+/**
+ * A pool emits errors on idle clients, where there is no caller to reject.
+ * Without this listener Node treats them as unhandled and kills the process,
+ * turning a momentary network blip into an outage.
+ */
+pool.on('error', (error) => {
+  console.error('Idle database client error:', error.message);
+  if (isCertificateError(error)) console.error(CERT_FAILURE_ADVICE);
 });
 
 /**
@@ -64,7 +84,28 @@ const { server } = createServer({
 });
 
 const port = Number(process.env['PORT'] ?? 8787);
-server.listen(port, () => console.log(`Juwa API listening on :${port}`));
+
+/**
+ * Prove the database is reachable BEFORE accepting traffic.
+ *
+ * Everything above validates configuration by reading it; none of it opens a
+ * socket. Without this probe a bad DATABASE_URL produces a service that starts
+ * cleanly, passes its health check and then fails the first real bet — the
+ * deploy looks green while the product is dead. One round trip at boot moves
+ * that discovery into the deploy log, where somebody is already looking.
+ */
+async function start(): Promise<void> {
+  try {
+    await pool.query('select 1');
+  } catch (error) {
+    console.error(`Cannot reach the database: ${(error as Error).message}`);
+    if (isCertificateError(error)) console.error(CERT_FAILURE_ADVICE);
+    process.exit(1);
+  }
+  server.listen(port, () => console.log(`Juwa API listening on :${port}`));
+}
+
+void start();
 
 // Finish in-flight requests before exiting, so a deploy never kills a bet
 // between the debit and the credit.

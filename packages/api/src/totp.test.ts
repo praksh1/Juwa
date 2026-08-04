@@ -87,3 +87,33 @@ test('the enrolment URI is what an authenticator expects', () => {
   assert.ok(uri.includes('issuer=Juwa+3.0'));
   assert.ok(uri.includes('period=30'));
 });
+
+test('a non-second timestamp is refused rather than silently answered', () => {
+  const secret = Buffer.alloc(20, 1);
+
+  // Every one of these previously produced a well-formed six-digit code by way
+  // of NaN collapsing to counter 0 — the code for the epoch, constant forever.
+  // A second factor pinned to a constant is not a second factor.
+  for (const bad of [undefined, null, NaN, Infinity, -1, 'now']) {
+    assert.throws(
+      () => totp(secret, bad as unknown as number),
+      TypeError,
+      `totp accepted ${String(bad)}`,
+    );
+  }
+
+  // Milliseconds are the realistic mistake: Date.now() rather than
+  // Date.now() / 1000. It is finite and positive, so it cannot be rejected —
+  // but it must not agree with the correct call.
+  const seconds = 1_700_000_000;
+  assert.notEqual(totp(secret, seconds), totp(secret, seconds * 1000));
+});
+
+test('verification near the epoch does not step below zero', () => {
+  // The window reaches one period backwards, which is negative for the first
+  // 30 seconds of 1970. That must not throw out of a boolean function.
+  const secret = Buffer.alloc(20, 1);
+  const code = totp(secret, 5);
+  assert.equal(verifyTotp(secret, code, 5), true);
+  assert.equal(verifyTotp(secret, '000000', 0), false);
+});

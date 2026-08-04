@@ -74,6 +74,19 @@ export function totp(
   atSeconds: number,
   { period = 30, digits = 6, algorithm = 'sha1' }: TotpOptions = {},
 ): string {
+  // A non-finite time silently becomes counter 0 further down, because
+  // Buffer.writeUInt32BE turns NaN into a zero. The function then returns a
+  // perfectly well-formed code — the code for 1 January 1970 — and every check
+  // against it agrees with itself. That failure looks exactly like a working
+  // second factor pinned to a constant, which is no second factor at all.
+  //
+  // Milliseconds are the way this actually happens: `totp(secret, Date.now())`
+  // instead of `Date.now() / 1000` is one keystroke away and gives a code for
+  // the year 56000, so it is rejected here rather than left to be discovered.
+  if (!Number.isFinite(atSeconds) || atSeconds < 0) {
+    throw new TypeError(`totp: atSeconds must be a non-negative finite number, got ${atSeconds}`);
+  }
+
   const counter = Math.floor(atSeconds / period);
 
   // The counter is a 64-bit big-endian integer. JavaScript bit operations are
@@ -121,7 +134,12 @@ export function verifyTotp(
   const period = options.period ?? 30;
   let matched = false;
   for (let step = -window; step <= window; step++) {
-    const expected = totp(secret, atSeconds + step * period, options);
+    const at = atSeconds + step * period;
+    // Only reachable within the first half-minute of 1970, but stepping back
+    // past the epoch is not a reason to reject a valid code — or to throw out
+    // of a verification routine whose contract is to return a boolean.
+    if (at < 0) continue;
+    const expected = totp(secret, at, options);
     // No early exit: checking every step regardless keeps the work constant
     // whether the match is the first candidate or the last.
     const a = Buffer.from(expected);

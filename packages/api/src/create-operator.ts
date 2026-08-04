@@ -16,6 +16,7 @@
 import { randomBytes } from 'node:crypto';
 import { Pool } from 'pg';
 import { hashPassword } from './admin.js';
+import { sslOptionFor } from './db-ssl.js';
 import { totpUri } from './totp.js';
 
 async function main(): Promise<void> {
@@ -37,7 +38,10 @@ async function main(): Promise<void> {
   const password = randomBytes(18).toString('base64url');
   const secret = randomBytes(20);
 
-  const pool = new Pool({ connectionString: url });
+  // Same TLS rule as the server. This script is the one that carries a freshly
+  // minted admin password and TOTP secret over the wire, so it is the last
+  // place that should be allowed to fall back to an unencrypted connection.
+  const pool = new Pool({ connectionString: url, ...sslOptionFor(url) });
   try {
     await pool.query(
       `insert into operators (email, password_hash, totp_secret, role)
