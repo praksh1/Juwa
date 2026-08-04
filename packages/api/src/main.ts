@@ -83,7 +83,29 @@ const { server } = createServer({
   ...(stripe ? { stripe } : {}),
 });
 
-const port = Number(process.env['PORT'] ?? 8787);
+/**
+ * The listening port, and where it came from.
+ *
+ * Container platforms differ on this: some inject PORT and route to it, some
+ * route to whatever the Dockerfile EXPOSEs, and a mismatch between the two
+ * produces a container that starts perfectly and fails its health check
+ * forever. "Attempt #6 failed with service unavailable" is the same message
+ * whether the process died, bound the wrong port, or never started at all —
+ * so the log has to say which.
+ */
+const portEnv = process.env['PORT'];
+const port = Number(portEnv ?? 8787);
+if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+  console.error(`PORT is not a usable port number: ${JSON.stringify(portEnv)}`);
+  process.exit(1);
+}
+console.log(
+  portEnv
+    ? `Port ${port}, from the PORT environment variable.`
+    : `Port ${port}, the built-in default — PORT was not set. If this platform ` +
+      `routes to a different port, the health check will fail while the process ` +
+      `looks fine.`,
+);
 
 /**
  * Prove the database is reachable BEFORE accepting traffic.
@@ -102,7 +124,19 @@ async function start(): Promise<void> {
     if (isCertificateError(error)) console.error(CERT_FAILURE_ADVICE);
     process.exit(1);
   }
-  server.listen(port, () => console.log(`Juwa API listening on :${port}`));
+
+  // A listen failure arrives as an event, not a rejection. Without this the
+  // process stays alive with nothing bound — the health check times out and
+  // the log says nothing at all, which is the least debuggable outcome
+  // available.
+  server.on('error', (error) => {
+    console.error(`Cannot listen on port ${port}: ${error.message}`);
+    process.exit(1);
+  });
+
+  // No host argument: Node binds every interface, IPv4 and IPv6 both. Pinning
+  // 0.0.0.0 here would break platforms whose internal networking is IPv6-only.
+  server.listen(port, () => console.log(`Juwa API listening on :${port} — ready.`));
 }
 
 void start();
