@@ -16,8 +16,11 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = process.env['EXPO_PUBLIC_SUPABASE_URL'];
-const SUPABASE_ANON_KEY = process.env['EXPO_PUBLIC_SUPABASE_ANON_KEY'];
+// Trimmed and de-slashed for the same reason the API base URL is: these values
+// are copied out of a dashboard, and a trailing slash or a stray space survives
+// into the built bundle where nothing ever looks at it again.
+const SUPABASE_URL = (process.env['EXPO_PUBLIC_SUPABASE_URL'] ?? '').trim().replace(/\/+$/, '');
+const SUPABASE_ANON_KEY = (process.env['EXPO_PUBLIC_SUPABASE_ANON_KEY'] ?? '').trim();
 
 export const IS_CONFIGURED = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
@@ -27,7 +30,7 @@ export const IS_CONFIGURED = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
  * why every policy in the schema is select-only and scoped to auth.uid().
  */
 export const supabase: SupabaseClient | null = IS_CONFIGURED
-  ? createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
         // Web-only, so the browser's own storage is the right place. Supabase
         // refreshes the token in the background before it expires.
@@ -56,22 +59,51 @@ function friendly(message: string): string {
   if (/already registered/i.test(message)) return 'That email already has an account. Try logging in.';
   if (/password should be at least/i.test(message)) return 'Passwords must be at least 6 characters.';
   if (/rate limit|too many/i.test(message)) return 'Too many attempts. Wait a minute and try again.';
+
+  // "Failed to fetch" is what a browser says when the request never reached
+  // anywhere — bad host, DNS failure, offline, or a paused project. It is the
+  // exact string fetch throws, and shown raw it tells a player nothing and an
+  // operator almost nothing.
+  //
+  // The detail goes to the console, not the screen. Naming the host or the
+  // environment variable on a sign-up form leaks deployment shape to everyone
+  // who visits, which has already happened twice in this codebase.
+  if (/failed to fetch|networkerror|load failed|network request failed/i.test(message)) {
+    console.error(
+      `Sign-in service unreachable at ${SUPABASE_URL || '(not configured)'}. ` +
+        'Check that the project is running and that EXPO_PUBLIC_SUPABASE_URL is correct. ' +
+        'A free Supabase project pauses after a week of inactivity.',
+    );
+    return 'Cannot reach the sign-in service right now. Please try again in a moment.';
+  }
+
   return message;
 }
 
 export async function signUp(email: string, password: string): Promise<AuthResult> {
   if (!supabase) return demoSignIn(email);
-  const { data, error } = await supabase.auth.signUp({ email, password });
-  if (error) return { ok: false, message: friendly(error.message) };
-  // With email confirmation on, there is no session until the link is clicked.
-  return { ok: true, needsEmailConfirmation: !data.session };
+  // supabase-js usually converts a network failure into `error`, but not
+  // always — a DNS failure can reject instead, and an uncaught rejection here
+  // leaves the button spinning with nothing on screen at all.
+  try {
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) return { ok: false, message: friendly(error.message) };
+    // With email confirmation on, there is no session until the link is clicked.
+    return { ok: true, needsEmailConfirmation: !data.session };
+  } catch (error) {
+    return { ok: false, message: friendly((error as Error).message) };
+  }
 }
 
 export async function signIn(email: string, password: string): Promise<AuthResult> {
   if (!supabase) return demoSignIn(email);
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) return { ok: false, message: friendly(error.message) };
-  return { ok: true };
+  try {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return { ok: false, message: friendly(error.message) };
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, message: friendly((error as Error).message) };
+  }
 }
 
 export async function signOut(): Promise<void> {

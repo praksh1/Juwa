@@ -152,3 +152,89 @@ if (existsSync(staleRedirects)) {
 }
 
 console.log('wrote _headers so cache and security rules are not tied to one host');
+
+// ------------------------------------------------------- configuration check
+
+/**
+ * Reject a build whose public configuration cannot possibly work.
+ *
+ * These values are baked into the bundle, so a wrong one is not a setting that
+ * can be corrected later — it is a property of the artefact, and the only
+ * symptom is "Failed to fetch" on a sign-up form, on a phone, with no console.
+ * The build environment is the last place this is cheap to catch.
+ *
+ * Absent is fine and stays fine: no API URL means demo mode, and no Supabase
+ * project means local development. Only a value that is present AND malformed
+ * fails, because that is never intentional.
+ */
+const URL_VARS = ['EXPO_PUBLIC_API_URL', 'EXPO_PUBLIC_SUPABASE_URL'];
+const configProblems = [];
+
+for (const name of URL_VARS) {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') continue;
+
+  const value = raw.trim();
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    configProblems.push(
+      `${name} is not a URL: ${JSON.stringify(value)}\n` +
+        `    It must start with https:// — a bare hostname will not work.`,
+    );
+    continue;
+  }
+
+  if (parsed.protocol !== 'https:') {
+    configProblems.push(
+      `${name} uses ${parsed.protocol}// — must be https://, or browsers will ` +
+        `block it as mixed content.`,
+    );
+  }
+  if (raw !== value) {
+    configProblems.push(`${name} has leading or trailing whitespace. Remove it.`);
+  }
+}
+
+// A JWT where a URL belongs is the single most common paste error here: the
+// anon key and the project URL sit next to each other in the dashboard.
+const supabaseUrl = process.env['EXPO_PUBLIC_SUPABASE_URL']?.trim();
+if (supabaseUrl?.startsWith('eyJ')) {
+  configProblems.push(
+    'EXPO_PUBLIC_SUPABASE_URL looks like an anon key, not a URL.\n' +
+      '    The URL looks like https://<project>.supabase.co; the key starts "eyJ".',
+  );
+}
+
+const anonKey = process.env['EXPO_PUBLIC_SUPABASE_ANON_KEY']?.trim();
+if (anonKey && !anonKey.startsWith('eyJ')) {
+  configProblems.push(
+    'EXPO_PUBLIC_SUPABASE_ANON_KEY does not look like a Supabase anon key.\n' +
+      '    Anon keys are JWTs and begin "eyJ". If this is the JWT SECRET, remove it\n' +
+      '    immediately — it must never be shipped to a browser.',
+  );
+}
+
+// Supabase and the API are independent: one configured without the other is a
+// half-deployed site that fails in a way neither log explains.
+const hasSupabaseUrl = Boolean(supabaseUrl);
+if (hasSupabaseUrl !== Boolean(anonKey)) {
+  configProblems.push(
+    'EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY must be set\n' +
+      '    together. With only one, the app silently falls back to demo mode.',
+  );
+}
+
+if (configProblems.length > 0) {
+  console.error('\nThis build cannot work as configured:\n');
+  for (const problem of configProblems) console.error(`  ✗ ${problem}`);
+  console.error('\nFix the environment variables and build again.\n');
+  process.exit(1);
+}
+
+console.log(
+  hasSupabaseUrl
+    ? `configured for accounts at ${new URL(supabaseUrl).host}`
+    : 'no Supabase configured — this build runs in demo mode',
+);
