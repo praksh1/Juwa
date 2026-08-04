@@ -120,6 +120,33 @@ and prompts for the secrets below. **On Railway:** New Project → Deploy from
 GitHub repo; it reads `railway.json`. Anything else that takes a container works
 too.
 
+### On free tiers, and one trap in them
+
+`render.yaml` asks for Render's `free` instance type. Free instances sleep
+after about fifteen minutes idle and take most of a minute to wake, which the
+app absorbs — reads time out at 90s and retry once, so a cold start is a slow
+load rather than an error. Writes are never retried; a bet that failed at the
+network layer may have reached the server, and replaying it can charge one spin
+twice.
+
+The trap is on the billing side, not the technical one. **Removing a payment
+method from Render disables the account's services for the remainder of the
+current billing period**, free ones included — so an account that has ever been
+on a paid plan can be locked out for weeks by trying to move *down* to free.
+Change the plan; do not remove the card.
+
+Railway is the fallback when that happens: a one-time $5 trial credit, no card
+required, and `railway.json` is already committed so there is nothing to
+configure. It is a way to keep testing for a few weeks, not a permanent home —
+the credit expires after 30 days and the Free plan that follows grants $1 a
+month.
+
+Serverless hosts are deliberately not on this list. The rate limiters in
+`packages/api/src/server.ts` hold their buckets in memory, so on a platform
+that starts a fresh instance per request the limits on `/bet` and `/register`
+quietly stop applying. That is a security control, not a performance
+optimisation, and it needs a long-lived process.
+
 ```bash
 DATABASE_URL=postgres://...        # Supabase → "Connect" button in the top bar
 SUPABASE_JWT_SECRET=...            # from step 1
