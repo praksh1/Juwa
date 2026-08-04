@@ -8,7 +8,15 @@ services:
     name: juwa-api
     runtime: docker
     dockerfilePath: ./Dockerfile
-    plan: starter
+    # `free` costs nothing and needs no card, at the price of sleeping after
+    # ~15 minutes idle: the next visitor waits around a minute for the
+    # container to start. The app handles that (see app/src/api/client.ts) but
+    # it is a poor first impression, so move to `starter` before showing this
+    # to anybody who matters.
+    #
+    # Changing the instance type in Render's dashboard works too, but a later
+    # blueprint sync resets it to whatever this line says. Change it here.
+    plan: free
     # Render restarts the service if this stops answering.
     healthCheckPath: /health
     envVars:

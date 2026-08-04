@@ -138,6 +138,31 @@ export class PlayApiError extends Error {
   }
 }
 
+/**
+ * Long enough for a sleeping free-tier container to boot, short enough that a
+ * genuinely dead connection still ends in a message rather than a spinner that
+ * never resolves.
+ */
+const COLD_START_TIMEOUT_MS = 90_000;
+
+/**
+ * Turn a fetch rejection into something a player can read.
+ *
+ * Deliberately says nothing about the URL. Twice before, the configured API
+ * address ended up rendered on screen inside an error string — the internal
+ * layout of the deployment is not a player's problem, and it is not something
+ * to hand to whoever is looking for the way in.
+ */
+function asNetworkError(error: unknown): PlayApiError {
+  const timedOut = error instanceof DOMException && error.name === 'TimeoutError';
+  return new PlayApiError(
+    timedOut
+      ? 'The server is taking too long to answer. It may be starting up — try again in a moment.'
+      : 'Cannot reach the server. Check your connection and try again.',
+    timedOut ? 'timeout' : 'network',
+  );
+}
+
 // ------------------------------------------------------------------- http
 
 export class HttpPlayApi implements PlayApi {
@@ -151,17 +176,42 @@ export class HttpPlayApi implements PlayApi {
     // roughly hourly, and a stale one becomes a mystery 401 mid-session.
     const token = await this.getToken();
 
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      method: body ? 'POST' : 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        // The player's timezone, so the daily bonus turns over at their
-        // midnight rather than the server's.
-        'X-UTC-Offset': String(-new Date().getTimezoneOffset()),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
+    const send = () =>
+      fetch(`${this.baseUrl}${path}`, {
+        method: body ? 'POST' : 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          // The player's timezone, so the daily bonus turns over at their
+          // midnight rather than the server's.
+          'X-UTC-Offset': String(-new Date().getTimezoneOffset()),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+        // Without this a request can hang for minutes on a dead connection —
+        // the spin button stays disabled and the only fix a player finds is
+        // reloading, which loses the round they are watching.
+        signal: AbortSignal.timeout(COLD_START_TIMEOUT_MS),
+      });
+
+    let response: Response;
+    try {
+      response = await send();
+    } catch (error) {
+      // A free-tier host sleeps when idle and takes most of a minute to come
+      // back, so the first request after a quiet spell fails outright. Retrying
+      // reads costs one round trip and turns that into a slow load instead of
+      // an error screen.
+      //
+      // Reads only. A write that failed at the network layer may still have
+      // reached the server, and replaying a bet nobody could confirm is how a
+      // player gets charged twice for one spin.
+      if (body !== undefined) throw asNetworkError(error);
+      try {
+        response = await send();
+      } catch (retryError) {
+        throw asNetworkError(retryError);
+      }
+    }
 
     if (!response.ok) {
       const detail = (await response.json().catch(() => ({}))) as {
