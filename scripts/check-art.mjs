@@ -182,25 +182,70 @@ const RULES = {
   icon: { size: 512, transparent: true, maxKB: 120, centred: true, minFill: 0.1, maxFill: 0.8 },
 };
 
-function ruleFor(name) {
-  const prefix = basename(name).split(/[-_.]/)[0].toLowerCase();
-  return [prefix, RULES[prefix]];
+/** Folder names accepted for each category, singular or plural. */
+const FOLDER_ALIASES = {
+  symbol: ['symbol', 'symbols'],
+  background: ['background', 'backgrounds', 'bg'],
+  tile: ['tile', 'tiles', 'lobby'],
+  overlay: ['overlay', 'overlays', 'win'],
+  icon: ['icon', 'icons', 'ui'],
+};
+
+/**
+ * Work out what an asset is, from its FOLDER first and its filename second.
+ *
+ * Generators produce names like `Gemini_Generated_Image_8fj20a.png`, and
+ * renaming a hundred of those by hand is the kind of chore that gets abandoned
+ * halfway through, leaving a set that is half-named and wholly unusable. Sorting
+ * files into `symbols/gems/`, `backgrounds/` and `tiles/` is a drag-and-drop
+ * that survives being done on a phone.
+ *
+ * A filename prefix still wins where present, so an already-named set keeps
+ * working.
+ */
+export function categoryFor(relativePath) {
+  const parts = relativePath.split('/').filter(Boolean);
+  const file = parts.pop() ?? '';
+
+  const prefix = basename(file).split(/[-_.]/)[0].toLowerCase();
+  if (RULES[prefix]) {
+    // symbol-gems-cherry.png -> family "gems"
+    return { category: prefix, family: basename(file).split(/[-_]/)[1] ?? 'unknown', source: 'filename' };
+  }
+
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const segment = parts[i].toLowerCase();
+    for (const [category, aliases] of Object.entries(FOLDER_ALIASES)) {
+      if (aliases.includes(segment)) {
+        // symbols/gems/whatever.png -> family "gems"; symbols/whatever.png -> "unknown"
+        const family = i + 1 < parts.length ? parts[i + 1].toLowerCase() : 'unknown';
+        return { category, family, source: 'folder' };
+      }
+    }
+  }
+
+  return { category: null, family: 'unknown', source: 'none' };
 }
 
-export function checkFile(path) {
-  const name = basename(path);
+export function checkFile(path, relativePath = basename(path)) {
+  const name = relativePath;
   const problems = [];
-  const [prefix, rule] = ruleFor(name);
+  const { category, family } = categoryFor(relativePath);
+  const rule = category ? RULES[category] : null;
 
   if (!rule) {
     return {
       name,
+      family,
       problems: [
-        `unknown category "${prefix}". Name files ` +
+        'cannot tell what this is. Put it in a folder named ' +
+          `${Object.keys(FOLDER_ALIASES).map((c) => `${c}s/`).join(', ')} ` +
+          '(symbols may be split further, e.g. symbols/gems/), or name the file ' +
           `${Object.keys(RULES).map((r) => `${r}-...`).join(', ')}`,
       ],
     };
   }
+  const prefix = category;
 
   const kb = Math.round(statSync(path).size / 1024);
   if (kb > rule.maxKB) problems.push(`${kb}KB exceeds the ${rule.maxKB}KB budget for a ${prefix}`);
@@ -210,7 +255,7 @@ export function checkFile(path) {
     png = readPng(readFileSync(path));
     m = measure(png);
   } catch (error) {
-    return { name, problems: [`cannot be read: ${error.message}`] };
+    return { name, family, problems: [`cannot be read: ${error.message}`] };
   }
 
   if (rule.size && (png.width !== rule.size || png.height !== rule.size)) {
@@ -237,7 +282,7 @@ export function checkFile(path) {
     );
   }
 
-  return { name, prefix, problems, measurement: m, kb, width: png.width, height: png.height };
+  return { name, prefix, family, problems, measurement: m, kb, width: png.width, height: png.height };
 }
 
 // ------------------------------------------------------------- set coherence
@@ -255,7 +300,7 @@ export function checkSetCoherence(results) {
 
   for (const r of results) {
     if (r.prefix !== 'symbol' || !r.measurement) continue;
-    const family = r.name.split(/[-_]/)[1] ?? 'unknown';
+    const family = r.family ?? 'unknown';
     if (!families.has(family)) families.set(family, []);
     families.get(family).push(r);
   }
@@ -280,21 +325,32 @@ export function checkSetCoherence(results) {
 
 // ------------------------------------------------------------------- reporting
 
+/** Every PNG under a folder, as paths relative to it. */
+function walk(root, prefix = '') {
+  const found = [];
+  for (const entry of readdirSync(join(root, prefix), { withFileTypes: true })) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) found.push(...walk(root, rel));
+    else if (['.png', '.webp'].includes(extname(entry.name).toLowerCase())) found.push(rel);
+  }
+  return found;
+}
+
 function main() {
   const folder = resolve(process.argv[2] ?? 'art');
   let files;
   try {
-    files = readdirSync(folder).filter((f) => extname(f).toLowerCase() === '.png').sort();
+    files = walk(folder).sort();
   } catch {
     console.error(`Cannot read ${folder}`);
     process.exit(1);
   }
   if (files.length === 0) {
-    console.error(`No PNG files in ${folder}`);
+    console.error(`No PNG or WebP files under ${folder}`);
     process.exit(1);
   }
 
-  const results = files.map((f) => checkFile(join(folder, f)));
+  const results = files.map((f) => checkFile(join(folder, f), f));
   const failed = results.filter((r) => r.problems.length > 0);
 
   for (const r of failed) {
