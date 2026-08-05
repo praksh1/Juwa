@@ -17,7 +17,8 @@
     "migration": "node scripts/build-migration.mjs",
     "check": "node scripts/check-deployment.mjs",
     "build:web": "npm run build --workspace @juwa/money && npm run build --workspace @juwa/economy && npm run build --workspace @juwa/ui && npm run build:web --workspace @juwa/app",
-    "rtp:catalogue": "npm run build --workspace @juwa/money && npm run build --workspace @juwa/engine && node packages/engine/dist/tools/catalogue-rtp.js"
+    "rtp:catalogue": "npm run build --workspace @juwa/money && npm run build --workspace @juwa/engine && node packages/engine/dist/tools/catalogue-rtp.js",
+    "check:art": "node scripts/check-art.mjs"
   },
   "engines": {
     "node": ">=20"
