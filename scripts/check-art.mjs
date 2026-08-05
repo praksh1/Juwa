@@ -182,14 +182,23 @@ const RULES = {
   icon: { size: 512, transparent: true, maxKB: 120, centred: true, minFill: 0.1, maxFill: 0.8 },
 };
 
-/** Folder names accepted for each category, singular or plural. */
+/**
+ * Folder names accepted for each category.
+ *
+ * Compared after stripping spaces, hyphens and underscores and lowercasing, so
+ * "Lobby Game Tiles", "lobby-game-tiles" and "lobbygametiles" are one thing.
+ * People name folders in whatever way made sense at the time, and refusing a
+ * perfectly clear name is the sort of pedantry that gets a tool abandoned.
+ */
 const FOLDER_ALIASES = {
-  symbol: ['symbol', 'symbols'],
-  background: ['background', 'backgrounds', 'bg'],
-  tile: ['tile', 'tiles', 'lobby'],
-  overlay: ['overlay', 'overlays', 'win'],
-  icon: ['icon', 'icons', 'ui'],
+  symbol: ['symbol', 'symbols', 'slotsymbols', 'slotsymbol', 'reelsymbols'],
+  background: ['background', 'backgrounds', 'bg', 'reelbackgrounds', 'reelbackground'],
+  tile: ['tile', 'tiles', 'lobby', 'lobbytiles', 'lobbygametiles', 'gametiles', 'gametile', 'covers'],
+  overlay: ['overlay', 'overlays', 'win', 'winoverlays', 'flourish', 'flourishes'],
+  icon: ['icon', 'icons', 'ui', 'uiassets', 'uiasset', 'store'],
 };
+
+const normalise = (segment) => segment.toLowerCase().replace(/[\s\-_]/g, '');
 
 /**
  * Work out what an asset is, from its FOLDER first and its filename second.
@@ -214,7 +223,7 @@ export function categoryFor(relativePath) {
   }
 
   for (let i = parts.length - 1; i >= 0; i--) {
-    const segment = parts[i].toLowerCase();
+    const segment = normalise(parts[i]);
     for (const [category, aliases] of Object.entries(FOLDER_ALIASES)) {
       if (aliases.includes(segment)) {
         // symbols/gems/whatever.png -> family "gems"; symbols/whatever.png -> "unknown"
@@ -308,15 +317,40 @@ export function checkSetCoherence(results) {
   for (const [family, members] of families) {
     if (members.length < 2) continue;
     const fills = members.map((m) => m.measurement.fill);
-    const min = Math.min(...fills);
-    const max = Math.max(...fills);
-    // 2x is generous; beyond that the difference is obvious in motion.
-    if (max / min > 2) {
-      const smallest = members[fills.indexOf(min)].name;
-      const largest = members[fills.indexOf(max)].name;
+
+    if (family !== 'unknown') {
+      // A named family is five symbols that appear on the same reel together,
+      // so the comparison is direct.
+      const min = Math.min(...fills);
+      const max = Math.max(...fills);
+      if (max / min > 2) {
+        problems.push(
+          `family "${family}": ${members[fills.indexOf(max)].name} is ` +
+            `${(max / min).toFixed(1)}× the visual weight of ${members[fills.indexOf(min)].name}. ` +
+            `Symbols in one set must look the same size.`,
+        );
+      }
+      continue;
+    }
+
+    // Unsorted symbols. These are probably several families mixed together, and
+    // families legitimately differ — so comparing the largest against the
+    // smallest would cry wolf. Flag distance from the MEDIAN instead: an
+    // outlier is wrong whatever family it belongs to, and the middle of the
+    // pack is not evidence of anything.
+    const sorted = [...fills].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    const outliers = members.filter(
+      (m) => m.measurement.fill > median * 2 || m.measurement.fill < median / 2,
+    );
+    if (outliers.length > 0) {
       problems.push(
-        `family "${family}": ${largest} is ${(max / min).toFixed(1)}× the visual weight of ` +
-          `${smallest}. Symbols in one set must look the same size.`,
+        `${outliers.length} of ${members.length} symbols are more than twice or less than half ` +
+          `the typical size (median ${(median * 100).toFixed(0)}% of frame). ` +
+          `These will not sit together on a reel:\n` +
+          outliers
+            .map((m) => `      ${m.name} — ${(m.measurement.fill * 100).toFixed(0)}%`)
+            .join('\n'),
       );
     }
   }

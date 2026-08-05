@@ -3,20 +3,32 @@
 Upload straight from the generator. **Do not rename anything** —
 `Gemini_Generated_Image_8fj20a.png` is fine. The folder says what a file is.
 
+Category folders are enough:
+
 ```
 art/
-  symbols/
-    classic/     5 files: diamond, bell, cherry, plum, lemon
-    gems/        5 files
-    ancient/     5 files
-    neon/        5 files
-    nature/      5 files
-    festival/    5 files
-  backgrounds/   12 files
-  tiles/         50 files, one per game
-  overlays/       3 files: burst, big, mega
-  ui/             6 files
+  symbols/       every symbol, all families together
+  backgrounds/
+  tiles/
+  overlays/
+  ui/
 ```
+
+Folder names are matched with spaces, hyphens and case ignored, so
+`Lobby Game Tiles/`, `lobby-game-tiles/` and `tiles/` are the same thing. Nested
+folders are fine — an `output/` wrapper is walked through.
+
+Splitting symbols by family is optional and only sharpens one check:
+
+```
+art/symbols/gems/     5 files: diamond, bell, cherry, plum, lemon
+art/symbols/neon/     5 files
+```
+
+With families, the checker compares the five symbols that share a reel directly.
+Without them, it compares every symbol against the median and reports only genuine
+outliers — because families legitimately differ from one another, and a check that
+cries wolf is a check people stop running.
 
 Then, from the repo root:
 
