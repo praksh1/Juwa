@@ -1,77 +1,58 @@
-# Drop generated art here
+# Art
 
-Upload straight from the generator. **Do not rename anything** —
-`Gemini_Generated_Image_8fj20a.png` is fine. The folder says what a file is.
-
-Category folders are enough:
+Generated with Gemini, then processed into what the game can actually ship.
 
 ```
 art/
-  symbols/       every symbol, all families together
-  backgrounds/
-  tiles/
-  overlays/
-  ui/
+  symbols/      40 PNG, 512x512, transparent
+  tiles/        45 JPEG, 1024x1113 (the 0.92 aspect the lobby renders)
+  backgrounds/   3 JPEG, 1536x1024
 ```
 
-Folder names are matched with spaces, hyphens and case ignored, so
-`Lobby Game Tiles/`, `lobby-game-tiles/` and `tiles/` are the same thing. Nested
-folders are fine — an `output/` wrapper is walked through.
+`npm run check:art art` validates the lot.
 
-Splitting symbols by family is optional and only sharpens one check:
+## What was done to the delivered files
 
-```
-art/symbols/gems/     5 files: diamond, bell, cherry, plum, lemon
-art/symbols/neon/     5 files
-```
+**466 MB became 15 MB.** Exports were 2048–2816px and up to 8 MB each; a slot
+symbol is drawn at about 90 CSS pixels, so 512 is already twice what a retina
+screen resolves. GitHub refused the upload at full size, and so would a phone
+on mobile data.
 
-With families, the checker compares the five symbols that share a reel directly.
-Without them, it compares every symbol against the median and reports only genuine
-outliers — because families legitimately differ from one another, and a check that
-cries wolf is a check people stop running.
+**Eleven symbols had no transparency.** The generator painted the transparency
+checkerboard into the pixels — on a dark reel those would have appeared as grey
+checked boxes. Recovered by flood-filling the background inward from the edges,
+which leaves interior whites alone: several subjects are largely white, and a
+global colour match would have punched holes through them.
 
-Then, from the repo root:
+**Two files could not be recovered** and were dropped: the checkerboard covered
+nearly the whole frame, leaving nothing to isolate.
 
-```
-npm run check:art art
-```
+**Symbol sizes were normalised by area, not by longest edge.** A wide subject
+scaled so its width matches a tall one still reads as smaller, because the eye
+judges overall mass.
 
-It reports what each problem will do on screen, so you can decide whether a file
-is worth regenerating.
+**Disconnected specks are discarded before measuring.** Background removal left
+faint debris near the frame edges, and a speck 1000px from the subject stretched
+its bounding box across the whole image — which told the normaliser that a small
+monkey was already the largest thing in the set, and shrank everything else to
+match it.
 
-## What it checks
+**One tile was excluded for baked-in text** — it carried a game title and a
+paytable strip. Every file was OCR'd; the only other hits were ornament misread
+as letters, confirmed by eye.
 
-Per file — dimensions, a real alpha channel, whether the background actually got
-removed, whether the subject is centred, whether it is large enough to read at
-60px, whether it has enough margin not to crop, and file size.
+## Known gaps
 
-Across a family — whether the five symbols carry the same visual weight. This is
-the one that cannot be seen file by file: a set where one symbol is twice the
-size of another looks broken in motion while every individual file passes.
+- **Backgrounds: 3 of 12.** The delivered `background/` folder was mostly more
+  symbols, which is where 10 of the 40 came from.
+- **The lightning bolt** keeps a faint fringe: its glow blends into the
+  checkerboard, so there is no clean edge to cut along. Worth regenerating.
+- **Filenames** are the generator's for 20 of them. Harmless — the loader maps
+  files to symbols explicitly — but unhelpful to read.
 
-## Sizes
+## Provenance
 
-| Folder | Size | Background |
-|---|---|---|
-| `symbols/*` | 512×512 | must be transparent |
-| `backgrounds` | 1536×1024 | opaque |
-| `tiles` | 1024×1024 | opaque |
-| `overlays` | 1024×1024 | must be transparent |
-| `ui` | 512×512 | must be transparent |
-
-Whole set under 8MB. That figure is a first load on mobile data.
-
-## Two things worth repeating
-
-**Which five symbols.** `SEVEN`, `BAR`, `WILD` and `SCATTER` stay as the vector
-art already in `app/src/components/SlotSymbol.tsx` — they carry typography, and
-they are the symbols a player must read instantly on a moving reel. Generate
-only `DIAMOND`, `BELL`, `CHERRY`, `PLUM`, `LEMON`, reinterpreted per family.
-
-**Value hierarchy.** `DIAMOND` pays most and `LEMON` least. Rank your five by how
-expensive they *look* and check that order matches. If the lemon looks more
-lavish than the diamond, players misread the paytable and feel cheated — which
-is a support ticket, not a style opinion.
-
-Licences, invoices and layered source files go in `art/licences/`. That folder is
-part of what gets sold.
+AI-generated images cannot be copyrighted in the US, so ownership of these
+cannot be warranted in a sale as they stand. See `docs/09-art-brief.md`. The
+route to defensible ownership is a designer materially editing them, with the
+layered sources kept as evidence of authorship.

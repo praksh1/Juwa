@@ -188,6 +188,15 @@ export function measure(png) {
     offCentreY: Math.abs((minY + maxY) / 2 - (png.height - 1) / 2) / png.height,
     boxWidth,
     boxHeight,
+    /**
+     * How much of the frame the subject's BOUNDING BOX spans.
+     *
+     * This, not the opaque-pixel fraction, is what determines whether two
+     * symbols look the same size on a reel. A lightning bolt and a pyramid can
+     * occupy identical boxes while the bolt covers a fifth of the pixels — by
+     * area it looks like an outlier, and by eye it looks perfectly at home.
+     */
+    boxSpan: Math.max(boxWidth / png.width, boxHeight / png.height),
     cornersOpaque: cornerAlpha.every((a) => a > 200),
   };
 }
@@ -306,8 +315,13 @@ export function checkFile(path, relativePath = basename(path)) {
     } else if (m.cornersOpaque) {
       problems.push('has opaque corners — the background was not removed');
     }
-    if (m.fill < rule.minFill) problems.push(`subject fills only ${(m.fill * 100).toFixed(0)}% of the frame — too small to read`);
-    if (m.fill > rule.maxFill) problems.push(`subject fills ${(m.fill * 100).toFixed(0)}% of the frame — no margin, it will crop`);
+    // Judged on the bounding box: a thin subject is not a small subject.
+    if (m.boxSpan < 0.45) {
+      problems.push(`subject spans only ${(m.boxSpan * 100).toFixed(0)}% of the frame — too small to read`);
+    }
+    if (m.boxSpan > 0.99 && m.fill > rule.maxFill) {
+      problems.push(`subject reaches the frame edge with no margin — it will crop`);
+    }
   }
 
   if (rule.centred && (m.offCentreX > 0.06 || m.offCentreY > 0.06)) {
@@ -342,7 +356,7 @@ export function checkSetCoherence(results) {
 
   for (const [family, members] of families) {
     if (members.length < 2) continue;
-    const fills = members.map((m) => m.measurement.fill);
+    const fills = members.map((m) => m.measurement.boxSpan);
 
     if (family !== 'unknown') {
       // A named family is five symbols that appear on the same reel together,
@@ -352,7 +366,7 @@ export function checkSetCoherence(results) {
       if (max / min > 2) {
         problems.push(
           `family "${family}": ${members[fills.indexOf(max)].name} is ` +
-            `${(max / min).toFixed(1)}× the visual weight of ${members[fills.indexOf(min)].name}. ` +
+            `${(max / min).toFixed(1)}× the size of ${members[fills.indexOf(min)].name}. ` +
             `Symbols in one set must look the same size.`,
         );
       }
@@ -367,15 +381,15 @@ export function checkSetCoherence(results) {
     const sorted = [...fills].sort((a, b) => a - b);
     const median = sorted[Math.floor(sorted.length / 2)];
     const outliers = members.filter(
-      (m) => m.measurement.fill > median * 2 || m.measurement.fill < median / 2,
+      (m) => m.measurement.boxSpan > median * 1.5 || m.measurement.boxSpan < median / 1.5,
     );
     if (outliers.length > 0) {
       problems.push(
-        `${outliers.length} of ${members.length} symbols are more than twice or less than half ` +
-          `the typical size (median ${(median * 100).toFixed(0)}% of frame). ` +
+        `${outliers.length} of ${members.length} symbols are more than 1.5x or less than two-thirds ` +
+          `the typical size (median span ${(median * 100).toFixed(0)}% of frame). ` +
           `These will not sit together on a reel:\n` +
           outliers
-            .map((m) => `      ${m.name} — ${(m.measurement.fill * 100).toFixed(0)}%`)
+            .map((m) => `      ${m.name} — spans ${(m.measurement.boxSpan * 100).toFixed(0)}%`)
             .join('\n'),
       );
     }
