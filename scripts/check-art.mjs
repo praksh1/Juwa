@@ -37,6 +37,8 @@ function readPng(buffer) {
 
   let offset = 8;
   let header = null;
+  let palette = null;
+  let transparency = null;
   const idat = [];
 
   while (offset < buffer.length) {
@@ -52,6 +54,10 @@ function readPng(buffer) {
         colourType: data[9],
         interlace: data[12],
       };
+    } else if (type === 'PLTE') {
+      palette = Buffer.from(data);
+    } else if (type === 'tRNS') {
+      transparency = Buffer.from(data);
     } else if (type === 'IDAT') {
       idat.push(data);
     } else if (type === 'IEND') {
@@ -61,7 +67,7 @@ function readPng(buffer) {
   }
 
   if (!header) throw new Error('no IHDR chunk');
-  return { ...header, idat: Buffer.concat(idat) };
+  return { ...header, palette, transparency, idat: Buffer.concat(idat) };
 }
 
 const CHANNELS = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };
@@ -114,6 +120,26 @@ function decodePixels(png) {
       target[x] = value & 0xff;
     }
   }
+  if (png.colourType === 3) {
+    // Indexed colour keeps its alpha in a separate tRNS table, so a palette
+    // image with full transparency reports one channel and would otherwise
+    // look opaque. Expand to RGBA rather than special-casing every measurement
+    // downstream — this is exactly how an optimised asset is stored, so getting
+    // it wrong rejects the files the pipeline itself produces.
+    if (!png.palette) throw new Error('indexed PNG with no palette');
+    const rgba = Buffer.alloc(png.width * png.height * 4);
+    for (let i = 0; i < png.width * png.height; i++) {
+      const index = out[i];
+      rgba[i * 4] = png.palette[index * 3] ?? 0;
+      rgba[i * 4 + 1] = png.palette[index * 3 + 1] ?? 0;
+      rgba[i * 4 + 2] = png.palette[index * 3 + 2] ?? 0;
+      rgba[i * 4 + 3] = png.transparency && index < png.transparency.length
+        ? png.transparency[index]
+        : 255;
+    }
+    return { pixels: rgba, channels: 4, stride: png.width * 4 };
+  }
+
   return { pixels: out, channels, stride };
 }
 
