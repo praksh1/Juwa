@@ -3,3 +3,4 @@ export * from './bonuses.js';
 export * from './vip.js';
 export * from './betting.js';
 export * from './jurisdictions.js';
+export * from './instant-odds.js';

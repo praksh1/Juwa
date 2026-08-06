@@ -142,9 +142,7 @@ const OTHER_GAMES: GameSummary[] = [
     maxBet: 500_000,
     accent: '#DC2626',
   },
-  // The "originals" — the instant games. Every one has a finished, tested
-  // engine on the server; what they are waiting on is a renderer each, so they
-  // sit greyed out in the lobby alongside the genuinely unbuilt tiles below.
+  // The "originals" — the instant games. Engine and screen both shipped.
   //
   // All five carry a 1% house edge, which is thinner than anything else in the
   // catalogue. That is not generosity: this is the category players compare
@@ -236,16 +234,10 @@ const OTHER_GAMES: GameSummary[] = [
 /**
  * Every tile in the lobby, playable or not.
  *
- * Three states are mixed here, and the distinction matters when reading the
- * list:
- *
- *  - **Playable** — engine and renderer both shipped. Listed in `PLAYABLE`.
- *  - **Engine only** — the five instant games. The server can settle a round
- *    today; there is no screen to play it on yet. Greyed out.
- *  - **Neither** — poker and scratch. Placeholders, so the shape of the
- *    finished product is visible from day one.
- *
- * Adding either missing half is documented in docs/04-adding-a-game.md.
+ * Anything in `PLAYABLE` has both an engine and a screen. The rest — poker and
+ * scratch — are placeholders, greyed out so the shape of the finished product
+ * is visible from day one. Building either half is documented in
+ * docs/04-adding-a-game.md.
  */
 export const GAMES: GameSummary[] = [...SLOT_SUMMARIES, ...OTHER_GAMES];
 
@@ -287,6 +279,11 @@ export const PLAYABLE = new Set<string>([
   ...SLOT_GAMES.map((game) => game.id),
   'juwa-blackjack',
   'juwa-roulette-eu',
+  'juwa-crash',
+  'juwa-limbo',
+  'juwa-dice',
+  'juwa-plinko',
+  'juwa-mines',
 ]);
 
 export function gamesInCategory(category: GameCategory | 'all'): GameSummary[] {

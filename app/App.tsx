@@ -10,6 +10,13 @@ import { LobbyScreen } from './src/screens/LobbyScreen';
 import { SlotsScreen } from './src/screens/SlotsScreen';
 import { BlackjackScreen } from './src/screens/BlackjackScreen';
 import { RouletteScreen } from './src/screens/RouletteScreen';
+import {
+  CrashScreen,
+  DiceScreen,
+  LimboScreen,
+  MinesScreen,
+  PlinkoScreen,
+} from './src/screens/instant/games';
 import { StoreScreen } from './src/screens/StoreScreen';
 import { WalletScreen } from './src/screens/WalletScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
@@ -53,6 +60,15 @@ function LobbyStack() {
         component={RouletteScreen}
         options={{ headerShown: true, title: 'European Roulette' }}
       />
+
+      {/* The instant games. Each has its own screen but they share a shell —
+          the balance, the stake chips and the request are identical across all
+          five, so only the play area differs. */}
+      <Stack.Screen name="juwa-crash" component={CrashScreen} options={{ headerShown: true, title: 'Crash' }} />
+      <Stack.Screen name="juwa-limbo" component={LimboScreen} options={{ headerShown: true, title: 'Limbo' }} />
+      <Stack.Screen name="juwa-dice" component={DiceScreen} options={{ headerShown: true, title: 'Dice' }} />
+      <Stack.Screen name="juwa-plinko" component={PlinkoScreen} options={{ headerShown: true, title: 'Plinko' }} />
+      <Stack.Screen name="juwa-mines" component={MinesScreen} options={{ headerShown: true, title: 'Mines' }} />
     </Stack.Navigator>
   );
 }

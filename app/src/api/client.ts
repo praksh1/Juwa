@@ -24,6 +24,7 @@
 import { getAccessToken } from './auth';
 import { SLOT_GAMES } from './slot-games.generated';
 import { slotPaytable } from './games';
+import { demoAct, demoPlaceBet, isInstantGame } from './demo-instant';
 
 export type RoundStatus = 'awaiting-action' | 'settled';
 
@@ -419,14 +420,38 @@ export class DemoPlayApi implements PlayApi {
     return { id, status: 'pending', coins: 0, packId: '' };
   }
 
-  async act(): Promise<RoundResponse> {
-    // Multi-step games need a real dealer holding a real shoe. Faking one on
-    // the device would mean the client deciding card outcomes, which is exactly
-    // what the whole architecture exists to prevent.
-    throw new PlayApiError(
-      'Blackjack is not available in demo mode. Sign in to play it.',
-      'server_required',
-    );
+  async act(request: {
+    roundId: string;
+    action: { type: string; [key: string]: unknown };
+    idempotencyKey: string;
+  }): Promise<RoundResponse> {
+    await new Promise((resolve) => setTimeout(resolve, 140));
+    // Mines is the one multi-step game the demo can carry. Its hidden state is
+    // a tile layout, which the stub simply keeps to itself — the same trick as
+    // the fake slot grids. Blackjack is not: a shoe has to be dealt from and
+    // counted, and a client holding one is a client that can read it.
+    let round;
+    try {
+      round = demoAct(request.roundId, request.action);
+    } catch {
+      throw new PlayApiError(
+        'This game is not available in demo mode. Sign in to play it.',
+        'server_required',
+      );
+    }
+    if (round.status === 'settled') this.balance += round.payout;
+    return {
+      roundId: request.roundId,
+      gameId: 'juwa-mines',
+      status: round.status,
+      state: round.state,
+      availableActions: round.availableActions,
+      ...(round.status === 'settled'
+        ? { settlement: { stake: 0, payout: round.payout, multiplier: round.multiplier } }
+        : {}),
+      balance: this.balance,
+      fairness: { serverSeedHash: 'demo', clientSeed: 'demo', nonce: 0 },
+    };
   }
 
   async getHistory() {
@@ -454,7 +479,7 @@ export class DemoPlayApi implements PlayApi {
     // Table games still need the server. Faking a roulette wheel on the device
     // would mean the client deciding outcomes, which is the one thing the whole
     // architecture exists to prevent.
-    if (!isSlotGame(request.gameId)) {
+    if (!isSlotGame(request.gameId) && !isInstantGame(request.gameId)) {
       throw new PlayApiError(
         'This game is not available in demo mode. Sign in to play it.',
         'server_required',
@@ -468,6 +493,24 @@ export class DemoPlayApi implements PlayApi {
     }
     // Simulate the round trip so the UI is built against realistic latency.
     await new Promise((resolve) => setTimeout(resolve, 180));
+
+    if (isInstantGame(request.gameId)) {
+      const roundId = `demo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const round = demoPlaceBet(request.gameId, request.stake, roundId, request.action);
+      this.balance = this.balance - request.stake + round.payout;
+      return {
+        roundId,
+        gameId: request.gameId,
+        status: round.status,
+        state: round.state,
+        availableActions: round.availableActions,
+        ...(round.status === 'settled'
+          ? { settlement: { stake: request.stake, payout: round.payout, multiplier: round.multiplier } }
+          : {}),
+        balance: this.balance,
+        fairness: { serverSeedHash: 'demo', clientSeed: 'demo', nonce: 0 },
+      };
+    }
 
     // Deal the shape the real server would for this game — three of the
     // catalogue's slots are three-reel classics, and a stub that always dealt
