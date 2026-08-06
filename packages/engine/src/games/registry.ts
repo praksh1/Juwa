@@ -19,6 +19,10 @@
  */
 
 import { BlackjackEngine } from './blackjack.js';
+import { CrashEngine, LimboEngine } from './crash.js';
+import { DiceEngine } from './dice.js';
+import { MinesEngine } from './mines.js';
+import { PlinkoEngine } from './plinko.js';
 import { RouletteEngine } from './roulette.js';
 import { allSlotEngines } from './slots.js';
 import type { GameEngine, GameId } from './types.js';
@@ -43,3 +47,11 @@ export function listGames(): GameEngine<any, any, any>[] {
 for (const slot of allSlotEngines()) register(slot);
 register(new RouletteEngine());
 register(new BlackjackEngine());
+
+// The "originals" — the instant games. Player-chosen odds, 1% edge on every
+// one of them, and no third-party licence behind any of them.
+register(new CrashEngine());
+register(new LimboEngine());
+register(new DiceEngine());
+register(new PlinkoEngine());
+register(new MinesEngine());

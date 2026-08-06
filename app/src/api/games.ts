@@ -107,6 +107,63 @@ const OTHER_GAMES: GameSummary[] = [
     maxBet: 500_000,
     accent: '#DC2626',
   },
+  // The "originals" — the instant games. Every one has a finished, tested
+  // engine on the server; what they are waiting on is a renderer each, so they
+  // sit greyed out in the lobby alongside the genuinely unbuilt tiles below.
+  //
+  // All five carry a 1% house edge, which is thinner than anything else in the
+  // catalogue. That is not generosity: this is the category players compare
+  // sites on, and they check. See packages/engine/src/games/instant-math.ts.
+  {
+    id: 'juwa-crash',
+    name: 'Crash',
+    category: 'instant',
+    rtp: 0.99,
+    minBet: 50,
+    maxBet: 500_000,
+    accent: '#F97316',
+    tag: 'new',
+  },
+  {
+    id: 'juwa-limbo',
+    name: 'Limbo',
+    category: 'instant',
+    rtp: 0.99,
+    minBet: 50,
+    maxBet: 500_000,
+    accent: '#06B6D4',
+    tag: 'new',
+  },
+  {
+    id: 'juwa-dice',
+    name: 'Dice',
+    category: 'instant',
+    rtp: 0.99,
+    minBet: 50,
+    maxBet: 500_000,
+    accent: '#A3E635',
+    tag: 'new',
+  },
+  {
+    id: 'juwa-plinko',
+    name: 'Plinko',
+    category: 'instant',
+    rtp: 0.99,
+    minBet: 50,
+    maxBet: 500_000,
+    accent: '#E879F9',
+    tag: 'new',
+  },
+  {
+    id: 'juwa-mines',
+    name: 'Mines',
+    category: 'instant',
+    rtp: 0.99,
+    minBet: 50,
+    maxBet: 500_000,
+    accent: '#38BDF8',
+    tag: 'new',
+  },
   // Not yet built. Greyed out in the lobby so the shape of the finished product
   // is visible from day one. Each needs an engine plus a screen — see
   // docs/04-adding-a-game.md.
@@ -142,11 +199,18 @@ const OTHER_GAMES: GameSummary[] = [
 ];
 
 /**
- * Games with a shipped *renderer*.
+ * Every tile in the lobby, playable or not.
  *
- * Every engine now has one. The remaining tiles are placeholders for games
- * whose engines have not been written — each is a file implementing
- * `GameEngine` plus a screen, per docs/04-adding-a-game.md.
+ * Three states are mixed here, and the distinction matters when reading the
+ * list:
+ *
+ *  - **Playable** — engine and renderer both shipped. Listed in `PLAYABLE`.
+ *  - **Engine only** — the five instant games. The server can settle a round
+ *    today; there is no screen to play it on yet. Greyed out.
+ *  - **Neither** — poker and scratch. Placeholders, so the shape of the
+ *    finished product is visible from day one.
+ *
+ * Adding either missing half is documented in docs/04-adding-a-game.md.
  */
 export const GAMES: GameSummary[] = [...SLOT_SUMMARIES, ...OTHER_GAMES];
 
