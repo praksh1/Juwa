@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { BASE_CABINET, anticipatingReels, bonusCabinet, colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
 import { betOptions, suggestedBet } from '@juwa/economy';
 import { Button, Card, Txt } from '../components/primitives';
 import { useRoute } from '@react-navigation/native';
-import { Reel, type ReelPhase } from '../components/Reel';
+import { Reel, SYMBOL_SIZE, type ReelPhase } from '../components/Reel';
+import { useCompactLayout } from '../layout';
 import { scatterTrigger, slotDetails, slotPaytable } from '../api/games';
 import { sounds, spinNow, unlock } from '../sound';
 import { winTier, rollUpDuration, type WinTier } from '../motion';
@@ -254,6 +255,39 @@ export function SlotsScreen() {
   const [reelsWidth, setReelsWidth] = useState(0);
 
   /**
+   * The machine shrinks on a short screen.
+   *
+   * A phone held sideways leaves roughly 200 points of height once Safari's
+   * chrome and the tab bar are taken out. Three rows of 58-point symbols plus a
+   * readout, the bet chips and a spin button need more than twice that, so the
+   * machine ran off the bottom and the game was unplayable in landscape — the
+   * player could see one row of symbols and no button.
+   *
+   * Scaling the symbols is the fix rather than scrolling, because a slot is one
+   * object: the reels and the button that turns them have to be on screen
+   * together, or every spin is two gestures and a guess.
+   */
+  const compact = useCompactLayout();
+  const { height: viewportHeight } = useWindowDimensions();
+  const symbolSize = useMemo(() => {
+    // Everything above and below the reels: header, readout, chips, button and
+    // tab bar. Taken from the portrait layout rather than guessed.
+    // MEASURED, not estimated, and re-measured three times. At 320 points tall
+    // the header, readout, card padding, bet chips and spin button come to
+    // about 258 whatever the reels do. A first guess of 190 left the spin
+    // button 46 points below the fold — freeing height simply grew the reels
+    // into it — and 245 still left 9.
+    //
+    // 20 points is a small symbol and it is the right trade: a landscape player
+    // who can see the reels and the button beats one who can see neither.
+    const chrome = compact ? 258 : 300;
+    const ideal = Math.floor((viewportHeight - chrome) / ROWS);
+    // Never larger than the design size, and never so small the artwork stops
+    // reading — below about 26 points a symbol is a coloured smudge.
+    return Math.max(compact ? 20 : 26, Math.min(SYMBOL_SIZE, ideal));
+  }, [viewportHeight, ROWS, compact]);
+
+  /**
    * The bonus-round re-theme.
    *
    * Free spins are the only part of a slot where the rules are different —
@@ -483,9 +517,9 @@ export function SlotsScreen() {
         {details && paytable ? <PaytableButton game={details} model={paytable} /> : null}
       </View>
 
-      <Card style={[styles.machine, cabinetStyle]}>
+      <Card style={[styles.machine, compact && styles.machineCompact, cabinetStyle]}>
         <Animated.View style={{ transform: [{ translateX: shake }] }}>
-        <Animated.View style={[styles.reelBay, bayStyle]}>
+        <Animated.View style={[styles.reelBay, compact && styles.reelBayCompact, bayStyle]}>
         <View
           style={styles.reels}
           onLayout={(e) => setReelsWidth(e.nativeEvent.layout.width)}
@@ -501,6 +535,7 @@ export function SlotsScreen() {
               landDuration={schedule[i]?.duration ?? 1}
               result={grid[i] ?? IDLE_GRID[i]!}
               litCells={lit}
+              size={symbolSize}
               anticipating={anticipating[i] ?? false}
               {...(details?.art ? { family: details.art } : {})}
               // Dimming needs something to contrast AGAINST. A scatter win
@@ -517,7 +552,13 @@ export function SlotsScreen() {
             />
           ))}
           {/* Above the symbols, below anything pressable. */}
-          <WinLines wins={lineWins} reels={REELS} phase={winPhase} width={reelsWidth} />
+          <WinLines
+            wins={lineWins}
+            reels={REELS}
+            phase={winPhase}
+            width={reelsWidth}
+            cellHeight={symbolSize}
+          />
         </View>
 
         {/* Coins are thrown from the centre of the reels, above the symbols
@@ -526,7 +567,10 @@ export function SlotsScreen() {
         </Animated.View>
         </Animated.View>
 
-        <View style={styles.readout} accessibilityLiveRegion="polite">
+        <View
+          style={[styles.readout, compact && styles.readoutCompact]}
+          accessibilityLiveRegion="polite"
+        >
           {phase === 'fs-intro' ? (
             <Txt variant="h3" color={colors.neon.magenta}>
               {freeSpinsTotal} FREE SPINS
@@ -622,7 +666,7 @@ export function SlotsScreen() {
         onPress={spin}
         disabled={spinning || bet > balance}
         loading={spinning}
-        style={styles.spin}
+        style={[styles.spin, compact && styles.spinCompact]}
       />
 
       <Txt variant="caption" color={colors.text.muted} style={styles.fairness}>
@@ -657,6 +701,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.surface.border,
   },
+  machineCompact: { gap: spacing.xs, padding: spacing.sm },
   machine: {
     gap: spacing.md,
     overflow: 'hidden',
@@ -682,6 +727,10 @@ const styles = StyleSheet.create({
   hidden: { opacity: 0 },
   reels: { flexDirection: 'row', gap: spacing.xs },
   readout: { minHeight: 32, alignItems: 'center', justifyContent: 'center' },
+  readoutCompact: { minHeight: 18 },
+  // Still above the 44-point touch minimum; only the generous padding goes.
+  spinCompact: { paddingVertical: spacing.xs, minHeight: 44 },
+  reelBayCompact: { padding: spacing.xs },
   betRow: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'center', flexWrap: 'wrap' },
   chip: {
     paddingHorizontal: spacing.md,

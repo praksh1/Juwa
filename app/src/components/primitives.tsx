@@ -11,6 +11,7 @@ import React from 'react';
 import { Animated, ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, layout, radius, spacing, typography } from '@juwa/ui';
+import { useCompactLayout } from '../layout';
 
 // ------------------------------------------------------------------- screen
 
@@ -31,13 +32,21 @@ export function Screen({
   contentStyle?: StyleProp<ViewStyle>;
 }) {
   const insets = useSafeAreaInsets();
+  // On a short screen the generous vertical rhythm is the difference between
+  // a spin button on screen and one below the fold. The horizontal padding is
+  // untouched — width is not what is scarce.
+  const compact = useCompactLayout();
   return (
     <ScrollView
       style={styles.screen}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={[
         styles.screenContent,
-        { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing['4xl'] },
+        compact && styles.screenContentCompact,
+        {
+          paddingTop: insets.top + (compact ? spacing.sm : spacing.lg),
+          paddingBottom: insets.bottom + (compact ? spacing.lg : spacing['4xl']),
+        },
         contentStyle,
       ]}
     >
@@ -176,6 +185,7 @@ export function SectionHeader({ title, action }: { title: string; action?: strin
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.surface.base },
+  screenContentCompact: { gap: spacing.sm },
   screenContent: {
     paddingHorizontal: layout.screenPadding,
     gap: spacing.xl,

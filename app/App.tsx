@@ -24,6 +24,7 @@ import { AppGate } from './src/AppGate';
 import { registerServiceWorker } from './src/pwa';
 import { SLOT_GAMES } from './src/api/slot-games.generated';
 import { Ticker } from './src/components/Ticker';
+import { useCompactLayout } from './src/layout';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -118,8 +119,13 @@ const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
  * This lives in its own component because `useSafeAreaInsets` has to be read
  * below `SafeAreaProvider`, not in the component that renders it.
  */
+function TickerUnlessCramped() {
+  return useCompactLayout() ? null : <Ticker />;
+}
+
 function Tabs() {
   const insets = useSafeAreaInsets();
+  const compact = useCompactLayout();
 
   return (
     <Tab.Navigator
@@ -127,13 +133,19 @@ function Tabs() {
         headerShown: false,
         tabBarActiveTintColor: colors.gold.default,
         tabBarInactiveTintColor: colors.text.muted,
-        tabBarStyle: {
-          backgroundColor: colors.surface.raised,
-          borderTopColor: colors.surface.border,
-          height: TAB_BAR_CONTENT_HEIGHT + insets.bottom,
-          paddingTop: spacing.xs,
-          paddingBottom: insets.bottom + spacing.xs,
-        },
+        // Hidden on a short screen. It costs about a sixth of the height a
+        // phone has in landscape, and every screen it leads to is one tap away
+        // through the back arrow anyway — whereas a spin button off the bottom
+        // of the screen has no alternative route.
+        tabBarStyle: compact
+          ? { display: 'none' as const }
+          : {
+              backgroundColor: colors.surface.raised,
+              borderTopColor: colors.surface.border,
+              height: TAB_BAR_CONTENT_HEIGHT + insets.bottom,
+              paddingTop: spacing.xs,
+              paddingBottom: insets.bottom + spacing.xs,
+            },
         tabBarLabelStyle: {
           fontSize: typography.caption.fontSize,
           lineHeight: typography.caption.lineHeight,
@@ -162,8 +174,10 @@ export default function App() {
       <NavigationContainer theme={theme}>
         <StatusBar style="light" />
         {/* Pinned above the navigator so it is present on every screen,
-            including the logged-out landing page. */}
-        <Ticker />
+            including the logged-out landing page — but not when height is the
+            scarce resource. It is decoration, and it was costing a landscape
+            player a row of symbols. */}
+        <TickerUnlessCramped />
         <AppGate>
           <Tabs />
         </AppGate>

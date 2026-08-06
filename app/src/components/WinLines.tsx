@@ -38,7 +38,13 @@ import { colors, radius, spacing } from '@juwa/ui';
 import type { LineWin } from '../api/client';
 import { Txt } from './primitives';
 
-/** Must match `SYMBOL_SIZE` in Reel.tsx — the one fixed dimension. */
+/**
+ * Default symbol height, matching `SYMBOL_SIZE` in Reel.tsx.
+ *
+ * Passed in rather than assumed, because the reels shrink on a short screen
+ * and a line drawn at the old pitch would run above or below the symbols it
+ * is meant to be connecting.
+ */
 export const CELL_HEIGHT = 58;
 /** Must match the `gap` on the reels row in SlotsScreen. */
 export const REEL_GAP = spacing.xs;
@@ -117,6 +123,8 @@ interface WinLinesProps {
   phase: WinPhase;
   /** Measured width of the reels row, including the gaps between reels. */
   width: number;
+  /** Symbol height in points. Must be whatever the reels are using. */
+  cellHeight?: number;
 }
 
 /**
@@ -126,7 +134,7 @@ interface WinLinesProps {
  * wide soft stroke under a bright thin one — the standard way to make a line
  * read as lit rather than drawn, without a real glow filter.
  */
-export function WinLines({ wins, reels, phase, width }: WinLinesProps) {
+export function WinLines({ wins, reels, phase, width, cellHeight = CELL_HEIGHT }: WinLinesProps) {
   const fade = useRef(new Animated.Value(0)).current;
   const shown = phase.kind === 'idle' ? [] : phase.kind === 'total' ? wins : [wins[phase.index]!];
 
@@ -146,14 +154,12 @@ export function WinLines({ wins, reels, phase, width }: WinLinesProps) {
 
   const reelWidth = (width - REEL_GAP * (reels - 1)) / reels;
   const centreX = (reel: number) => reel * (reelWidth + REEL_GAP) + reelWidth / 2;
-  const centreY = (row: number) => row * CELL_HEIGHT + CELL_HEIGHT / 2;
+  const centreY = (row: number) => row * cellHeight + cellHeight / 2;
 
   // During the walk the single line is the subject and gets the bright
   // treatment. In the total every line is on screen at once, so each is drawn
   // thinner — five bright ropes across a small grid is unreadable.
   const single = phase.kind === 'line';
-  const height = Math.max(...shown.flatMap((w) => (w.cells ?? []).map(([, r]) => r + 1)), 1);
-
   return (
     <Animated.View
       pointerEvents="none"
@@ -201,7 +207,9 @@ export function WinLines({ wins, reels, phase, width }: WinLinesProps) {
           );
         })}
       </Svg>
-      {single ? <LineBadge win={shown[0]!} reelWidth={reelWidth} gridHeight={height} /> : null}
+      {single ? (
+        <LineBadge win={shown[0]!} reelWidth={reelWidth} cellHeight={cellHeight} />
+      ) : null}
     </Animated.View>
   );
 }
@@ -216,18 +224,18 @@ export function WinLines({ wins, reels, phase, width }: WinLinesProps) {
 function LineBadge({
   win,
   reelWidth,
-  gridHeight,
+  cellHeight,
 }: {
   win: LineWin;
   reelWidth: number;
-  gridHeight: number;
+  cellHeight: number;
 }) {
   const cells = win.cells ?? [];
   const last = cells[cells.length - 1];
   if (!last) return null;
   const [reel, row] = last;
   const x = reel * (reelWidth + REEL_GAP) + reelWidth / 2;
-  const y = row * CELL_HEIGHT + CELL_HEIGHT / 2;
+  const y = row * cellHeight + cellHeight / 2;
 
   return (
     <View
@@ -236,7 +244,7 @@ function LineBadge({
         {
           left: Math.max(0, x - 34),
           // Sit above the cell, unless that is off the top of the grid.
-          top: row === 0 ? y + CELL_HEIGHT * 0.45 : y - CELL_HEIGHT * 0.95,
+          top: row === 0 ? y + cellHeight * 0.45 : y - cellHeight * 0.95,
         },
       ]}
     >

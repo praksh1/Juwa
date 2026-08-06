@@ -38,7 +38,15 @@ import { spinNow } from '../sound';
  */
 
 const FILLER = ['CHERRY', 'LEMON', 'PLUM', 'BAR', 'BELL', 'SEVEN', 'DIAMOND', 'WILD'];
-const SYMBOL_SIZE = 58;
+/**
+ * How tall one symbol is, in portrait.
+ *
+ * A default rather than a constant, because a phone held sideways has about
+ * 200 points of usable height once the browser chrome and the tab bar are
+ * accounted for — and three rows at 58 plus a spin button does not fit in it.
+ * The machine shrinks instead of being scrolled past.
+ */
+export const SYMBOL_SIZE = 58;
 /** Symbols in one loop cycle. */
 const LOOP_SYMBOLS = 8;
 /** Decorative symbols that scroll past during the landing deceleration. */
@@ -117,6 +125,8 @@ export interface ReelProps {
    * the machine reel by reel rather than lighting the whole grid at once.
    */
   anticipating?: boolean;
+  /** Symbol height in points. Shrinks on short screens; see `SYMBOL_SIZE`. */
+  size?: number;
   /** Increments once per spin, so each spin is a distinct animation. */
   round?: number;
   /** Fires when this reel physically stops. */
@@ -135,6 +145,7 @@ export function Reel({
   landFrom = 0,
   landDuration = 1,
   litCells,
+  size = SYMBOL_SIZE,
   anticipating = false,
   celebrating = false,
   round = 0,
@@ -195,10 +206,10 @@ export function Reel({
   // The loop strip is duplicated so translating by exactly one cycle height
   // returns an identical image, which is what makes the repeat invisible.
   const loopStrip = [...loopFiller, ...loopFiller];
-  const loopSpan = LOOP_SYMBOLS * SYMBOL_SIZE;
+  const loopSpan = LOOP_SYMBOLS * size;
 
   const landingStrip = [...landingFiller, ...result];
-  const landingTravel = LANDING_FILLER * SYMBOL_SIZE;
+  const landingTravel = LANDING_FILLER * size;
 
   // ------------------------------------------------------------------- loop
   useEffect(() => {
@@ -212,7 +223,7 @@ export function Reel({
 
     const tick = () => {
       const elapsed = spinNow() - startedAt;
-      const travelled = elapsed * LOOP_SYMBOLS_PER_SECOND * SYMBOL_SIZE;
+      const travelled = elapsed * LOOP_SYMBOLS_PER_SECOND * size;
       // Modulo keeps the value bounded; without it the transform grows without
       // limit and eventually loses precision.
       offset.setValue(((phaseOffset - travelled) % loopSpan) + loopSpan);
@@ -221,7 +232,7 @@ export function Reel({
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spinning, index, loopSpan]);
+  }, [spinning, index, loopSpan, size]);
 
   // ---------------------------------------------------------------- landing
   useEffect(() => {
@@ -256,7 +267,7 @@ export function Reel({
   const resultStart = spinning ? Infinity : landingFiller.length;
 
   return (
-    <View style={[styles.window, { height: SYMBOL_SIZE * rows }]}>
+    <View style={[styles.window, { height: size * rows }]}>
       <Animated.View style={{ transform: [{ translateY: offset }] }}>
         {strip.map((symbol, i) => {
           const resultRow = i - resultStart;
@@ -272,13 +283,14 @@ export function Reel({
               key={`${symbol}-${i}`}
               style={[
                 styles.cell,
+                { height: size },
                 onWinningLine && styles.cellWinning,
                 dimmed && styles.cellDimmed,
               ]}
             >
               <SlotSymbol
                 name={symbol}
-                size={onWinningLine ? SYMBOL_SIZE - 4 : SYMBOL_SIZE - 12}
+                size={onWinningLine ? size - 4 : size - 12}
                 {...(family ? { family } : {})}
               />
             </View>
@@ -309,7 +321,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   cell: {
-    height: SYMBOL_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
-import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, spacing } from '@juwa/ui';
 import { format } from '@juwa/money';
@@ -56,6 +56,13 @@ export function LobbyScreen() {
     setBonusMessage(result.granted ? null : (result.reason ?? 'Come back tomorrow'));
   };
   const games = useMemo(() => gamesInCategory(category), [category]);
+
+  /** Two per row, so the grid can be plain Views. */
+  const gameRows = useMemo(() => {
+    const rows: GameSummary[][] = [];
+    for (let i = 0; i < games.length; i += 2) rows.push(games.slice(i, i + 2));
+    return rows;
+  }, [games]);
 
   const openGame = (game: GameSummary) => {
     // Only games with a shipped renderer are reachable; the rest render as
@@ -145,17 +152,44 @@ export function LobbyScreen() {
           the screen, behind a bonus card, the category chips and an install
           nag — so the one thing a player opened the app to do required a
           scroll. */}
-      <FlatList
-        data={games}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        scrollEnabled={false}
-        columnWrapperStyle={styles.gridRow}
-        contentContainerStyle={styles.grid}
-        renderItem={({ item }) => (
-          <GameCard game={item} playable={PLAYABLE.has(item.id)} onPress={openGame} />
-        )}
-      />
+      {/*
+        A plain grid, NOT a FlatList.
+
+        A `<FlatList scrollEnabled={false}>` inside the screen's ScrollView
+        renders as a container with `touch-action: none`, and that container is
+        as tall as the whole grid — around 3,600px here, which is nearly the
+        entire lobby. `touch-action: none` tells the browser not to pan for any
+        touch starting inside it, so on iOS Safari dragging anywhere over the
+        game tiles scrolled nothing at all. The lobby was stuck showing two and
+        a half rows with no way to reach the rest.
+
+        It survived testing because Chromium is far more forgiving about
+        handing the gesture to an ancestor scroller, and because automated
+        checks scroll programmatically rather than by dragging. It took a
+        screen recording from a real phone to see it.
+
+        Nothing is lost by dropping the FlatList: with `scrollEnabled={false}`
+        it never virtualised, so it was already rendering all thirty-odd cards.
+        This renders the same cards through the ScrollView that was always
+        meant to be doing the scrolling.
+      */}
+      <View style={styles.grid}>
+        {gameRows.map((row, index) => (
+          <View key={index} style={styles.gridRow}>
+            {row.map((item) => (
+              <GameCard
+                key={item.id}
+                game={item}
+                playable={PLAYABLE.has(item.id)}
+                onPress={openGame}
+              />
+            ))}
+            {/* Keeps a lone card on the last row at half width rather than
+                letting it stretch across both columns. */}
+            {row.length === 1 ? <View style={styles.gridSpacer} /> : null}
+          </View>
+        ))}
+      </View>
 
       {/* Asked for after the player has seen what they'd be installing. */}
       <InstallPrompt />
@@ -221,7 +255,8 @@ const styles = StyleSheet.create({
   },
   chipActive: { backgroundColor: colors.gold.default, borderColor: colors.gold.default },
   grid: { gap: spacing.md },
-  gridRow: { gap: spacing.md },
+  gridRow: { flexDirection: 'row', gap: spacing.md },
+  gridSpacer: { flex: 1 },
   fairness: { gap: spacing.md },
   fairnessBody: { marginBottom: spacing.xs },
   disclosure: { textAlign: 'center' },
