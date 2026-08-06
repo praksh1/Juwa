@@ -11,6 +11,7 @@ import { sounds, spinNow, unlock } from '../sound';
 import { winTier, rollUpDuration, type WinTier } from '../motion';
 import { CoinCounter } from '../components/CoinCounter';
 import { CoinBurst } from '../components/CoinBurst';
+import { WinLines, litCells, useWinCycle } from '../components/WinLines';
 import { WinOverlay, useCabinetShake } from '../components/WinOverlay';
 import {
   PlayApiError,
@@ -212,7 +213,16 @@ export function SlotsScreen() {
 
   const settlement = round?.settlement;
   const slots = round?.state as SlotsState | undefined;
-  const winningRows = useMemo(() => {
+  /**
+   * The lines that paid on whatever spin is currently on screen.
+   *
+   * Every one of them, in the order the engine evaluated them. The old version
+   * of this kept only `line < 3` — a leftover from treating the payline index
+   * as a row index — which silently discarded every zig-zag win. Those wins
+   * were paid and were invisible, which is the worst combination: the balance
+   * moved and the machine showed nothing to explain it.
+   */
+  const lineWins = useMemo(() => {
     if (spinning && phase !== 'fs' && phase !== 'fs-total') return [];
     if (!slots) return [];
     // During the bonus round the highlight follows whichever free spin is on
@@ -221,10 +231,23 @@ export function SlotsScreen() {
       phase === 'fs' || phase === 'fs-total'
         ? (slots.freeSpins[freeSpinIndex] ?? slots.baseSpin)
         : slots.baseSpin;
-    // The payline index doubles as a row index for the three straight lines;
-    // richer zig-zag highlighting arrives with the win-line overlay.
-    return source.lineWins.map((win) => win.line).filter((line) => line < 3);
+    return source.lineWins.filter((win) => (win.cells?.length ?? 0) > 0);
   }, [slots, spinning, phase, freeSpinIndex]);
+
+  /**
+   * Total first, then walk the lines one at a time, then loop.
+   *
+   * Held while the reels are still, which is also when the player is reading.
+   */
+  const winPhase = useWinCycle(lineWins, !spinning);
+  const lit = useMemo(() => litCells(lineWins, winPhase), [lineWins, winPhase]);
+
+  /**
+   * The reels are laid out with `flex: 1`, so their width is whatever the
+   * phone gives them. The overlay needs the real number to put the line
+   * through the middle of the symbols rather than near it.
+   */
+  const [reelsWidth, setReelsWidth] = useState(0);
 
   const spin = useCallback(async () => {
     if (spinning) return;
@@ -409,7 +432,10 @@ export function SlotsScreen() {
       <Card style={[styles.machine, inFreeSpins && styles.machineBonus]}>
         <Animated.View style={{ transform: [{ translateX: shake }] }}>
         <View style={styles.reelBay}>
-        <View style={styles.reels}>
+        <View
+          style={styles.reels}
+          onLayout={(e) => setReelsWidth(e.nativeEvent.layout.width)}
+        >
           {Array.from({ length: REELS }, (_, i) => (
             <Reel
               key={i}
@@ -420,16 +446,23 @@ export function SlotsScreen() {
               landFrom={schedule[i]?.from ?? 0}
               landDuration={schedule[i]?.duration ?? 1}
               result={grid[i] ?? IDLE_GRID[i]!}
-              winningRows={winningRows}
+              litCells={lit}
               {...(details?.art ? { family: details.art } : {})}
               // Dimming needs something to contrast AGAINST. A scatter win
               // pays from anywhere on the grid and produces no winning line,
               // so dimming on payout alone turned the whole machine dark and
               // highlighted nothing.
-              celebrating={celebration.tier !== 'none' && winningRows.length > 0}
+              //
+              // It also has to follow the WALK rather than the celebration:
+              // the celebration ends after a couple of seconds, but the line
+              // cycle keeps running until the next spin, and a lit line on an
+              // undimmed grid is barely a highlight at all.
+              celebrating={lit.size > 0}
               onLanded={() => handleReelLanded(i)}
             />
           ))}
+          {/* Above the symbols, below anything pressable. */}
+          <WinLines wins={lineWins} reels={REELS} phase={winPhase} width={reelsWidth} />
         </View>
 
         {/* Coins are thrown from the centre of the reels, above the symbols

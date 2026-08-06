@@ -91,6 +91,22 @@ export interface LineWin {
   symbol: SlotSymbol;
   count: number;
   multiplier: number;
+  /**
+   * The winning cells as `[reel, row]`, leftmost reel first.
+   *
+   * Derived here rather than left for the client to work out, and that is a
+   * deliberate boundary rather than a convenience. The client has no payline
+   * table — it deliberately does not import this package — so the alternative
+   * is shipping a second copy of every payline shape into the app. Two copies
+   * of the same table drift, and when they drift the machine draws a winning
+   * line through cells the server did not pay for. A player screenshots that,
+   * and they are right to.
+   *
+   * `count` alone is not enough either: it says how many reels matched, not
+   * which rows they matched on, and a zig-zag line visits a different row on
+   * every reel.
+   */
+  cells: readonly (readonly [number, number])[];
 }
 
 export interface SpinResult {
@@ -219,7 +235,9 @@ function evaluateLine(
 
     const multiplier = spec.pays[Math.min(count, 5) as 3 | 4 | 5] ?? 0;
     if (multiplier > 0 && (best === null || multiplier > best.multiplier)) {
-      best = { line: -1, symbol: candidate, count, multiplier };
+      // `line` and `cells` are filled in by the caller, which is the only place
+      // that knows which payline index this is.
+      best = { line: -1, symbol: candidate, count, multiplier, cells: [] };
     }
   }
   return best;
@@ -238,7 +256,17 @@ export function evaluateGrid(
   for (const [i, line] of math.paylines.entries()) {
     const win = evaluateLine(grid, line, math, pays);
     if (win) {
-      const scaled = { ...win, line: i, multiplier: win.multiplier * winMultiplier * scale };
+      // Only the reels that actually matched, not the whole payline. A
+      // three-of-a-kind on a five-reel line lights three cells; lighting all
+      // five tells the player two symbols paid that did not.
+      const cells: [number, number][] = [];
+      for (let reel = 0; reel < win.count; reel++) cells.push([reel, line[reel]!]);
+      const scaled = {
+        ...win,
+        line: i,
+        cells,
+        multiplier: win.multiplier * winMultiplier * scale,
+      };
       lineWins.push(scaled);
       lineMultiplierSum += scaled.multiplier;
     }

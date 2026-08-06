@@ -37,6 +37,17 @@ export interface LineWin {
   symbol: string;
   count: number;
   multiplier: number;
+  /**
+   * The winning cells as `[reel, row]`, leftmost first, sent by the server.
+   *
+   * The app has no payline table and must not grow one: it deliberately does
+   * not import `@juwa/engine`, so any local copy would be a second source of
+   * truth that drifts from the one the money was paid against.
+   *
+   * Optional because a round settled by an older server will not carry it. The
+   * overlay treats a missing value as "no line to draw" rather than guessing.
+   */
+  cells?: [number, number][];
 }
 
 export interface SpinResult {
@@ -330,6 +341,30 @@ function weightedSymbol(): string {
 }
 
 /** See the warning at the top of this file. Not a game. */
+/**
+ * Payline shapes for the offline demo only.
+ *
+ * Straight rows plus the two classic V and inverted-V shapes, which is enough
+ * to exercise a bent line without pretending to be the real table. The real
+ * shapes live in the engine and reach the client as `cells` on each win.
+ */
+function demoPaylines(reels: number, rows: number): number[][] {
+  const lines: number[][] = [];
+  for (let row = 0; row < rows; row++) lines.push(Array.from({ length: reels }, () => row));
+  if (rows >= 3 && reels >= 3) {
+    // A V and its mirror, stretched to whatever grid this game has: top row at
+    // the outer reels, bottom row in the middle.
+    const half = (reels - 1) / 2;
+    const v = Array.from({ length: reels }, (_, reel) => {
+      const fromCentre = Math.abs(reel - half) / half; // 1 at the edges, 0 in the middle
+      return Math.round((1 - fromCentre) * (rows - 1));
+    });
+    lines.push(v);
+    lines.push(v.map((row) => rows - 1 - row));
+  }
+  return lines;
+}
+
 export class DemoPlayApi implements PlayApi {
   private balance: number;
 
@@ -442,14 +477,24 @@ export class DemoPlayApi implements PlayApi {
     );
 
     // A crude payout, purely so win presentation has something to render.
+    //
+    // The shapes below are INVENTED FOR THE DEMO. They are not the engine's
+    // paylines and are not meant to match them — the whole spin is fabricated
+    // here, so there is nothing to be consistent with. What matters is that
+    // they include zig-zags: a stub that only ever produced straight rows
+    // would let the win-line overlay look finished while every bent line it
+    // will meet in production went untested.
+    const demoLines = demoPaylines(reels, rows);
     const lineWins: LineWin[] = [];
-    for (let row = 0; row < rows; row++) {
-      const symbols = grid.map((reel) => reel[row]!);
+    for (const [lineIndex, line] of demoLines.entries()) {
+      const symbols = line.map((row, reel) => grid[reel]![row]!);
       const first = symbols[0]!;
       let count = 1;
       while (count < reels && (symbols[count] === first || symbols[count] === 'WILD')) count++;
       if (count >= 3) {
-        lineWins.push({ line: row, symbol: first, count, multiplier: count * 4 });
+        const cells: [number, number][] = [];
+        for (let reel = 0; reel < count; reel++) cells.push([reel, line[reel]!]);
+        lineWins.push({ line: lineIndex, symbol: first, count, multiplier: count * 4, cells });
       }
     }
     const baseMultiplier = lineWins.reduce((sum, w) => sum + w.multiplier, 0) / 20;

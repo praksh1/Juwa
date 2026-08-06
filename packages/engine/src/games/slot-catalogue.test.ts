@@ -129,3 +129,66 @@ test('a spin never pays more than the declared maximum win', () => {
     assert.ok(Number.isInteger(payout), `spin ${i} paid a fractional ${payout}`);
   }
 });
+
+/**
+ * The winning cells.
+ *
+ * This is the field the client draws its win lines from, and it is the one
+ * place where the machine can lie to a player without the money being wrong:
+ * pay for one combination and light up another. The client cannot check the
+ * work — it has no payline table on purpose — so the checking happens here,
+ * across every model in the catalogue rather than on one example.
+ */
+test('every reported winning cell actually holds a winning symbol', () => {
+  let winsChecked = 0;
+
+  for (const definition of SLOT_CATALOGUE) {
+    const math = slotModel(definition).math;
+    const engine = new SlotsEngine(definition);
+
+    for (let n = 0; n < 400; n++) {
+      const state = engine.init(minor(2000), new RngStream('cells', definition.id, n));
+      const spins = [state.public.baseSpin, ...state.public.freeSpins];
+
+      for (const spin of spins) {
+        for (const win of spin.lineWins) {
+          winsChecked++;
+          const line = math.paylines[win.line];
+          assert.ok(line, `${definition.id}: win reports line ${win.line}, which does not exist`);
+
+          // One cell per matched reel — no more, no fewer. Reporting the whole
+          // payline on a three-of-a-kind lights two symbols that did not pay.
+          assert.equal(
+            win.cells.length,
+            win.count,
+            `${definition.id}: ${win.count} symbols matched but ${win.cells.length} cells reported`,
+          );
+
+          for (const [i, cell] of win.cells.entries()) {
+            const [reel, row] = cell;
+            // Contiguous from the leftmost reel: that is what "count matching
+            // from the left" means, and a gap would draw a broken line.
+            assert.equal(reel, i, `${definition.id}: cells are not leftmost-first`);
+            assert.equal(
+              row,
+              line[i],
+              `${definition.id}: cell ${i} is on row ${row}, but payline ${win.line} uses ${line[i]}`,
+            );
+
+            // The payload check: the symbol actually sitting there must be the
+            // one that paid, or a wild standing in for it.
+            const symbol = spin.grid[reel]![row]!;
+            assert.ok(
+              symbol === win.symbol || symbol === 'WILD',
+              `${definition.id}: line ${win.line} paid ${win.symbol} but cell ` +
+                `[${reel},${row}] holds ${symbol}`,
+            );
+          }
+        }
+      }
+    }
+  }
+
+  // Guards against the assertions above passing because nothing was examined.
+  assert.ok(winsChecked > 2000, `only ${winsChecked} wins were checked`);
+});

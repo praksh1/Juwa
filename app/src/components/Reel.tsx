@@ -79,8 +79,19 @@ export interface ReelProps {
   landFrom?: number;
   /** How long this reel's landing takes, in seconds. */
   landDuration?: number;
-  /** Rows that form part of a winning line, for the highlight. */
-  winningRows?: number[];
+  /**
+   * The cells lit right now, as `reel,row` keys.
+   *
+   * Cells rather than rows, because a payline is not a row: a zig-zag visits a
+   * different row on each reel, and a three-of-a-kind on a five-reel line pays
+   * three cells rather than five. Highlighting whole rows lit up symbols that
+   * had not paid and left the ones that had unlit on any line that was not
+   * straight — which is to say, on most of them.
+   *
+   * The set is shared with the overlay that draws the connecting line, so the
+   * lit symbols and the drawn line can never disagree.
+   */
+  litCells?: Set<string>;
   /**
    * Theme family supplying artwork for the picture symbols.
    *
@@ -111,7 +122,7 @@ export function Reel({
   phase,
   landFrom = 0,
   landDuration = 1,
-  winningRows = [],
+  litCells,
   celebrating = false,
   round = 0,
   family,
@@ -197,7 +208,7 @@ export function Reel({
         {strip.map((symbol, i) => {
           const resultRow = i - resultStart;
           const onWinningLine =
-            phase === 'idle' && resultRow >= 0 && winningRows.includes(resultRow);
+            phase === 'idle' && resultRow >= 0 && (litCells?.has(`${index},${resultRow}`) ?? false);
           // Only dim once there is something to dim FOR. Outside a celebration
           // every symbol is equal, and a permanently faded grid just looks
           // broken.
