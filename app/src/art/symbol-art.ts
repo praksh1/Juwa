@@ -73,6 +73,17 @@ export const SYMBOL_FAMILIES: Record<string, Record<PictureSymbol, string>> = {
     PLUM: `${ART}/myth_laurel.png`,
     LEMON: `${ART}/myth_lightning.png`,
   },
+  // The classic fruit machine. Its DIAMOND is a stack of ingots rather than a
+  // gem, because a fruit machine's high symbol has always been metal — and the
+  // ingots stay clearly distinct from the three flat BAR plates, which are a
+  // different symbol at a different value and are still drawn as vector.
+  fruit: {
+    DIAMOND: `${ART}/fruit_bars.png`,
+    BELL: `${ART}/fruit_bell.png`,
+    CHERRY: `${ART}/fruit_cherries.png`,
+    PLUM: `${ART}/fruit_plum.png`,
+    LEMON: `${ART}/fruit_lemon.png`,
+  },
   // Abstract medallions, for the themes that are a mood rather than a place —
   // Aurora, Supernova, Neon Alley. A literal subject would fight the name.
   orb: {

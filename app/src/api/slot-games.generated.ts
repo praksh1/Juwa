@@ -12,7 +12,7 @@
 import type { SlotGame } from './games';
 
 export const SLOT_GAMES: SlotGame[] = [
-  { id: 'juwa-classic-slots', name: 'Juwa Classic', category: 'slots', rtp: 0.9614, volatility: 'low', reels: 5, rows: 3, lines: 20, minBet: 20, maxBet: 50000, theme: { primary: '#7C3AED', secondary: '#C026D3', accent: '#FFC53D' }, tag: 'hot' },
+  { id: 'juwa-classic-slots', name: 'Juwa Classic', category: 'slots', rtp: 0.9614, volatility: 'low', reels: 5, rows: 3, lines: 20, minBet: 20, maxBet: 50000, theme: { primary: '#7C3AED', secondary: '#C026D3', accent: '#FFC53D' }, tag: 'hot', art: 'fruit' },
   { id: 'slot-emerald-nights', name: 'Emerald Nights', category: 'slots', rtp: 0.9614, volatility: 'low', reels: 5, rows: 3, lines: 20, minBet: 20, maxBet: 50000, theme: { primary: '#065F46', secondary: '#10B981', accent: '#A7F3D0' }, art: 'jungle' },
   { id: 'slot-royal-flush', name: 'Royal Fortune', category: 'slots', rtp: 0.9614, volatility: 'low', reels: 5, rows: 3, lines: 20, minBet: 20, maxBet: 50000, theme: { primary: '#7F1D1D', secondary: '#DC2626', accent: '#FCA5A5' }, art: 'myth' },
   { id: 'slot-ocean-drift', name: 'Ocean Drift', category: 'slots', rtp: 0.9614, volatility: 'low', reels: 5, rows: 3, lines: 20, minBet: 10, maxBet: 10000, theme: { primary: '#0C4A6E', secondary: '#0EA5E9', accent: '#BAE6FD' }, art: 'pirate' },
@@ -32,7 +32,7 @@ export const SLOT_GAMES: SlotGame[] = [
   { id: 'slot-supernova', name: 'Supernova', category: 'slots', rtp: 0.9554, volatility: 'very-high', reels: 5, rows: 3, lines: 20, minBet: 20, maxBet: 50000, theme: { primary: '#1E1B4B', secondary: '#7C3AED', accent: '#F0ABFC' }, tag: 'new', art: 'orb' },
   { id: 'slot-pharaohs-vault', name: 'Pharaoh\'s Vault', category: 'slots', rtp: 0.9554, volatility: 'very-high', reels: 5, rows: 3, lines: 20, minBet: 100, maxBet: 200000, theme: { primary: '#422006', secondary: '#CA8A04', accent: '#FEF08A' }, art: 'egypt' },
   { id: 'slot-storm-chaser', name: 'Storm Chaser', category: 'slots', rtp: 0.9554, volatility: 'very-high', reels: 5, rows: 3, lines: 20, minBet: 20, maxBet: 50000, theme: { primary: '#164E63', secondary: '#06B6D4', accent: '#CFFAFE' }, art: 'myth' },
-  { id: 'slot-lucky-sevens', name: 'Lucky Sevens', category: 'slots', rtp: 0.9455, volatility: 'high', reels: 3, rows: 1, lines: 1, minBet: 10, maxBet: 10000, theme: { primary: '#7F1D1D', secondary: '#EF4444', accent: '#FFC53D' } },
-  { id: 'slot-triple-bar', name: 'Triple Bar', category: 'slots', rtp: 0.9455, volatility: 'high', reels: 3, rows: 1, lines: 1, minBet: 10, maxBet: 10000, theme: { primary: '#1C1917', secondary: '#57534E', accent: '#E6CE8C' } },
-  { id: 'slot-fruit-stand', name: 'Fruit Stand', category: 'slots', rtp: 0.9455, volatility: 'high', reels: 3, rows: 1, lines: 1, minBet: 10, maxBet: 10000, theme: { primary: '#166534', secondary: '#22C55E', accent: '#FEF08A' } },
+  { id: 'slot-lucky-sevens', name: 'Lucky Sevens', category: 'slots', rtp: 0.9455, volatility: 'high', reels: 3, rows: 1, lines: 1, minBet: 10, maxBet: 10000, theme: { primary: '#7F1D1D', secondary: '#EF4444', accent: '#FFC53D' }, art: 'fruit' },
+  { id: 'slot-triple-bar', name: 'Triple Bar', category: 'slots', rtp: 0.9455, volatility: 'high', reels: 3, rows: 1, lines: 1, minBet: 10, maxBet: 10000, theme: { primary: '#1C1917', secondary: '#57534E', accent: '#E6CE8C' }, art: 'fruit' },
+  { id: 'slot-fruit-stand', name: 'Fruit Stand', category: 'slots', rtp: 0.9455, volatility: 'high', reels: 3, rows: 1, lines: 1, minBet: 10, maxBet: 10000, theme: { primary: '#166534', secondary: '#22C55E', accent: '#FEF08A' }, art: 'fruit' },
 ];

@@ -237,11 +237,10 @@ export interface SlotDefinition {
    * here because this is the single place a game is defined; a separate mapping
    * file would drift the first time somebody added a game.
    *
-   * Absent means the vector symbols, which is right for the fruit-machine
-   * titles: dressing Lucky Sevens as ancient Egypt would be worse than leaving
-   * it plain.
+   * Absent still means the vector symbols, which remains the correct answer
+   * for anything with no family of its own.
    */
-  art?: 'egypt' | 'pirate' | 'wildwest' | 'asian' | 'jungle' | 'myth' | 'orb';
+  art?: 'egypt' | 'pirate' | 'wildwest' | 'asian' | 'jungle' | 'myth' | 'orb' | 'fruit';
 }
 
 const DEFAULT_LIMITS: BetLimits = { min: minor(20), max: minor(50_000) };
@@ -257,7 +256,7 @@ const HIGH_LIMITS: BetLimits = { min: minor(100), max: minor(200_000) };
 export const SLOT_CATALOGUE: SlotDefinition[] = [
   // ------------------------------------------------------------- low volatility
   { id: 'juwa-classic-slots', name: 'Juwa Classic', model: 'classic-20', tag: 'hot',
-    theme: { primary: '#7C3AED', secondary: '#C026D3', accent: '#FFC53D' }, limits: DEFAULT_LIMITS },
+    theme: { primary: '#7C3AED', secondary: '#C026D3', accent: '#FFC53D' }, limits: DEFAULT_LIMITS, art: 'fruit' },
   { id: 'slot-emerald-nights', name: 'Emerald Nights', model: 'classic-20',
     theme: { primary: '#065F46', secondary: '#10B981', accent: '#A7F3D0' }, limits: DEFAULT_LIMITS, art: 'jungle' },
   { id: 'slot-royal-flush', name: 'Royal Fortune', model: 'classic-20',
@@ -305,11 +304,11 @@ export const SLOT_CATALOGUE: SlotDefinition[] = [
 
   // ---------------------------------------------------------------- three reel
   { id: 'slot-lucky-sevens', name: 'Lucky Sevens', model: 'classic-3',
-    theme: { primary: '#7F1D1D', secondary: '#EF4444', accent: '#FFC53D' }, limits: LOW_LIMITS },
+    theme: { primary: '#7F1D1D', secondary: '#EF4444', accent: '#FFC53D' }, limits: LOW_LIMITS, art: 'fruit' },
   { id: 'slot-triple-bar', name: 'Triple Bar', model: 'classic-3',
-    theme: { primary: '#1C1917', secondary: '#57534E', accent: '#E6CE8C' }, limits: LOW_LIMITS },
+    theme: { primary: '#1C1917', secondary: '#57534E', accent: '#E6CE8C' }, limits: LOW_LIMITS, art: 'fruit' },
   { id: 'slot-fruit-stand', name: 'Fruit Stand', model: 'classic-3',
-    theme: { primary: '#166534', secondary: '#22C55E', accent: '#FEF08A' }, limits: LOW_LIMITS },
+    theme: { primary: '#166534', secondary: '#22C55E', accent: '#FEF08A' }, limits: LOW_LIMITS, art: 'fruit' },
 ];
 
 /** The measured return for a game, which is its model's. */

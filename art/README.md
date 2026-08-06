@@ -1,58 +1,69 @@
 # Art
 
-Generated with Gemini, then processed into what the game can actually ship.
+Generated with Gemini and ChatGPT, then processed into what the game can ship.
 
 ```
 art/
-  symbols/      40 PNG, 512x512, transparent
-  tiles/        45 JPEG, 1024x1113 (the 0.92 aspect the lobby renders)
-  backgrounds/   3 JPEG, 1536x1024
+  symbols/      45 PNG, 512x512, transparent
+  tiles/        23 JPEG named by game + 35 spare in tiles/unassigned
+  backgrounds/  12 JPEG, 1536x1024
+  ui/            9 — five transparent PNG, four black-background JPEG
 ```
 
-`npm run check:art art` validates the lot.
+`npm run check:art art` validates the symbols and UI.
 
-## What was done to the delivered files
+## The one fault that keeps recurring
 
-**466 MB became 15 MB.** Exports were 2048–2816px and up to 8 MB each; a slot
-symbol is drawn at about 90 CSS pixels, so 512 is already twice what a retina
-screen resolves. GitHub refused the upload at full size, and so would a phone
-on mobile data.
+Across three drops, **the generator paints the transparency checkerboard into
+the pixels**. On a dark reel that is a grey checked box.
 
-**Eleven symbols had no transparency.** The generator painted the transparency
-checkerboard into the pixels — on a dark reel those would have appeared as grey
-checked boxes. Recovered by flood-filling the background inward from the edges,
-which leaves interior whites alone: several subjects are largely white, and a
-global colour match would have punched holes through them.
+- Drop 1: 11 of 30 symbols. Ten recovered by flood-filling from the frame
+  edges, two beyond recovery.
+- Drop 2: 4 of 9 UI assets, all unrecoverable — see below.
+- Drop 3: 5 of 5 Gemini fruit symbols. The 5 ChatGPT ones were correct, so
+  those were used and the Gemini set discarded.
 
-**Two files could not be recovered** and were dropped: the checkerboard covered
-nearly the whole frame, leaving nothing to isolate.
+**Hard edges can be rescued; soft glows cannot.** A glow is semi-transparent,
+so the checkerboard shows through it, tinted. What was behind the glow is gone.
 
-**Symbol sizes were normalised by area, not by longest edge.** A wide subject
-scaled so its width matches a tall one still reads as smaller, because the eye
-judges overall mass.
+**Therefore glows are generated on solid black**, not transparency, and
+composited additively — black contributes nothing under a screen blend. The
+four re-done UI assets use this and are stored as JPEG, since they have no
+alpha to preserve.
 
-**Disconnected specks are discarded before measuring.** Background removal left
-faint debris near the frame edges, and a speck 1000px from the subject stretched
-its bounding box across the whole image — which told the normaliser that a small
-monkey was already the largest thing in the set, and shrank everything else to
-match it.
+## Gemini stamps a badge on its output
 
-**One tile was excluded for baked-in text** — it carried a game title and a
-paytable strip. Every file was OCR'd; the only other hits were ornament misread
-as letters, confirmed by eye.
+A small four-pointed star, low in the right of frame. Removed from all 15 files
+in drop 3.
+
+Detection by "brightest thing in the corner" found a coin or an ice highlight
+instead and patched the artwork. Detection by largest connected blob found
+scenery. What worked was measuring the position across all fifteen: it is a
+constant at 90.5% across, 85.8% down, so the search was abandoned in favour of
+the constant.
+
+Removal is a feathered disc filled with the median colour of the ring around
+it. Blurring was tried first and does not work — blurring a bright star leaves
+a softer bright star. The pixels have to be replaced.
+
+## Other processing
+
+- **466 MB became 20 MB.** Exports were 2048–2816px; a symbol is drawn at ~90
+  CSS pixels.
+- **Sizes normalised by area**, not longest edge — a wide subject scaled to
+  match a tall one's width still reads as smaller.
+- **Disconnected specks discarded before measuring.** A speck 1000px from the
+  subject stretched its bounding box across the frame and told the normaliser a
+  small monkey was the largest thing in the set.
+- **One tile excluded for baked-in text.** Everything is OCR-checked.
 
 ## Known gaps
 
-- **Backgrounds: 3 of 12.** The delivered `background/` folder was mostly more
-  symbols, which is where 10 of the 40 came from.
-- **The lightning bolt** keeps a faint fringe: its glow blends into the
-  checkerboard, so there is no clean edge to cut along. Worth regenerating.
-- **Filenames** are the generator's for 20 of them. Harmless — the loader maps
-  files to symbols explicitly — but unhelpful to read.
+- The **lightning bolt** keeps a faint fringe — its glow blends into the
+  checker. Regenerate it on black.
+- **35 spare tiles** in `tiles/unassigned`, for games that do not exist yet.
 
 ## Provenance
 
-AI-generated images cannot be copyrighted in the US, so ownership of these
-cannot be warranted in a sale as they stand. See `docs/09-art-brief.md`. The
-route to defensible ownership is a designer materially editing them, with the
-layered sources kept as evidence of authorship.
+AI-generated images cannot be copyrighted in the US, so ownership cannot be
+warranted in a sale as they stand. See `docs/09-art-brief.md`.
