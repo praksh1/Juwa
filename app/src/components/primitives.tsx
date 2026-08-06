@@ -8,17 +8,7 @@
  */
 
 import React from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  type StyleProp,
-  type TextStyle,
-  type ViewStyle,
-} from 'react-native';
+import { Animated, ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, layout, radius, spacing, typography } from '@juwa/ui';
 
@@ -140,14 +130,23 @@ export function Button({
 
 // --------------------------------------------------------------------- card
 
+/**
+ * Renders an `Animated.View` rather than a `View`.
+ *
+ * Animated styles are ordinary styles to a plain View — it simply ignores the
+ * animation and shows the initial value — so a card that needs to change
+ * colour cannot do it through this component unless the underlying node is
+ * animatable. Animated.View accepts static styles unchanged, so this costs
+ * nothing for the cards that never animate.
+ */
 export function Card({
   children,
   style,
 }: {
   children: React.ReactNode;
-  style?: StyleProp<ViewStyle>;
+  style?: StyleProp<ViewStyle> | Animated.WithAnimatedValue<StyleProp<ViewStyle>>;
 }) {
-  return <View style={[styles.card, style]}>{children}</View>;
+  return <Animated.View style={[styles.card, style]}>{children}</Animated.View>;
 }
 
 // ------------------------------------------------------------------- badge

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
-import { anticipatingReels, colors, radius, spacing } from '@juwa/ui';
+import { BASE_CABINET, anticipatingReels, bonusCabinet, colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
 import { betOptions, suggestedBet } from '@juwa/economy';
 import { Button, Card, Txt } from '../components/primitives';
@@ -253,6 +253,42 @@ export function SlotsScreen() {
    */
   const [reelsWidth, setReelsWidth] = useState(0);
 
+  /**
+   * The bonus-round re-theme.
+   *
+   * Free spins are the only part of a slot where the rules are different —
+   * every win multiplied, spins that cost nothing — so the machine has to say
+   * which mode it is in without the player reading anything. The whole cabinet
+   * changes colour, derived from this game's own theme rather than one
+   * hardcoded red, so Dragon's Hoard goes deep red and Frost Peak goes glacial.
+   *
+   * Crossfaded rather than switched. A hard cut looks like a rendering fault;
+   * the fade reads as the machine changing gear, and it is slow enough to be
+   * noticed at a glance and fast enough not to delay the first free spin.
+   */
+  const bonusPalette = useMemo(
+    () => (details ? bonusCabinet(details.theme) : BASE_CABINET),
+    [details],
+  );
+  const bonusMix = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(bonusMix, {
+      toValue: inFreeSpins ? 1 : 0,
+      duration: 520,
+      // Colours cannot be driven natively; this has to run on the JS thread.
+      useNativeDriver: false,
+    }).start();
+  }, [inFreeSpins, bonusMix]);
+
+  const fade = (from: string, to: string) =>
+    bonusMix.interpolate({ inputRange: [0, 1], outputRange: [from, to] });
+  const cabinetStyle = {
+    backgroundColor: fade(BASE_CABINET.background, bonusPalette.background),
+    borderColor: fade(BASE_CABINET.border, bonusPalette.border),
+    shadowColor: bonusPalette.glow,
+  };
+  const bayStyle = { backgroundColor: fade(BASE_CABINET.bay, bonusPalette.bay) };
+
   const spin = useCallback(async () => {
     if (spinning) return;
     if (bet > balance) {
@@ -447,9 +483,9 @@ export function SlotsScreen() {
         {details && paytable ? <PaytableButton game={details} model={paytable} /> : null}
       </View>
 
-      <Card style={[styles.machine, inFreeSpins && styles.machineBonus]}>
+      <Card style={[styles.machine, cabinetStyle]}>
         <Animated.View style={{ transform: [{ translateX: shake }] }}>
-        <View style={styles.reelBay}>
+        <Animated.View style={[styles.reelBay, bayStyle]}>
         <View
           style={styles.reels}
           onLayout={(e) => setReelsWidth(e.nativeEvent.layout.width)}
@@ -487,7 +523,7 @@ export function SlotsScreen() {
         {/* Coins are thrown from the centre of the reels, above the symbols
             but below anything a player can press. */}
         <CoinBurst tier={celebration.tier} round={celebration.round} />
-        </View>
+        </Animated.View>
         </Animated.View>
 
         <View style={styles.readout} accessibilityLiveRegion="polite">
@@ -628,7 +664,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     backgroundColor: '#0B1330',
   },
-  machineBonus: { borderColor: colors.neon.magenta },
   /**
    * The reel bay is recessed: darker than the cabinet, with a gold inner rule.
    * A slot machine's reels sit BEHIND glass, and that inset is most of what
