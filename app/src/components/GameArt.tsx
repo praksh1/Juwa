@@ -21,6 +21,7 @@
  */
 
 import React from 'react';
+import { Image, StyleSheet } from 'react-native';
 import Svg, {
   Circle,
   Defs,
@@ -450,6 +451,24 @@ const ART: Record<string, () => React.JSX.Element> = {
   'juwa-scratch': Scratch,
 };
 
+/**
+ * Games with a photographic tile in `art/tiles`.
+ *
+ * A hard list rather than an existence check, because the web has no way to ask
+ * "is there a file at this path" without requesting it — and a request that
+ * 404s renders as a broken tile for the length of the round trip. Wrong here
+ * shows up immediately as a missing tile in the lobby, which is the cheapest
+ * possible way to be wrong.
+ */
+const TILED = new Set([
+  'juwa-classic-slots', 'slot-emerald-nights', 'slot-royal-flush', 'slot-ocean-drift',
+  'slot-sunset-strip', 'slot-midnight-gold', 'slot-neon-alley', 'slot-desert-mirage',
+  'slot-frost-peak', 'slot-jade-temple', 'slot-carnival-row', 'slot-jungle-run',
+  'slot-city-lights', 'slot-spice-market', 'slot-aurora-borealis', 'slot-dragons-hoard',
+  'slot-vault-breaker', 'slot-supernova', 'slot-pharaohs-vault', 'slot-storm-chaser',
+  'slot-lucky-sevens', 'slot-triple-bar', 'slot-fruit-stand',
+]);
+
 export function GameArt({
   gameId,
   accent,
@@ -459,6 +478,19 @@ export function GameArt({
   accent: string;
   theme?: SlotTheme;
 }) {
+  if (TILED.has(gameId)) {
+    return (
+      <Image
+        source={{ uri: `/art/tiles/${gameId}.jpg` }}
+        style={StyleSheet.absoluteFill}
+        // `cover`: the tile was cropped to the card's exact aspect already, so
+        // this only absorbs rounding. `contain` would letterbox on a hair's
+        // difference and put grey bars down the lobby.
+        resizeMode="cover"
+      />
+    );
+  }
+
   const Drawing = ART[gameId];
   return (
     <Svg

@@ -16,7 +16,9 @@
  */
 
 import React from 'react';
+import { Image } from 'react-native';
 import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
+import { symbolImage } from '../art/symbol-art';
 
 const uid = (symbol: string, name: string) => `sym-${symbol}-${name}`;
 
@@ -274,7 +276,41 @@ const SYMBOLS: Record<string, () => React.JSX.Element> = {
 
 export const SYMBOL_NAMES = Object.keys(SYMBOLS);
 
-export function SlotSymbol({ name, size }: { name: string; size: number }) {
+/**
+ * One symbol on a reel.
+ *
+ * A themed family supplies artwork for the five picture symbols; everything
+ * else falls through to the vector drawings above. The fallback is the point,
+ * not a safety net — SEVEN, BAR, WILD and SCATTER are deliberately never
+ * re-skinned, a game with no family assigned is meant to look like a classic
+ * fruit machine, and a family delivered half-finished shows vectors for the
+ * gaps instead of holes.
+ */
+export function SlotSymbol({
+  name,
+  size,
+  family,
+}: {
+  name: string;
+  size: number;
+  family?: string;
+}) {
+  const image = symbolImage(family, name);
+  if (image) {
+    return (
+      <Image
+        source={{ uri: image }}
+        style={{ width: size, height: size }}
+        // `contain` so a wide subject keeps its proportions. `cover` would crop
+        // a tiger's face off to fill a square cell.
+        resizeMode="contain"
+        // The symbol name, not the file: a screen reader should hear what the
+        // reel landed on, not which theme is loaded.
+        accessibilityLabel={name}
+      />
+    );
+  }
+
   const Drawing = SYMBOLS[name];
   if (!Drawing) return null;
   return (

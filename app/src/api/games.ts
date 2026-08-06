@@ -34,6 +34,11 @@ export interface SlotGame {
   maxBet: number;
   theme: { primary: string; secondary: string; accent: string };
   tag?: 'new' | 'hot' | 'mega';
+  /**
+   * Artwork family for the picture symbols. Absent means the vector symbols,
+   * which is deliberate for the fruit-machine titles.
+   */
+  art?: string;
 }
 
 export interface GameSummary {

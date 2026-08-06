@@ -37,6 +37,7 @@ const entries = SLOT_CATALOGUE.map((game) => {
     maxBet: game.limits.max,
     theme: game.theme,
     ...(game.tag ? { tag: game.tag } : {}),
+    ...(game.art ? { art: game.art } : {}),
   };
 });
 

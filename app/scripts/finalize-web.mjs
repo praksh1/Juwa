@@ -9,8 +9,9 @@
  *
  *   node app/scripts/finalize-web.mjs <dist-dir>
  */
-import { readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, rmSync, cpSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 /** app/, regardless of the working directory the build ran from. */
@@ -152,6 +153,33 @@ if (existsSync(staleRedirects)) {
 }
 
 console.log('wrote _headers so cache and security rules are not tied to one host');
+
+// -------------------------------------------------------------------- art
+
+/**
+ * Copy the art into the build.
+ *
+ * It lives at the repository root rather than in `app/public/` so there is ONE
+ * copy in version control. Committing it twice would put 14MB of binaries in
+ * the history twice over, and the two copies would drift the first time
+ * somebody replaced a symbol in the wrong place.
+ *
+ * Absent is not an error: a clone without art still builds and runs, falling
+ * back to the vector symbols. That is what keeps the game working while art is
+ * arriving family by family.
+ */
+const artSource = resolve(appRoot, '..', 'art');
+if (existsSync(artSource)) {
+  cpSync(artSource, resolve(dist, 'art'), { recursive: true });
+  const count = (dir) =>
+    readdirSync(dir, { withFileTypes: true }).reduce(
+      (n, e) => n + (e.isDirectory() ? count(resolve(dir, e.name)) : 1),
+      0,
+    );
+  console.log(`copied ${count(artSource)} art files into the build`);
+} else {
+  console.log('no art/ directory — the build will use vector symbols');
+}
 
 // ------------------------------------------------------- configuration check
 

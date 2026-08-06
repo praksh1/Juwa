@@ -421,6 +421,7 @@ export function SlotsScreen() {
               landDuration={schedule[i]?.duration ?? 1}
               result={grid[i] ?? IDLE_GRID[i]!}
               winningRows={winningRows}
+              {...(details?.art ? { family: details.art } : {})}
               // Dimming needs something to contrast AGAINST. A scatter win
               // pays from anywhere on the grid and produces no winning line,
               // so dimming on payout alone turned the whole machine dark and

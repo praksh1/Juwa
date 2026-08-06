@@ -82,6 +82,13 @@ export interface ReelProps {
   /** Rows that form part of a winning line, for the highlight. */
   winningRows?: number[];
   /**
+   * Theme family supplying artwork for the picture symbols.
+   *
+   * Optional, and absent is a real answer: the classic fruit-machine games have
+   * no family and are meant to keep the vector symbols.
+   */
+  family?: string;
+  /**
    * True once a win is being celebrated. Losing symbols dim so the winning
    * ones stand out — showing what DIDN'T pay at full strength is why players
    * miss small wins entirely on a busy grid.
@@ -107,6 +114,7 @@ export function Reel({
   winningRows = [],
   celebrating = false,
   round = 0,
+  family,
   onLanded,
 }: ReelProps) {
   const offset = useRef(new Animated.Value(0)).current;
@@ -207,6 +215,7 @@ export function Reel({
               <SlotSymbol
                 name={symbol}
                 size={onWinningLine ? SYMBOL_SIZE - 4 : SYMBOL_SIZE - 12}
+                {...(family ? { family } : {})}
               />
             </View>
           );
