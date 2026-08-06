@@ -28,7 +28,7 @@
 import React, { useCallback, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { colors, radius, spacing } from '@juwa/ui';
-import type { SlotGame, SlotModelInfo } from '../api/games';
+import { scatterTrigger, type SlotGame, type SlotModelInfo } from '../api/games';
 import { SlotSymbol } from './SlotSymbol';
 import { Txt } from './primitives';
 
@@ -65,14 +65,6 @@ export function dismissRules(gameId: string): void {
 /** Highest-paying first. A paytable in engine order is a paytable nobody reads. */
 function byValue(model: SlotModelInfo) {
   return [...model.symbols].sort((a, b) => (b.pays['5'] || b.pays['3']) - (a.pays['5'] || a.pays['3']));
-}
-
-function scatterTrigger(model: SlotModelInfo): { count: number; spins: number } | null {
-  const entries = Object.entries(model.freeSpinsAwarded)
-    .map(([count, spins]) => ({ count: Number(count), spins: Number(spins) }))
-    .filter((e) => e.spins > 0)
-    .sort((a, b) => a.count - b.count);
-  return entries[0] ?? null;
 }
 
 // ---------------------------------------------------------------- paytable

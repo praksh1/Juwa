@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
 import { colors, radius } from '@juwa/ui';
 import { SlotSymbol } from './SlotSymbol';
@@ -105,6 +105,18 @@ export interface ReelProps {
    * miss small wins entirely on a busy grid.
    */
   celebrating?: boolean;
+  /**
+   * This reel could still complete the bonus, and is being made to say so.
+   *
+   * Set on every reel that has not yet stopped once enough scatters are
+   * already showing for one more to trigger the round. It is the moment a slot
+   * machine is actually about — the player can see it coming — and a reel that
+   * stops on schedule with no signal throws it away.
+   *
+   * The glow runs only while this reel is still moving, so it travels across
+   * the machine reel by reel rather than lighting the whole grid at once.
+   */
+  anticipating?: boolean;
   /** Increments once per spin, so each spin is a distinct animation. */
   round?: number;
   /** Fires when this reel physically stops. */
@@ -123,6 +135,7 @@ export function Reel({
   landFrom = 0,
   landDuration = 1,
   litCells,
+  anticipating = false,
   celebrating = false,
   round = 0,
   family,
@@ -132,6 +145,17 @@ export function Reel({
   const loopFiller = useRef<string[]>(randomFiller(LOOP_SYMBOLS)).current;
   const landingFiller = useRef<string[]>(randomFiller(LANDING_FILLER)).current;
 
+  /**
+   * Whether this reel is still in motion.
+   *
+   * Not the same as `phase`: during `landing` every reel is in the landing
+   * phase, but they stop one after another. The glow has to follow the reel
+   * that is actually still spinning, so it is cleared by this reel's own stop
+   * rather than by the machine's phase.
+   */
+  const [moving, setMoving] = useState(phase !== 'idle');
+  const glow = useRef(new Animated.Value(0)).current;
+
   // Held in a ref: it changes identity on every parent render, and depending on
   // it would restart the animation mid-spin.
   const landedRef = useRef(onLanded);
@@ -139,6 +163,34 @@ export function Reel({
 
   const spinning = phase === 'spinning';
   const landing = phase === 'landing';
+
+  useEffect(() => {
+    if (phase !== 'idle') setMoving(true);
+  }, [phase, round]);
+
+  /**
+   * The pulse.
+   *
+   * Runs only while this reel is both anticipating and moving, so it costs
+   * nothing on the overwhelming majority of spins. `useNativeDriver` keeps it
+   * off the JS thread, which matters here more than usual: the reel positions
+   * are being computed every frame in JS on the same thread, and a glow that
+   * stutters in time with the reels reads as the machine struggling.
+   */
+  useEffect(() => {
+    if (!anticipating || !moving) {
+      glow.setValue(0);
+      return;
+    }
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glow, { toValue: 1, duration: 340, useNativeDriver: true }),
+        Animated.timing(glow, { toValue: 0.35, duration: 340, useNativeDriver: true }),
+      ]),
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [anticipating, moving, glow]);
 
   // The loop strip is duplicated so translating by exactly one cycle height
   // returns an identical image, which is what makes the repeat invisible.
@@ -191,6 +243,7 @@ export function Reel({
       offset.setValue(0);
       if (!done) {
         done = true;
+        setMoving(false);
         landedRef.current?.();
       }
     };
@@ -232,6 +285,15 @@ export function Reel({
           );
         })}
       </Animated.View>
+
+      {anticipating ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.anticipation, { opacity: glow }]}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        />
+      ) : null}
     </View>
   );
 }
@@ -264,4 +326,20 @@ const styles = StyleSheet.create({
   },
   /** ~20% opacity, per the brief. Enough to read, far enough back to ignore. */
   cellDimmed: { opacity: 0.2 },
+  /**
+   * Magenta rather than cyan on purpose. The palette reserves cyan for "press
+   * this" and magenta for bonus moments, and this is precisely a bonus moment
+   * — a cyan column here would read as an invitation to tap the reel.
+   */
+  anticipation: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: radius.sm,
+    borderWidth: 2,
+    borderColor: colors.neon.magenta,
+    backgroundColor: 'rgba(255, 61, 138, 0.16)',
+    shadowColor: colors.neon.magenta,
+    shadowOpacity: 0.9,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 0 },
+  },
 });

@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
-import { colors, radius, spacing } from '@juwa/ui';
+import { anticipatingReels, colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
 import { betOptions, suggestedBet } from '@juwa/economy';
 import { Button, Card, Txt } from '../components/primitives';
 import { useRoute } from '@react-navigation/native';
 import { Reel, type ReelPhase } from '../components/Reel';
-import { slotDetails, slotPaytable } from '../api/games';
+import { scatterTrigger, slotDetails, slotPaytable } from '../api/games';
 import { sounds, spinNow, unlock } from '../sound';
 import { winTier, rollUpDuration, type WinTier } from '../motion';
 import { CoinCounter } from '../components/CoinCounter';
@@ -37,28 +37,11 @@ const FS_SPEED = 0.45;
 const BASE_LAND_SECONDS = 0.95;
 /** Gap between consecutive reels stopping. */
 const STAGGER_SECONDS = 0.27;
-/** Added to the final reel when a win is still live on it. */
-const ANTICIPATION_SECONDS = 0.7;
+/** Added to EACH reel that still has the bonus live on it. */
+const ANTICIPATION_SECONDS = 0.6;
 /** Booked slightly ahead so the audio thread receives the schedule in time. */
 const LEAD_IN_SECONDS = 0.04;
 
-/**
- * Is a win still possible once four reels have landed?
- *
- * Two scatters in the first four reels means a third anywhere on the last reel
- * triggers the bonus round. That is the moment worth stretching: the player can
- * see it coming, and a reel that simply stops on schedule throws the tension
- * away. Line wins are deliberately not included — with wilds and twenty
- * paylines almost every spin leaves something technically live, and a machine
- * that anticipates every spin has stopped anticipating anything.
- */
-function shouldAnticipate(grid: string[][]): boolean {
-  let scatters = 0;
-  for (const column of grid.slice(0, grid.length - 1)) {
-    for (const symbol of column) if (symbol === 'SCATTER') scatters++;
-  }
-  return scatters >= 2;
-}
 
 /** What the machine shows before the first spin. */
 function idleGrid(reels: number, rows: number): string[][] {
@@ -93,6 +76,11 @@ export function SlotsScreen() {
   const gameId = route.name;
   const details = slotDetails(gameId);
   const paytable = slotPaytable(gameId);
+  /**
+   * How many scatters this game needs. Zero when it has no bonus round, which
+   * switches anticipation off entirely rather than guessing a threshold.
+   */
+  const scatterTriggerCount = paytable ? (scatterTrigger(paytable)?.count ?? 0) : 0;
   /**
    * The rules card, shown once per game unless dismissed for good.
    *
@@ -155,6 +143,8 @@ export function SlotsScreen() {
    * reels, so every reel and every stop sound refers to one timeline.
    */
   const [schedule, setSchedule] = useState<{ from: number; duration: number }[]>([]);
+  /** Which reels are lit for the bonus on the spin currently animating. */
+  const [anticipating, setAnticipating] = useState<boolean[]>([]);
   /**
    * Resolved by the LAST reel's own stop callback. This is the handshake that
    * keeps the sound and the readout tied to what is actually on screen.
@@ -311,26 +301,31 @@ export function SlotsScreen() {
         // without it the first stop can be requested for a moment that has
         // already passed and fires late.
         const t0 = spinNow() + LEAD_IN_SECONDS;
-        const anticipate = shouldAnticipate(next);
+        const anticipate = anticipatingReels(next, scatterTriggerCount);
 
+        // Each anticipating reel adds to every reel after it, so the delay
+        // accumulates and the machine visibly slows the closer it gets. A flat
+        // extra on each would keep the gaps identical, which is a pause rather
+        // than a build.
+        let held = 0;
         const plan = Array.from({ length: REELS }, (_, i) => {
+          if (anticipate[i]) held += ANTICIPATION_SECONDS;
           const base = (BASE_LAND_SECONDS + i * STAGGER_SECONDS) * speedScale;
-          // The last reel runs long when a win is still live, so the pause
-          // before it lands is the tension rather than an accident of timing.
-          const extra = anticipate && i === REELS - 1 ? ANTICIPATION_SECONDS : 0;
-          return { from: t0, duration: base + extra };
+          return { from: t0, duration: base + held };
         });
 
         for (const [i, reel] of plan.entries()) {
           sounds.reelStopAt(i, reel.from + reel.duration);
-        }
-        if (anticipate) {
-          const fourth = plan[REELS - 2]!;
-          const last = plan[REELS - 1]!;
-          const from = fourth.from + fourth.duration;
-          sounds.tensionAt(from, last.from + last.duration - from);
+          // The rising tone runs through the gap this reel's hold created,
+          // from the moment the previous reel stopped until this one does.
+          if (anticipate[i] && i > 0) {
+            const previous = plan[i - 1]!;
+            const from = previous.from + previous.duration;
+            sounds.tensionAt(from, reel.from + reel.duration - from);
+          }
         }
 
+        setAnticipating(anticipate);
         setSchedule(plan);
         setGrid(next);
         setReelRound((n) => n + 1);
@@ -470,6 +465,7 @@ export function SlotsScreen() {
               landDuration={schedule[i]?.duration ?? 1}
               result={grid[i] ?? IDLE_GRID[i]!}
               litCells={lit}
+              anticipating={anticipating[i] ?? false}
               {...(details?.art ? { family: details.art } : {})}
               // Dimming needs something to contrast AGAINST. A scatter win
               // pays from anywhere on the grid and produces no winning line,

@@ -261,6 +261,23 @@ export function slotPaytable(id: string): SlotModelInfo | undefined {
 }
 
 /**
+ * The cheapest scatter combination that awards free spins, or null if the game
+ * has no bonus round at all — which the three-reel classics do not.
+ *
+ * Shared by the rules card, which announces it, and the reels, which light up
+ * when one more scatter would reach it. Those two must agree: a machine that
+ * builds tension at a threshold different from the one it advertised is a
+ * machine a player learns not to believe.
+ */
+export function scatterTrigger(model: SlotModelInfo): { count: number; spins: number } | null {
+  const tiers = Object.entries(model.freeSpinsAwarded)
+    .map(([count, spins]) => ({ count: Number(count), spins: Number(spins) }))
+    .filter((tier) => tier.spins > 0)
+    .sort((a, b) => a.count - b.count);
+  return tiers[0] ?? null;
+}
+
+/**
  * Games with a shipped renderer.
  *
  * Every slot in the catalogue is playable: they share one screen driven by the
