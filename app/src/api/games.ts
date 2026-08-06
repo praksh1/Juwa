@@ -17,7 +17,7 @@
  * In Phase 3 this becomes a `fetch` against the API — the shape stays the same.
  */
 
-import { SLOT_GAMES } from './slot-games.generated';
+import { SLOT_GAMES, SLOT_MODEL_INFO } from './slot-games.generated';
 
 export type GameCategory = 'slots' | 'table' | 'live' | 'instant' | 'poker';
 
@@ -39,6 +39,41 @@ export interface SlotGame {
    * which is deliberate for the fruit-machine titles.
    */
   art?: string;
+  /** Which shared maths model this theme runs on. Keys `SLOT_MODEL_INFO`. */
+  model: string;
+}
+
+/**
+ * A model's paytable, for the rules screen and the in-game paytable.
+ *
+ * Attached to the MODEL rather than the game: twenty-three themes share five
+ * pieces of maths, so there are five paytables. A copy per game would be
+ * twenty-three places for five facts to disagree.
+ *
+ * ⚠️ THE TWO NUMBERS ARE IN DIFFERENT UNITS, which is not a quirk of ours —
+ * it is how slots work, and getting it wrong misstates every payout on screen.
+ *
+ *   `symbols[].pays` is a multiple of the LINE bet. The engine divides the sum
+ *   of line wins by the payline count, so 12 on a 20-line game returns 0.6× the
+ *   total stake.
+ *
+ *   `scatterPays` is a multiple of the TOTAL bet. Scatters pay from anywhere on
+ *   the grid and belong to no line.
+ */
+export interface SlotModelInfo {
+  id: string;
+  lines: number;
+  symbols: {
+    id: string;
+    kind: 'normal' | 'wild' | 'scatter';
+    pays: Record<'3' | '4' | '5', number>;
+  }[];
+  /** Total-bet multiple, by how many scatters landed. */
+  scatterPays: Record<string, number>;
+  /** Free spins awarded, by how many scatters landed. */
+  freeSpinsAwarded: Record<string, number>;
+  /** Every win during the bonus round is multiplied by this. */
+  freeSpinMultiplier: number;
 }
 
 export interface GameSummary {
@@ -217,6 +252,12 @@ export const GAMES: GameSummary[] = [...SLOT_SUMMARIES, ...OTHER_GAMES];
 /** Theme and reel geometry for a slot, or undefined for a non-slot. */
 export function slotDetails(id: string): SlotGame | undefined {
   return SLOT_GAMES.find((game) => game.id === id);
+}
+
+/** The paytable behind a game, or undefined for a non-slot. */
+export function slotPaytable(id: string): SlotModelInfo | undefined {
+  const game = slotDetails(id);
+  return game ? SLOT_MODEL_INFO[game.model] : undefined;
 }
 
 /**

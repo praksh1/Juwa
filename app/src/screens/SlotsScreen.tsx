@@ -6,11 +6,16 @@ import { betOptions, suggestedBet } from '@juwa/economy';
 import { Button, Card, Txt } from '../components/primitives';
 import { useRoute } from '@react-navigation/native';
 import { Reel, type ReelPhase } from '../components/Reel';
-import { slotDetails } from '../api/games';
+import { slotDetails, slotPaytable } from '../api/games';
 import { sounds, spinNow, unlock } from '../sound';
 import { winTier, rollUpDuration, type WinTier } from '../motion';
 import { CoinCounter } from '../components/CoinCounter';
 import { CoinBurst } from '../components/CoinBurst';
+import {
+  PaytableButton,
+  RulesIntro,
+  rulesDismissed,
+} from '../components/GameRules';
 import { WinLines, litCells, useWinCycle } from '../components/WinLines';
 import { WinOverlay, useCabinetShake } from '../components/WinOverlay';
 import {
@@ -87,6 +92,15 @@ export function SlotsScreen() {
   const route = useRoute();
   const gameId = route.name;
   const details = slotDetails(gameId);
+  const paytable = slotPaytable(gameId);
+  /**
+   * The rules card, shown once per game unless dismissed for good.
+   *
+   * Read from storage in the initial state rather than an effect: an effect
+   * would render the machine first and drop the card over it a frame later,
+   * which reads as a glitch rather than an introduction.
+   */
+  const [showRules, setShowRules] = useState(() => !rulesDismissed(gameId));
   const MIN_BET = minor(details?.minBet ?? 20);
   const MAX_BET = minor(details?.maxBet ?? 50_000);
   /**
@@ -409,6 +423,9 @@ export function SlotsScreen() {
 
   return (
     <View style={styles.screen}>
+      {showRules && details && paytable ? (
+        <RulesIntro game={details} model={paytable} onPlay={() => setShowRules(false)} />
+      ) : null}
       <View style={styles.header}>
         <View>
           <Txt variant="caption" color={colors.text.muted}>
@@ -427,6 +444,12 @@ export function SlotsScreen() {
             RTP {((details?.rtp ?? 0.96) * 100).toFixed(2)}%
           </Txt>
         </View>
+        {/*
+          Small and beside the machine rather than a screen of its own. A player
+          wanting to know what a bell pays wants it without leaving the game;
+          a player who does not should barely notice it is there.
+        */}
+        {details && paytable ? <PaytableButton game={details} model={paytable} /> : null}
       </View>
 
       <Card style={[styles.machine, inFreeSpins && styles.machineBonus]}>

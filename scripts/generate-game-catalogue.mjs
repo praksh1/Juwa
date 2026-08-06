@@ -36,10 +36,54 @@ const entries = SLOT_CATALOGUE.map((game) => {
     minBet: game.limits.min,
     maxBet: game.limits.max,
     theme: game.theme,
+    model: game.model,
     ...(game.tag ? { tag: game.tag } : {}),
     ...(game.art ? { art: game.art } : {}),
   };
 });
+
+/**
+ * The paytables, one per MODEL rather than one per game.
+ *
+ * Twenty-three themes share five pieces of maths. Emitting a paytable per game
+ * would put five facts into twenty-three places, and the first thing to go
+ * wrong would be a reskin showing a paytable its own model does not pay.
+ *
+ * Two different units are in play and the labels below are not decoration:
+ *
+ *   Line pays are quoted PER LINE. `evaluateGrid` divides the sum of line wins
+ *   by the payline count, so a 12x line win on a 20-line game returns 0.6x the
+ *   total stake. Quoting these against the total bet would understate every
+ *   row by the line count.
+ *
+ *   Scatter pays are quoted against the TOTAL bet — they pay from anywhere on
+ *   the grid and are not attached to a line at all.
+ *
+ * `payoutScale` is folded in here rather than shown separately. It is a
+ * calibration knob on the model, not a fact about the game, and a paytable
+ * that needs the player to multiply by 0.7384 is not a paytable.
+ */
+const models = {};
+for (const [id, model] of Object.entries(SLOT_MODELS)) {
+  const scale = model.math.payoutScale ?? 1;
+  const round = (n) => Math.round(n * 100) / 100;
+  models[id] = {
+    id,
+    lines: model.math.paylines.length,
+    symbols: model.math.symbols
+      .filter((s) => s.kind !== 'scatter')
+      .map((s) => ({
+        id: s.id,
+        kind: s.kind,
+        pays: { 3: round(s.pays[3] * scale), 4: round(s.pays[4] * scale), 5: round(s.pays[5] * scale) },
+      })),
+    scatterPays: Object.fromEntries(
+      Object.entries(model.math.scatterPays).map(([n, v]) => [n, round(v * scale)]),
+    ),
+    freeSpinsAwarded: { ...model.math.freeSpinsAwarded },
+    freeSpinMultiplier: model.math.freeSpinMultiplier,
+  };
+}
 
 const field = (k, v) =>
   `${k}: ${typeof v === 'string' ? `'${v.replace(/'/g, "\\'")}'` : v}`;
@@ -66,11 +110,15 @@ const output = `/**
  * lobby's copy of what the server can actually deal.
  */
 
-import type { SlotGame } from './games';
+import type { SlotGame, SlotModelInfo } from './games';
 
 export const SLOT_GAMES: SlotGame[] = [
 ${body}
 ];
+
+/** Paytables by model id. See the note in the generator about the two units. */
+export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = ${JSON.stringify(models, null, 2)
+  .replace(/^/gm, '')};
 `;
 
 const target = resolve(root, 'app/src/api/slot-games.generated.ts');

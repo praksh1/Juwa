@@ -23,6 +23,7 @@
 
 import { getAccessToken } from './auth';
 import { SLOT_GAMES } from './slot-games.generated';
+import { slotPaytable } from './games';
 
 export type RoundStatus = 'awaiting-action' | 'settled';
 
@@ -485,6 +486,7 @@ export class DemoPlayApi implements PlayApi {
     // would let the win-line overlay look finished while every bent line it
     // will meet in production went untested.
     const demoLines = demoPaylines(reels, rows);
+    const paytable = slotPaytable(request.gameId);
     const lineWins: LineWin[] = [];
     for (const [lineIndex, line] of demoLines.entries()) {
       const symbols = line.map((row, reel) => grid[reel]![row]!);
@@ -494,10 +496,23 @@ export class DemoPlayApi implements PlayApi {
       if (count >= 3) {
         const cells: [number, number][] = [];
         for (let reel = 0; reel < count; reel++) cells.push([reel, line[reel]!]);
-        lineWins.push({ line: lineIndex, symbol: first, count, multiplier: count * 4, cells });
+        // The REAL per-line payout for this symbol, not an invented one.
+        //
+        // The grid is still fabricated and the frequencies are nothing like
+        // the certified model — but now that the app carries the paytable for
+        // the rules screen, paying `count * 4` would put a demo that visibly
+        // contradicts the paytable printed two taps away on the same screen.
+        // A player cannot tell "the demo's odds are fake" from "the paytable
+        // is wrong", and only one of those is true.
+        const pays = paytable?.symbols.find((sym) => sym.id === first)?.pays;
+        const multiplier = pays?.[String(Math.min(count, 5)) as '3' | '4' | '5'] ?? count * 4;
+        lineWins.push({ line: lineIndex, symbol: first, count, multiplier, cells });
       }
     }
-    const baseMultiplier = lineWins.reduce((sum, w) => sum + w.multiplier, 0) / 20;
+    // Divided by the game's own payline count, exactly as the engine does —
+    // line wins are quoted per line.
+    const lineCount = paytable?.lines ?? demoLines.length;
+    const baseMultiplier = lineWins.reduce((sum, w) => sum + w.multiplier, 0) / lineCount;
 
     /**
      * The bonus round, occasionally.
