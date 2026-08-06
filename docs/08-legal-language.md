@@ -249,6 +249,23 @@ Even without an app store, others get a say:
 
 Take this list. It is roughly an hour's worth.
 
+### ⚠️ Ask question 0 first — it is worth more than the rest combined
+
+> **Between 2025 and 2026, fourteen US states banned sweepstakes casinos.**
+> Juwa has no redemption — `assertRedeemable` in `@juwa/money` refuses to
+> convert coins into anything — so those statutes were written for a model it
+> does not operate. **Does that hold?** Some of the bills are drafted broadly.
+> If a free-to-play social casino with purchasable coins falls inside any of
+> them, that is a product change, and it is far cheaper to hear it now.
+
+The fourteen are listed, dated and cited in `SWEEPSTAKES_RESTRICTED_STATES`
+(`packages/economy/src/jurisdictions.ts`), already wired to switch on by itself
+if redemption is ever enabled. California and New York are among them — about a
+fifth of the US population — so this is not a detail to defer.
+
+The rest of the list assumes the answer to question 0 is "yes, you are outside
+them".
+
 1. Is 18 the right minimum age for the markets I am targeting, and is
    self-declared date of birth sufficient, or do I need verification?
 2. Which jurisdictions am I exposed to, given I sell worldwide over the web —

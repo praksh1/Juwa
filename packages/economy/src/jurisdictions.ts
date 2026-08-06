@@ -1,3 +1,5 @@
+import { CURRENCIES } from '@juwa/money';
+
 /**
  * Where Juwa 3.0 will and will not open an account.
  *
@@ -95,12 +97,77 @@ export const US_STATES: Jurisdiction[] = [
  */
 export const RESTRICTED_STATES: readonly string[] = ['WA', 'ID', 'NV', 'MI', 'MT'];
 
+/**
+ * The wider list that applies the moment coins become redeemable.
+ *
+ * ⚠️ NOT IN FORCE TODAY, AND THAT IS NOT AN OVERSIGHT. Juwa is a social
+ * casino: `assertRedeemable` in @juwa/money refuses to convert Gold Coins into
+ * anything, so there is no prize, no redemption, and none of the statutes
+ * below reach the product as it stands.
+ *
+ * They reach it the instant that changes. Every one of these was written for
+ * the SWEEPSTAKES model — dual currency, where a "free" coin can be turned
+ * back into money — and adding redemption is precisely the move that converts
+ * Juwa from the first thing into the second. Between 2025 and 2026 eleven
+ * states banned that model outright:
+ *
+ *   CA  AB 831, signed 11 October 2025, in force 1 January 2026
+ *   CT  in force February 2026
+ *   OK  SB 1589, passed over a veto, in force 1 November 2026
+ *   LA  dedicated statute signed May 2026, replacing AG enforcement
+ *   TN  dedicated statute signed May 2026, replacing AG enforcement
+ *   IN, ME, MT, NV, NJ, NY  statutory bans enacted across 2025–26
+ *
+ * and three more already enforced older gambling law against operators:
+ *
+ *   ID, MI, WA
+ *
+ * California and New York alone are roughly a fifth of the US population, so
+ * this is not a rounding error on a business plan.
+ *
+ * WHY IT IS HERE AT ALL, UNUSED. A buyer's first question about a social
+ * casino is what it costs to turn on redemption. Answering "the state list is
+ * already written and switches itself on" is a better answer than a promise,
+ * and it means nobody has to rediscover this research under deadline. The list
+ * is a strict superset of `RESTRICTED_STATES`, so switching modes only ever
+ * closes states, never opens one.
+ *
+ * ⚠️ MOVING TARGET. Bills were still being signed when this was written.
+ * Anyone enabling redemption must have a lawyer re-check the list on the day,
+ * not trust this comment.
+ */
+export const SWEEPSTAKES_RESTRICTED_STATES: readonly string[] = [
+  'CA', 'CT', 'ID', 'IN', 'LA', 'ME', 'MI', 'MT', 'NJ', 'NV', 'NY', 'OK', 'TN', 'WA',
+];
+
+/**
+ * Whether any currency can be turned back into money.
+ *
+ * The switch is derived from the currency table rather than kept as a separate
+ * flag, so it cannot be forgotten. Somebody enabling redemption edits one
+ * boolean in @juwa/money; the registration gate widens by itself, in the same
+ * commit, without anyone remembering that these two facts are connected.
+ */
+export function redemptionEnabled(): boolean {
+  return Object.values(CURRENCIES).some((currency) => currency.redeemable);
+}
+
+/**
+ * The states that actually block registration right now.
+ *
+ * Takes the redemption state as an argument so the widened behaviour can be
+ * tested without a build that really pays money out.
+ */
+export function restrictedStates(redeemable = redemptionEnabled()): readonly string[] {
+  return redeemable ? SWEEPSTAKES_RESTRICTED_STATES : RESTRICTED_STATES;
+}
+
 /** The only country we currently accept. */
 export const SUPPORTED_COUNTRIES: readonly string[] = ['US'];
 
 export function isRestrictedState(code: string | null | undefined): boolean {
   if (!code) return false;
-  return RESTRICTED_STATES.includes(code.toUpperCase());
+  return restrictedStates().includes(code.toUpperCase());
 }
 
 export function isKnownState(code: string | null | undefined): boolean {
