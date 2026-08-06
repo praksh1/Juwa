@@ -469,6 +469,17 @@ const TILED = new Set([
   'slot-lucky-sevens', 'slot-triple-bar', 'slot-fruit-stand',
 ]);
 
+/**
+ * Whether this game has photographic tile artwork.
+ *
+ * The generated tiles were drawn with an empty ornamental plaque across the
+ * top, waiting for the title. The vector fallbacks have no such plaque, so the
+ * card has to know which it is looking at before deciding where to put the name.
+ */
+export function hasTileArt(gameId: string): boolean {
+  return TILED.has(gameId);
+}
+
 export function GameArt({
   gameId,
   accent,

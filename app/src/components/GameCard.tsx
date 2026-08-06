@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, shadows, spacing, typography } from '@juwa/ui';
 import { Badge, Txt } from './primitives';
+import { hasTileArt } from './GameArt';
 import { GameArt } from './GameArt';
 import { slotDetails, type GameSummary } from '../api/games';
 
@@ -30,6 +31,8 @@ export function GameCard({
   playable: boolean;
   onPress: (game: GameSummary) => void;
 }) {
+  // Only the photographic tiles carry a painted banner to write into.
+  const plaque = hasTileArt(game.id);
   return (
     <Pressable
       onPress={() => onPress(game)}
@@ -50,12 +53,40 @@ export function GameCard({
 
         {/* The name sits over the art, so it needs the art dimmed underneath it
             or a light drawing will swallow white text. */}
-        <LinearGradient
-          colors={['transparent', 'rgba(7, 12, 28, 0.55)', 'rgba(7, 12, 28, 0.94)']}
-          locations={[0.45, 0.72, 1]}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
+        {/* Only needed behind bottom-left white text. A tile whose name sits
+            in its own plaque should show its artwork undimmed. */}
+        {plaque ? null : (
+          <LinearGradient
+            colors={['transparent', 'rgba(7, 12, 28, 0.55)', 'rgba(7, 12, 28, 0.94)']}
+            locations={[0.45, 0.72, 1]}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+        )}
+
+        {/*
+          The title goes IN the plaque.
+
+          Every generated tile was drawn with an ornate banner across the top
+          and deliberately left empty, waiting for the name. Putting the name at
+          the bottom in plain white left that banner reading as a blank sign —
+          the tile looked unfinished in a way that is hard to name until you see
+          the two side by side.
+
+          A SIBLING OF THE OVERLAY, not a child of the badge row. Percentages
+          resolve against the nearest positioned ancestor, and nested inside the
+          row they resolved against a twenty-point strip: the text was clipped
+          to about two pixels and the plaque stayed as empty as before.
+
+          Dark text, because the plaque is light gold and white on it vanishes.
+        */}
+        {plaque ? (
+          <View style={styles.plaque} pointerEvents="none">
+            <Txt variant="caption" numberOfLines={1} style={styles.plaqueText}>
+              {game.name}
+            </Txt>
+          </View>
+        ) : null}
 
         <View style={styles.overlay}>
           <View style={styles.topRow}>
@@ -70,9 +101,13 @@ export function GameCard({
             </View>
           ) : null}
 
-          <Txt variant="bodySmall" numberOfLines={1} style={styles.name}>
-            {game.name}
-          </Txt>
+          {plaque ? (
+            <View />
+          ) : (
+            <Txt variant="bodySmall" numberOfLines={1} style={styles.name}>
+              {game.name}
+            </Txt>
+          )}
         </View>
       </View>
     </Pressable>
@@ -100,6 +135,33 @@ const styles = StyleSheet.create({
   topRow: {
     flexDirection: 'row',
     justifyContent: 'flex-start',
+    // Clear of the plaque. The badge used to sit in the top-left corner, which
+    // is exactly where the banner is, so "HOT" landed on top of "Juwa Classic".
+    marginTop: '20%',
+  },
+  /**
+   * Sits over the painted banner rather than drawing one.
+   *
+   * Positioned as a fraction of the card so it tracks the artwork at any tile
+   * size — the banner is part of the image, so a fixed offset would drift off
+   * it on a wider phone.
+   */
+  plaque: {
+    position: 'absolute',
+    left: '13%',
+    right: '13%',
+    // The banners sit between roughly 2% and 25% down depending on the tile;
+    // this band overlaps all of them.
+    top: '6%',
+    height: '12%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  plaqueText: {
+    fontWeight: '800',
+    color: '#3A2A08',
+    letterSpacing: 0.2,
+    textAlign: 'center',
   },
   soon: {
     alignSelf: 'center',

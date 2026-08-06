@@ -53,6 +53,21 @@ export const REEL_GAP = spacing.xs;
 const TOTAL_HOLD_MS = 1500;
 /** How long each individual line is held during the walk. */
 const LINE_HOLD_MS = 1100;
+/**
+ * How many times the walk repeats before it settles.
+ *
+ * It used to loop until the next spin, which reads as a machine stuck in a
+ * flashing state rather than one explaining a win — the flashing outlasts any
+ * interest in it, and on a big win, which is when the player is looking
+ * hardest, it is the thing that never stops. Three passes is long enough to
+ * read a five-line win twice over and short enough to end while it is still
+ * saying something.
+ *
+ * The final state is not blank: the walk ends back on the TOTAL, so the
+ * winning symbols stay lit and the amount stays on screen until the next spin.
+ * Nothing is lost, it just stops moving.
+ */
+const WALK_REPEATS = 3;
 
 export type WinPhase =
   | { kind: 'idle' }
@@ -88,9 +103,15 @@ export function useWinCycle(wins: LineWin[], enabled: boolean): WinPhase {
     if (wins.length < 2) return;
 
     let index = 0;
+    const steps = wins.length * WALK_REPEATS;
     let timer: ReturnType<typeof setTimeout>;
     const step = () => {
       if (generation.current !== mine) return;
+      if (index >= steps) {
+        // Settle on the total: every winning line lit, nothing animating.
+        setPhase({ kind: 'total' });
+        return;
+      }
       setPhase({ kind: 'line', index: index % wins.length });
       index += 1;
       timer = setTimeout(step, LINE_HOLD_MS);

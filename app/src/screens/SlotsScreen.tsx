@@ -272,19 +272,19 @@ export function SlotsScreen() {
   const symbolSize = useMemo(() => {
     // Everything above and below the reels: header, readout, chips, button and
     // tab bar. Taken from the portrait layout rather than guessed.
-    // MEASURED, not estimated, and re-measured three times. At 320 points tall
-    // the header, readout, card padding, bet chips and spin button come to
-    // about 258 whatever the reels do. A first guess of 190 left the spin
-    // button 46 points below the fold — freeing height simply grew the reels
-    // into it — and 245 still left 9.
+    // MEASURED. In portrait the header, readout, chips and spin button sit
+    // above and below the reels and come to about 300.
     //
-    // 20 points is a small symbol and it is the right trade: a landscape player
-    // who can see the reels and the button beats one who can see neither.
-    const chrome = compact ? 258 : 300;
+    // In landscape the chips and button move BESIDE the machine, so only the
+    // navigation header, the card padding and the readout are spending height
+    // — about 120. That is the whole reason for the side-by-side layout: at 258
+    // the symbols had to shrink to 20 points to fit, which was playable and
+    // did not look like a slot machine.
+    const chrome = compact ? 120 : 300;
     const ideal = Math.floor((viewportHeight - chrome) / ROWS);
     // Never larger than the design size, and never so small the artwork stops
     // reading — below about 26 points a symbol is a coloured smudge.
-    return Math.max(compact ? 20 : 26, Math.min(SYMBOL_SIZE, ideal));
+    return Math.max(26, Math.min(SYMBOL_SIZE, ideal));
   }, [viewportHeight, ROWS, compact]);
 
   /**
@@ -517,6 +517,16 @@ export function SlotsScreen() {
         {details && paytable ? <PaytableButton game={details} model={paytable} /> : null}
       </View>
 
+      {/*
+        Side by side when height is scarce.
+
+        A phone in landscape has width to spare and almost no height, so
+        stacking the controls under the machine spends the one scarce dimension
+        on the one that is abundant. Putting them beside it hands the full
+        height back to the reels — symbols go from 20 points to over 60, which
+        is the difference between "playable" and "looks like a slot machine".
+      */}
+      <View style={compact ? styles.landscapeRow : undefined}>
       <Card style={[styles.machine, compact && styles.machineCompact, cabinetStyle]}>
         <Animated.View style={{ transform: [{ translateX: shake }] }}>
         <Animated.View style={[styles.reelBay, compact && styles.reelBayCompact, bayStyle]}>
@@ -633,6 +643,7 @@ export function SlotsScreen() {
         />
       </Card>
 
+      <View style={compact ? styles.controlsColumn : undefined}>
       <View style={styles.betRow}>
         {options.map((option) => {
           const active = option === bet;
@@ -668,6 +679,8 @@ export function SlotsScreen() {
         loading={spinning}
         style={[styles.spin, compact && styles.spinCompact]}
       />
+      </View>
+      </View>
 
       <Txt variant="caption" color={colors.text.muted} style={styles.fairness}>
         {USE_DEMO_API
@@ -701,7 +714,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.surface.border,
   },
-  machineCompact: { gap: spacing.xs, padding: spacing.sm },
+  machineCompact: { gap: spacing.xs, padding: spacing.sm, flex: 1 },
+  landscapeRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
+  // Wide enough for "10,000 GC" on a chip without wrapping to three lines.
+  controlsColumn: { width: 190, gap: spacing.sm, justifyContent: 'center' },
   machine: {
     gap: spacing.md,
     overflow: 'hidden',
