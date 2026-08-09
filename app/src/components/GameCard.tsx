@@ -1,9 +1,10 @@
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { colors, radius, shadows, spacing, typography } from '@juwa/ui';
+import { colors, radius, shadows, spacing, titleMetal, typography } from '@juwa/ui';
 import { Badge, Txt } from './primitives';
 import { hasTileArt } from './GameArt';
+import { TileTitle } from './TileTitle';
 import { TILE_BANNERS } from '../api/tile-banners.generated';
 import { GameArt } from './GameArt';
 import { slotDetails, type GameSummary } from '../api/games';
@@ -35,20 +36,26 @@ export function GameCard({
   // Only the photographic tiles carry a painted banner to write into.
   const banner = hasTileArt(game.id) ? TILE_BANNERS[game.id] : undefined;
   /**
-   * The band the title is drawn in, centred on the measured banner.
+   * Where the name goes, and what it is written in.
    *
-   * The detector reports a tight band; text needs a little more room than the
-   * flattest few rows of a sign, so this centres a slightly taller box on it
-   * rather than using the measured height directly.
+   * `banner` means the artwork has a real blank sign and the name is set into
+   * it, undimmed, with the metal chosen from the tile's own measured colour.
+   *
+   * `plate` means it does not. Four tiles are painted edge to edge — a carved
+   * frieze under a panther's headdress, a Vegas skyline, a temple in full sun,
+   * an open fire — and squeezing a name into the least busy strip of a painting
+   * is what made those titles look dropped on by accident rather than designed
+   * in. Those get a plate of their own along the bottom, which is honest about
+   * being a label and always legible.
    */
   const plaque = banner
     ? {
-        top: `${Math.max(0, (banner.top + banner.height / 2) * 100 - 5.5)}%` as const,
-        // Dark type on a bright plaque, light on a dark one, decided from the
-        // banner's own measured luminance rather than assumed. Several of the
-        // tiles have blue or bronze banners where black text disappears.
-        color: banner.luminance > 0.55 ? '#2E1F04' : '#FFE8A3',
-        shadow: banner.luminance > 0.55 ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.85)',
+        placement: banner.placement,
+        // The detector reports a tight band; text needs a little more room than
+        // the flattest few rows of a sign, so the box is centred on the band
+        // rather than being the band.
+        top: `${Math.max(0, (banner.top + banner.height / 2) * 100 - 5.5)}%`,
+        metal: titleMetal(banner.hue, banner.placement === 'plate' ? 0.1 : banner.luminance),
       }
     : undefined;
   return (
@@ -73,7 +80,7 @@ export function GameCard({
             or a light drawing will swallow white text. */}
         {/* Only needed behind bottom-left white text. A tile whose name sits
             in its own plaque should show its artwork undimmed. */}
-        {plaque ? null : (
+        {plaque?.placement === 'banner' ? null : (
           <LinearGradient
             colors={['transparent', 'rgba(7, 12, 28, 0.55)', 'rgba(7, 12, 28, 0.94)']}
             locations={[0.45, 0.72, 1]}
@@ -99,22 +106,22 @@ export function GameCard({
           Dark text, because the plaque is light gold and white on it vanishes.
         */}
         {plaque ? (
-          <View style={[styles.plaque, { top: plaque.top as never }]} pointerEvents="none">
-            <Txt
-              variant="bodySmall"
-              numberOfLines={1}
-              style={[
-                styles.plaqueText,
-                { color: plaque.color, textShadowColor: plaque.shadow },
-              ]}
-            >
-              {game.name}
-            </Txt>
-          </View>
+          <TileTitle
+            name={game.name}
+            metal={plaque.metal}
+            style={
+              plaque.placement === 'banner'
+                ? [styles.plaque, { top: plaque.top as never }]
+                : styles.platePlaque
+            }
+          />
         ) : null}
 
         <View style={styles.overlay}>
-          <View style={styles.topRow}>
+          {/* Pushed clear of the sign, but only when there IS one up there —
+              on a plate tile the top corner is free and a badge floating a
+              fifth of the way down looks like a mistake. */}
+          <View style={[styles.topRow, plaque?.placement === 'banner' && styles.topRowBelowSign]}>
             {game.tag ? <Badge label={game.tag} color={game.accent} /> : <View />}
           </View>
 
@@ -160,8 +167,10 @@ const styles = StyleSheet.create({
   topRow: {
     flexDirection: 'row',
     justifyContent: 'flex-start',
-    // Clear of the plaque. The badge used to sit in the top-left corner, which
-    // is exactly where the banner is, so "HOT" landed on top of "Juwa Classic".
+  },
+  // Clear of the plaque. The badge used to sit in the top-left corner, which
+  // is exactly where the banner is, so "HOT" landed on top of "Juwa Classic".
+  topRowBelowSign: {
     marginTop: '20%',
   },
   /**
@@ -171,22 +180,37 @@ const styles = StyleSheet.create({
    * size — the banner is part of the image, so a fixed offset would drift off
    * it on a wider phone.
    */
+  /**
+   * Sits over the painted banner rather than drawing one.
+   *
+   * Inset well past the ends of the signs. Every one of these banners is an
+   * ornate frame with a blank middle, and a name that runs the full width of
+   * the tile collides with the scrollwork at both ends — which is what
+   * "MIDNIGHT GOLD" and "PHARAOH'S VAULT" were doing. The inset is generous
+   * rather than tight because the signs are not all the same width, and the
+   * cost of a wide margin is a couple of points of size on the longest names
+   * only: everything shorter is limited by the height of the band, not by this.
+   */
   plaque: {
     position: 'absolute',
-    left: '11%',
-    right: '11%',
+    left: '16%',
+    right: '16%',
     height: '11%',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  plaqueText: {
-    fontWeight: '800',
-    letterSpacing: 0.3,
-    textAlign: 'center',
-    // A contrast halo rather than a drop shadow: these banners are ornate and
-    // a directional shadow reads as a printing error on top of one.
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 4,
+  /**
+   * The name's own sign, for the tiles the artist painted right to the edges.
+   *
+   * Along the bottom rather than the top, because the bottom of these four
+   * tiles is the least interesting part of each of them — the top is where the
+   * subject is, which is exactly why there was nowhere to write. It sits inside
+   * the existing bottom gradient, so it needs no slab of its own.
+   */
+  platePlaque: {
+    position: 'absolute',
+    left: '9%',
+    right: '9%',
+    bottom: '6%',
+    height: '13%',
   },
   soon: {
     alignSelf: 'center',

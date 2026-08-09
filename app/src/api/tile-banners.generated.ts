@@ -18,30 +18,40 @@ export interface TileBanner {
   height: number;
   /** 0 is black, 1 is white. Above ~0.5 the name has to be dark to be read. */
   luminance: number;
+  /** How busy the band is horizontally. Near 0 is a blank sign. */
+  rough: number;
+  /** The tile's own dominant colour, in degrees. Drives the title's metal. */
+  hue: number;
+  /**
+   * 'banner' writes the name into the painted sign at `top`.
+   * 'plate' means the artwork has no sign, so the name gets its own bar along
+   * the bottom of the tile.
+   */
+  placement: 'banner' | 'plate';
 }
 
 export const TILE_BANNERS: Record<string, TileBanner> = {
-  'juwa-classic-slots': { top: 0.0057, height: 0.1494, luminance: 0.756 },
-  'slot-aurora-borealis': { top: 0.0517, height: 0.1264, luminance: 0.575 },
-  'slot-carnival-row': { top: 0.0172, height: 0.1494, luminance: 0.476 },
-  'slot-city-lights': { top: 0.1264, height: 0.1552, luminance: 0.425 },
-  'slot-desert-mirage': { top: 0, height: 0.1494, luminance: 0.614 },
-  'slot-dragons-hoard': { top: 0.0115, height: 0.1149, luminance: 0.268 },
-  'slot-emerald-nights': { top: 0.1092, height: 0.1437, luminance: 0.865 },
-  'slot-frost-peak': { top: 0, height: 0.1264, luminance: 0.524 },
-  'slot-fruit-stand': { top: 0.0057, height: 0.1264, luminance: 0.229 },
-  'slot-jade-temple': { top: 0.1207, height: 0.1782, luminance: 0.466 },
-  'slot-jungle-run': { top: 0, height: 0.1954, luminance: 0.374 },
-  'slot-lucky-sevens': { top: 0.2011, height: 0.0977, luminance: 0.329 },
-  'slot-midnight-gold': { top: 0.0345, height: 0.1149, luminance: 0.729 },
-  'slot-neon-alley': { top: 0.1034, height: 0.1954, luminance: 0.485 },
-  'slot-ocean-drift': { top: 0.05, height: 0.14, luminance: 0.52 },
-  'slot-pharaohs-vault': { top: 0, height: 0.1609, luminance: 0.706 },
-  'slot-royal-flush': { top: 0.02, height: 0.17, luminance: 0.72 },
-  'slot-spice-market': { top: 0.0632, height: 0.1437, luminance: 0.623 },
-  'slot-storm-chaser': { top: 0.1264, height: 0.1322, luminance: 0.618 },
-  'slot-sunset-strip': { top: 0.0805, height: 0.1552, luminance: 0.312 },
-  'slot-supernova': { top: 0, height: 0.1724, luminance: 0.691 },
-  'slot-triple-bar': { top: 0.0632, height: 0.1207, luminance: 0.644 },
-  'slot-vault-breaker': { top: 0.0517, height: 0.1264, luminance: 0.628 },
+  'juwa-classic-slots': { top: 0.0057, height: 0.1494, luminance: 0.756, rough: 0.0066, hue: 37, placement: 'banner' },
+  'slot-aurora-borealis': { top: 0.04, height: 0.07, luminance: 0.528, rough: 0.0329, hue: 215, placement: 'banner' },
+  'slot-carnival-row': { top: 0.035, height: 0.09, luminance: 0.443, rough: 0.0276, hue: 218, placement: 'banner' },
+  'slot-city-lights': { top: 0.035, height: 0.09, luminance: 0.296, rough: 0.0327, hue: 215, placement: 'banner' },
+  'slot-desert-mirage': { top: 0, height: 0.1494, luminance: 0.614, rough: 0.0765, hue: 39, placement: 'plate' },
+  'slot-dragons-hoard': { top: 0.0115, height: 0.1149, luminance: 0.262, rough: 0.0238, hue: 10, placement: 'banner' },
+  'slot-emerald-nights': { top: 0.1092, height: 0.1437, luminance: 0.865, rough: 0.0221, hue: 37, placement: 'banner' },
+  'slot-frost-peak': { top: 0, height: 0.1264, luminance: 0.524, rough: 0.0033, hue: 207, placement: 'banner' },
+  'slot-fruit-stand': { top: 0.0057, height: 0.1264, luminance: 0.229, rough: 0.0151, hue: 24, placement: 'banner' },
+  'slot-jade-temple': { top: 0.03, height: 0.08, luminance: 0.323, rough: 0.0243, hue: 25, placement: 'banner' },
+  'slot-jungle-run': { top: 0, height: 0.1954, luminance: 0.373, rough: 0.0603, hue: 28, placement: 'plate' },
+  'slot-lucky-sevens': { top: 0.2011, height: 0.0977, luminance: 0.329, rough: 0.0538, hue: 11, placement: 'plate' },
+  'slot-midnight-gold': { top: 0.0345, height: 0.1149, luminance: 0.729, rough: 0.0354, hue: 36, placement: 'banner' },
+  'slot-neon-alley': { top: 0.1034, height: 0.1954, luminance: 0.48, rough: 0.082, hue: 35, placement: 'plate' },
+  'slot-ocean-drift': { top: 0.08, height: 0.12, luminance: 0.472, rough: 0.0404, hue: 198, placement: 'banner' },
+  'slot-pharaohs-vault': { top: 0.0115, height: 0.1437, luminance: 0.671, rough: 0.0277, hue: 27, placement: 'banner' },
+  'slot-royal-flush': { top: 0.02, height: 0.17, luminance: 0.369, rough: 0.0273, hue: 35, placement: 'banner' },
+  'slot-spice-market': { top: 0.0632, height: 0.1437, luminance: 0.623, rough: 0.036, hue: 29, placement: 'banner' },
+  'slot-storm-chaser': { top: 0.03, height: 0.08, luminance: 0.361, rough: 0.0209, hue: 173, placement: 'banner' },
+  'slot-sunset-strip': { top: 0.0805, height: 0.1552, luminance: 0.312, rough: 0.0407, hue: 20, placement: 'banner' },
+  'slot-supernova': { top: 0.0402, height: 0.1264, luminance: 0.636, rough: 0.0413, hue: 23, placement: 'banner' },
+  'slot-triple-bar': { top: 0.0632, height: 0.1149, luminance: 0.763, rough: 0.0187, hue: 32, placement: 'banner' },
+  'slot-vault-breaker': { top: 0.0517, height: 0.1264, luminance: 0.628, rough: 0.0358, hue: 35, placement: 'banner' },
 };
