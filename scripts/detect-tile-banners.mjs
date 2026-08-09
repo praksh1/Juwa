@@ -57,52 +57,97 @@ function rowStats(buf, y) {
 
 function detect(file) {
   const buf = pixels(file);
-  const limit = Math.floor(H * 0.42);
-  const rows = [];
+  // Banners live near the top. A wider window is how the first version found a
+  // bright patch of treasure 36% down and called it a sign.
+  const limit = Math.floor(H * 0.3);
+
+  const raw = [];
   for (let y = 0; y < limit; y++) {
     const { mean, rough } = rowStats(buf, y);
-    // Flat and bright scores high. Roughness is subtracted hard: an ornate
-    // frame is bright too, and it is the flatness that says "blank sign".
-    rows.push(Math.max(0, mean - rough * 4));
+    // Flat AND bright. Roughness is subtracted hard: an ornate frame is bright
+    // too, and flatness is what says "blank sign" rather than "picture".
+    raw.push(mean - rough * 4);
   }
-  // Best contiguous run, at least 6% of the height tall.
-  const minRun = Math.max(4, Math.round(H * 0.06));
-  let best = { score: -1, from: 0, to: minRun };
-  for (let from = 0; from < limit - minRun; from++) {
-    let sum = 0;
-    for (let to = from; to < limit; to++) {
-      sum += rows[to];
-      const len = to - from + 1;
-      if (len < minRun) continue;
-      const score = sum / len;
-      if (score > best.score) best = { score, from, to };
+
+  // Subtract the median so only rows that stand out from this particular tile
+  // count as positive. Without a baseline a uniformly bright tile scores every
+  // row, and the band grows to fill the window.
+  const median = [...raw].sort((a, b) => a - b)[Math.floor(raw.length / 2)];
+  const scores = raw.map((v) => v - median);
+
+  // Largest-sum contiguous run (Kadane). Maximising the SUM rather than the
+  // MEAN is the fix for every band coming back at the minimum length: a mean is
+  // highest over the single best row, so it always collapsed to the floor,
+  // whereas a sum keeps extending while rows are still above baseline — which
+  // is exactly the extent of the plaque.
+  let best = { score: -Infinity, from: 0, to: 0 };
+  let runStart = 0;
+  let running = 0;
+  for (let y = 0; y < scores.length; y++) {
+    if (running <= 0) {
+      running = scores[y];
+      runStart = y;
+    } else {
+      running += scores[y];
     }
+    if (running > best.score) best = { score: running, from: runStart, to: y };
   }
-  // Mean luminance of the band decides whether the name is dark or light.
-  let bandLum = 0, count = 0;
+
+  // A sign is a band, not a line. Anything thinner is a highlight.
+  const minRun = Math.max(3, Math.round(H * 0.045));
+  if (best.to - best.from + 1 < minRun) {
+    const centre = Math.round((best.from + best.to) / 2);
+    best.from = Math.max(0, centre - Math.floor(minRun / 2));
+    best.to = Math.min(limit - 1, best.from + minRun - 1);
+  }
+
+  let bandLum = 0;
+  let count = 0;
   for (let y = best.from; y <= best.to; y++) {
     const { lum } = rowStats(buf, y);
-    for (const l of lum) { bandLum += l; count++; }
+    for (const l of lum) {
+      bandLum += l;
+      count++;
+    }
   }
   const luminance = bandLum / count;
   return {
     top: +(best.from / H).toFixed(4),
     height: +((best.to - best.from + 1) / H).toFixed(4),
     luminance: +luminance.toFixed(3),
-    confident: best.score > 0.12,
   };
 }
+
+/**
+ * Hand-corrected banners.
+ *
+ * The detector is good but not perfect, and these entries beat it. Both tiles
+ * below have a bright ornate frame running the full height, which gives the
+ * scoring a second flat bright band to lock onto lower down — the title landed
+ * under the sign rather than on it.
+ *
+ * Rather than keep tuning a heuristic against artwork I can only partly see,
+ * anything visibly wrong on a phone belongs here. Add the game id and the band
+ * as fractions of the tile height, measured off a screenshot; re-running the
+ * detector keeps it.
+ */
+const OVERRIDES = {
+  // Detector put this at 12.1%; the plaque is at the very top of the frame.
+  'slot-royal-flush': { top: 0.02, height: 0.17, luminance: 0.72 },
+  // Detector put this at 21.8%, well below the blue banner.
+  'slot-ocean-drift': { top: 0.05, height: 0.14, luminance: 0.52 },
+};
 
 const dir = join(root, 'art/tiles');
 const files = readdirSync(dir).filter((f) => f.endsWith('.jpg'));
 const banners = {};
 for (const file of files.sort()) {
   const id = basename(file, '.jpg');
-  const found = detect(join(dir, file));
+  const found = OVERRIDES[id] ?? detect(join(dir, file));
   banners[id] = found;
   console.log(
     `${id.padEnd(26)} top=${(found.top * 100).toFixed(1)}% h=${(found.height * 100).toFixed(1)}% ` +
-    `lum=${found.luminance} ${found.confident ? '' : '(low confidence)'}`,
+    `lum=${found.luminance}${OVERRIDES[id] ? ' (hand-corrected)' : ''}`,
   );
 }
 
