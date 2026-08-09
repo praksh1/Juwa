@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, shadows, spacing, typography } from '@juwa/ui';
 import { Badge, Txt } from './primitives';
 import { hasTileArt } from './GameArt';
+import { TILE_BANNERS } from '../api/tile-banners.generated';
 import { GameArt } from './GameArt';
 import { slotDetails, type GameSummary } from '../api/games';
 
@@ -32,7 +33,24 @@ export function GameCard({
   onPress: (game: GameSummary) => void;
 }) {
   // Only the photographic tiles carry a painted banner to write into.
-  const plaque = hasTileArt(game.id);
+  const banner = hasTileArt(game.id) ? TILE_BANNERS[game.id] : undefined;
+  /**
+   * The band the title is drawn in, centred on the measured banner.
+   *
+   * The detector reports a tight band; text needs a little more room than the
+   * flattest few rows of a sign, so this centres a slightly taller box on it
+   * rather than using the measured height directly.
+   */
+  const plaque = banner
+    ? {
+        top: `${Math.max(0, (banner.top + banner.height / 2) * 100 - 5.5)}%` as const,
+        // Dark type on a bright plaque, light on a dark one, decided from the
+        // banner's own measured luminance rather than assumed. Several of the
+        // tiles have blue or bronze banners where black text disappears.
+        color: banner.luminance > 0.55 ? '#2E1F04' : '#FFE8A3',
+        shadow: banner.luminance > 0.55 ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.85)',
+      }
+    : undefined;
   return (
     <Pressable
       onPress={() => onPress(game)}
@@ -81,8 +99,15 @@ export function GameCard({
           Dark text, because the plaque is light gold and white on it vanishes.
         */}
         {plaque ? (
-          <View style={styles.plaque} pointerEvents="none">
-            <Txt variant="caption" numberOfLines={1} style={styles.plaqueText}>
+          <View style={[styles.plaque, { top: plaque.top as never }]} pointerEvents="none">
+            <Txt
+              variant="bodySmall"
+              numberOfLines={1}
+              style={[
+                styles.plaqueText,
+                { color: plaque.color, textShadowColor: plaque.shadow },
+              ]}
+            >
               {game.name}
             </Txt>
           </View>
@@ -148,20 +173,20 @@ const styles = StyleSheet.create({
    */
   plaque: {
     position: 'absolute',
-    left: '13%',
-    right: '13%',
-    // The banners sit between roughly 2% and 25% down depending on the tile;
-    // this band overlaps all of them.
-    top: '6%',
-    height: '12%',
+    left: '11%',
+    right: '11%',
+    height: '11%',
     alignItems: 'center',
     justifyContent: 'center',
   },
   plaqueText: {
     fontWeight: '800',
-    color: '#3A2A08',
-    letterSpacing: 0.2,
+    letterSpacing: 0.3,
     textAlign: 'center',
+    // A contrast halo rather than a drop shadow: these banners are ornate and
+    // a directional shadow reads as a printing error on top of one.
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 4,
   },
   soon: {
     alignSelf: 'center',
