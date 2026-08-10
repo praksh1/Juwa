@@ -29,6 +29,19 @@ double-entry transaction in the same ledger the games use.
 
 ---
 
+## Before anything: you need an operator account
+
+The operator console is at **your API's URL + `/admin`** — on Railway, not on
+the Cloudflare site. No operator code is ever shipped to a player's device, so
+it is not on the player site and never will be.
+
+If you have never created an operator, you cannot sign in and therefore cannot
+create an agent. Set it up first — see
+[Deploying, §3c](07-deploying.md#3c-the-operator-panel). The short version: put
+`BOOTSTRAP_OPERATOR_EMAIL` and `BOOTSTRAP_OPERATOR_PASSWORD` in Railway's
+variables, redeploy, read the `otpauth://` line out of the deploy log into an
+authenticator app, then delete both variables.
+
 ## Setting up your first agent
 
 The person **signs up as an ordinary player first**, with their own email and
@@ -46,6 +59,12 @@ Then, in the operator console at `/admin`:
    the record, and press **Grant**.
 
 Next time they open the app they have an **Agent** tab.
+
+> **There is no separate agent login, and this catches everyone once.** An agent
+> signs in through the ordinary player sign-in box with their own email and
+> password. Being an agent is a property of an account, not a different door.
+> The tab appears because the server tells the app that this account is an
+> agent — so if the tab is missing, the account has not been promoted yet.
 
 ## How an agent gets players
 

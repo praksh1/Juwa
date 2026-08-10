@@ -12,6 +12,7 @@ import { LiveStripeGateway } from './stripe.js';
 import { CERT_FAILURE_ADVICE, decideSsl, isCertificateError, sslOptionFor } from './db-ssl.js';
 import { describeProblems, parseAllowedOrigins } from './origins.js';
 import { JwksCache, jwksUrlForSupabase } from './jwks.js';
+import { bootstrapOperator } from './bootstrap-operator.js';
 
 function required(name: string): string {
   const value = process.env[name];
@@ -175,6 +176,16 @@ async function start(): Promise<void> {
     if (isCertificateError(error)) console.error(CERT_FAILURE_ADVICE);
     process.exit(1);
   }
+
+  /*
+   * The first operator, if the environment asks for one and there is not one
+   * already. Runs after the database probe — it needs a working connection —
+   * and before listening, so the credentials are printed above the "ready" line
+   * rather than buried under request logs.
+   *
+   * Does nothing on every boot after the first. See bootstrap-operator.ts.
+   */
+  await bootstrapOperator(pool);
 
   // A listen failure arrives as an event, not a rejection. Without this the
   // process stays alive with nothing bound — the health check times out and

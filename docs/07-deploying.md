@@ -294,16 +294,47 @@ The panel lives at **`https://api.yourdomain.com/admin`** — on the API, not on
 the player site. No operator code, field name or endpoint is ever shipped to a
 player's device.
 
-Create the first account on the server, once:
+There is deliberately no sign-up form — an endpoint that mints operators is an
+endpoint that mints attackers, and this account can disable every game you have
+and mint coin inventory for agents. So the first account is created out of band,
+one of two ways.
+
+### Option A — environment variables (no terminal needed)
+
+Set two variables on the API service, alongside `DATABASE_URL`:
+
+```
+BOOTSTRAP_OPERATOR_EMAIL      you@yourdomain.com
+BOOTSTRAP_OPERATOR_PASSWORD   a long passphrase from a password manager
+```
+
+Redeploy. The deploy log prints an `otpauth://` line — put that into an
+authenticator app (1Password, Authy, Google Authenticator). Then **delete both
+variables**. You can now sign in at `/admin` with that email, that password, and
+a code from the app.
+
+Three things make this safe to leave in the code permanently:
+
+- It runs **only when the operators table is empty**. Once one account exists it
+  does nothing, forever, whatever the variables say — so it cannot be used to
+  add a second account later, and cannot overwrite or re-enable one you
+  disabled.
+- The password is **never printed**. You chose it; a deploy log outlives the
+  deploy.
+- If it fails, the API still starts. A setup convenience must never be able to
+  take the service down.
+
+The `otpauth://` line in the log **is** a credential. Delete the variables when
+you are done, and treat that line the way you would treat the password.
+
+### Option B — a terminal on the server
 
 ```bash
 DATABASE_URL=postgres://... node packages/api/dist/create-operator.js you@yourdomain.com
 ```
 
-It prints a generated password and an `otpauth://` URI. The password is shown
-**once**; put the URI into an authenticator app. There is deliberately no
-sign-up form — an endpoint that mints operators is an endpoint that mints
-attackers, and this account can disable every game you have.
+It generates the password for you and prints it once, along with the same
+`otpauth://` URI.
 
 What the panel can change: whether a game is enabled, a ceiling on any single
 round's payout, and bet limits. Changes apply to **new spins only** — a round
