@@ -62,6 +62,21 @@ export const ADMIN_CONSOLE_HTML = `<!doctype html>
   .hint { color: var(--muted); font-size: 13px; }
   .off { opacity: .45; }
   .wrap { overflow-x: auto; }
+  .pill {
+    display: inline-block; padding: 2px 9px; border-radius: 999px;
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  }
+  .pill.active { background: rgba(63,214,138,.16); color: var(--good); }
+  .pill.pending { background: rgba(200,164,77,.16); color: var(--brass); }
+  .pill.suspended { background: rgba(255,107,107,.16); color: var(--bad); }
+  .grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+  .grid label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+  details { border-top: 1px solid var(--border); }
+  details summary { cursor: pointer; padding: 9px 10px; color: var(--muted); font-size: 13px; }
+  /* The action cells hold controls, not prose — let them size to their buttons
+     rather than being squeezed until "Suspend" wraps under "Grant". Never put
+     display:flex on the <td> itself: that removes it from table layout. */
+  td .row { flex-wrap: nowrap; }
 </style>
 </head>
 <body>
@@ -119,12 +134,13 @@ function renderLogin(message) {
 }
 
 async function renderPanel() {
-  let games, audit, operator;
+  let games, audit, operator, agents;
   try {
     const result = await api('/admin/games');
     games = result.games;
     operator = result.operator;
     audit = (await api('/admin/audit?limit=40')).entries;
+    agents = (await api('/admin/agents')).agents;
   } catch (error) {
     token = null;
     renderLogin(error.message);
@@ -216,6 +232,8 @@ async function renderPanel() {
   }
   main.append(table);
 
+  main.append(renderAgents(agents));
+
   const log = $(\`<section><h2>Audit log</h2><div class="wrap"><table>
     <thead><tr><th>When</th><th>Who</th><th>What</th><th>From</th><th>To</th></tr></thead>
     <tbody></tbody></table></div>
@@ -240,6 +258,177 @@ async function renderPanel() {
     token = null;
     renderLogin();
   });
+}
+
+/**
+ * Agents.
+ *
+ * Three things an operator actually does here, and nothing else: promote a
+ * player to agent, hand an agent inventory, and turn an agent on or off.
+ *
+ * Note what this section CANNOT do, and it is deliberate. It cannot create a
+ * login — an agent signs up through the ordinary player flow with their own
+ * email and their own password, and is then promoted by username, so no
+ * operator ever handles somebody else's credentials. It cannot take coins back
+ * from an agent or a player: there is no route for it, because a balance that
+ * can be reversed on request is a balance somebody can be paid cash for. And it
+ * cannot edit the ledger — a mistake is corrected by a further transaction, not
+ * by changing history.
+ */
+function renderAgents(agents) {
+  const section = $(\`<section><h2>Agents</h2>
+    <div class="card" style="margin-bottom:14px">
+      <div class="grid">
+        <label>Player username<input name="username" placeholder="their existing account"></label>
+        <label>Agent name<input name="displayName" placeholder="shown to their players"></label>
+        <label>Notes<input name="notes" placeholder="optional"></label>
+        <label>&nbsp;<button id="mkagent">Promote to agent</button></label>
+      </div>
+      <p class="hint">The person signs up as a player first, with their own email and password.
+      This promotes that account — nothing here creates a login or sees a password. New agents
+      start <strong>pending</strong> and cannot allocate or invite until activated.</p>
+      <div class="err"></div>
+    </div>
+    <div class="wrap"><table>
+      <thead><tr>
+        <th>Agent</th><th>Status</th><th class="num">Inventory</th><th class="num">Players</th>
+        <th>Grant inventory</th><th>Change status</th>
+      </tr></thead><tbody></tbody></table></div>
+    <p class="hint">Inventory moves from the house account through the same double-entry ledger
+    every other coin movement uses — nothing is minted, and every allocation an agent makes is a
+    real transaction with an audit trail. An agent can never allocate more than they hold.</p>
+  </section>\`);
+
+  const create = async (event) => {
+    const button = event.target;
+    const value = (name) => section.querySelector('[name=' + name + ']').value.trim();
+    button.disabled = true;
+    try {
+      await api('/admin/agents', {
+        method: 'POST',
+        body: JSON.stringify({
+          username: value('username'),
+          displayName: value('displayName'),
+          notes: value('notes'),
+        }),
+      });
+      renderPanel();
+    } catch (error) {
+      section.querySelector('.err').textContent = error.message;
+      button.disabled = false;
+    }
+  };
+  section.querySelector('#mkagent').addEventListener('click', create);
+
+  const tbody = section.querySelector('tbody');
+  for (const agent of agents) {
+    const row = $(\`<tr>
+      <td>\${agent.displayName}<div class="hint">\${agent.agentId}</div></td>
+      <td><span class="pill \${agent.status}">\${agent.status}</span></td>
+      <td class="num">\${num(agent.inventory)}</td>
+      <td class="num">\${num(agent.playerCount)}</td>
+      \${/*
+        The controls are wrapped in a div rather than laid out by putting .row
+        on the cell itself. display:flex on a <td> takes it OUT of table
+        layout in Chromium, so the last two cells stopped behaving as columns
+        and the status buttons rendered underneath the grant controls instead
+        of beside them — in the right cell, in the wrong place.
+      */''}
+      <td><div class="row">
+        <input type="number" min="1" step="1" name="amount" placeholder="coins">
+        <input name="reference" placeholder="reference" style="width:130px">
+        <button class="ghost" data-do="grant">Grant</button>
+      </div></td>
+      <td><div class="row" data-do="status"></div></td>
+    </tr>\`);
+
+    // Only the transitions that make sense from where the agent is now. A
+    // "suspend" button on an already-suspended agent is a button that teaches
+    // an operator their clicks do not matter.
+    const actions = row.querySelector('[data-do=status]');
+    for (const next of ['active', 'suspended'].filter((s) => s !== agent.status)) {
+      const button = $(\`<button class="ghost">\${next === 'active' ? 'Activate' : 'Suspend'}</button>\`);
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        try {
+          await api('/admin/agents/' + agent.agentId, {
+            method: 'PATCH',
+            body: JSON.stringify({ status: next }),
+          });
+          renderPanel();
+        } catch (error) {
+          button.textContent = error.message;
+        }
+      });
+      actions.append(button);
+    }
+
+    row.querySelector('[data-do=grant]').addEventListener('click', async (event) => {
+      const button = event.target;
+      const amount = Number(row.querySelector('[name=amount]').value);
+      if (!Number.isInteger(amount) || amount <= 0) {
+        button.textContent = 'Whole coins';
+        return;
+      }
+      button.disabled = true;
+      try {
+        await api('/admin/agents/' + agent.agentId + '/inventory', {
+          method: 'POST',
+          body: JSON.stringify({
+            amount,
+            reference: row.querySelector('[name=reference]').value.trim(),
+            // Generated per CLICK, so a double-tap on a slow connection cannot
+            // grant twice — the second request carries the same key and the
+            // ledger returns the first transaction.
+            idempotencyKey: crypto.randomUUID(),
+          }),
+        });
+        renderPanel();
+      } catch (error) {
+        button.textContent = error.message;
+        button.disabled = false;
+      }
+    });
+
+    tbody.append(row);
+
+    // The agent's players, folded away. Useful when a player says "my agent
+    // gave me coins and they are not here", and noise the rest of the time.
+    const players = $(\`<tr><td colspan="6" style="padding:0">
+      <details><summary>Players (\${num(agent.playerCount)})</summary>
+      <div class="wrap" style="padding:0 10px 10px"><table><thead><tr>
+        <th>Player</th><th class="num">Balance</th><th>Since</th><th>Last seen</th>
+      </tr></thead><tbody></tbody></table></div></details></td></tr>\`);
+    const details = players.querySelector('details');
+    let loaded = false;
+    details.addEventListener('toggle', async () => {
+      if (!details.open || loaded) return;
+      loaded = true;
+      const body = players.querySelector('tbody');
+      try {
+        const result = await api('/admin/agents/' + agent.agentId + '/players');
+        for (const player of result.players) {
+          body.append($(\`<tr>
+            <td>\${player.username}<div class="hint">\${player.playerId}</div></td>
+            <td class="num">\${num(player.balance)}</td>
+            <td>\${new Date(player.assignedAt).toLocaleDateString()}</td>
+            <td>\${player.lastSeenAt ? new Date(player.lastSeenAt).toLocaleString() : '—'}</td>
+          </tr>\`));
+        }
+        if (!result.players.length) {
+          body.append($('<tr><td colspan="4" class="hint">No players yet.</td></tr>'));
+        }
+      } catch (error) {
+        body.append($(\`<tr><td colspan="4" class="err">\${error.message}</td></tr>\`));
+      }
+    });
+    tbody.append(players);
+  }
+
+  if (!agents.length) {
+    tbody.append($('<tr><td colspan="6" class="hint">No agents yet.</td></tr>'));
+  }
+  return section;
 }
 
 renderLogin();
