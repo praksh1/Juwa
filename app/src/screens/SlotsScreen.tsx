@@ -7,6 +7,7 @@ import { Card, Txt } from '../components/primitives';
 import { useRoute } from '@react-navigation/native';
 import { Reel, SPIN_UP_SECONDS, SYMBOL_SIZE, type ReelPhase } from '../components/Reel';
 import { tintFromAccent } from '../components/SlotSymbol';
+import { materialFor } from '../components/symbols/materials';
 import { useCompactLayout } from '../layout';
 import { scatterTrigger, slotDetails, slotPaytable } from '../api/games';
 import { sounds, spinNow, unlock } from '../sound';
@@ -254,6 +255,8 @@ export function SlotsScreen() {
    * colour, which is the difference between one seven and twenty-three.
    */
   const symbolTint = useMemo(() => tintFromAccent(details?.theme.accent), [details?.theme.accent]);
+  /** What this game's low symbols are cut from. See symbols/materials. */
+  const material = useMemo(() => materialFor(gameId), [gameId]);
 
   /**
    * Resolved by the LAST reel's own stop callback. This is the handshake that
@@ -816,6 +819,7 @@ export function SlotsScreen() {
               anticipating={anticipating[i] ?? false}
               {...(details?.art ? { family: details.art } : {})}
               tint={symbolTint}
+              material={material}
               // Dimming needs something to contrast AGAINST. A scatter win
               // pays from anywhere on the grid and produces no winning line,
               // so dimming on payout alone turned the whole machine dark and

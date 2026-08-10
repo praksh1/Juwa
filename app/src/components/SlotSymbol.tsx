@@ -20,6 +20,8 @@ import { Image } from 'react-native';
 import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 import { hexToHsl, hslToHex } from '@juwa/ui';
 import { symbolDisplayName, symbolImage } from '../art/symbol-art';
+import { ROYAL_FOR_SYMBOL, RoyalSymbol } from './symbols/Royals';
+import type { Material } from './symbols/materials';
 
 const uid = (symbol: string, name: string) => `sym-${symbol}-${name}`;
 
@@ -343,13 +345,28 @@ export function SlotSymbol({
   size,
   family,
   tint,
+  material,
 }: {
   name: string;
   size: number;
   family?: string;
   /** The metal the drawn symbols are cast in. Ignored by themed artwork. */
   tint?: SymbolTint;
+  /**
+   * The substance this game's low symbols are cut from.
+   *
+   * When given, the three cheapest symbols are drawn as card royals in that
+   * material instead of as borrowed fruit — which is what every cabinet this
+   * is modelled on does, and what stops six games dealing the same medallions.
+   */
+  material?: Material;
 }) {
+  // Royals win over a family image: a themed picture for a LOW symbol is the
+  // slot that borrowed pirate hats for a mermaid game.
+  const royal = material ? ROYAL_FOR_SYMBOL[name] : undefined;
+  if (royal && material) {
+    return <RoyalSymbol glyph={royal} material={material} size={size} />;
+  }
   const image = symbolImage(family, name);
   if (image) {
     return (

@@ -12,6 +12,7 @@ import {
 } from '@juwa/ui';
 import { AnimatedSymbol } from './AnimatedSymbol';
 import type { SymbolTint } from './SlotSymbol';
+import type { Material } from './symbols/materials';
 import { usePrefersReducedMotion } from '../motion';
 import { spinNow } from '../sound';
 
@@ -133,6 +134,8 @@ export interface ReelProps {
   family?: string;
   /** The metal the drawn symbols are cast in. Comes from the game's accent. */
   tint?: SymbolTint;
+  /** The substance this game's low symbols are cut from. */
+  material?: Material;
   /**
    * True once a win is being celebrated. Losing symbols dim so the winning
    * ones stand out — showing what DIDN'T pay at full strength is why players
@@ -206,6 +209,7 @@ export function Reel({
   round = 0,
   family,
   tint,
+  material,
   onLanded,
 }: ReelProps) {
   const offset = useRef(new Animated.Value(0)).current;
@@ -449,6 +453,7 @@ export function Reel({
                 seed={index * 31 + i}
                 {...(family ? { family } : {})}
                 {...(tint ? { tint } : {})}
+                {...(material ? { material } : {})}
               />
             </View>
           );

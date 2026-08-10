@@ -38,6 +38,7 @@ import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { radius, type SymbolState } from '@juwa/ui';
 import { SlotSymbol, type SymbolTint } from './SlotSymbol';
+import type { Material } from './symbols/materials';
 import { usePrefersReducedMotion } from '../motion';
 
 /**
@@ -76,6 +77,8 @@ interface AnimatedSymbolProps {
   family?: string;
   /** The metal the drawn symbols are cast in, from the game's accent. */
   tint?: SymbolTint;
+  /** The substance this game's low symbols are cut from. */
+  material?: Material;
   state: SymbolState;
   /**
    * Anything stable and per-cell. Spreads the breathing out so fifteen symbols
@@ -84,7 +87,7 @@ interface AnimatedSymbolProps {
   seed: number;
 }
 
-export function AnimatedSymbol({ name, size, family, tint, state, seed }: AnimatedSymbolProps) {
+export function AnimatedSymbol({ name, size, family, tint, material, state, seed }: AnimatedSymbolProps) {
   const reduceMotion = usePrefersReducedMotion();
   const scale = useRef(new Animated.Value(1)).current;
   const shine = useRef(new Animated.Value(0)).current;
@@ -213,6 +216,7 @@ export function AnimatedSymbol({ name, size, family, tint, state, seed }: Animat
           size={size}
           {...(family ? { family } : {})}
           {...(tint ? { tint } : {})}
+          {...(material ? { material } : {})}
         />
         {winning && !reduceMotion ? (
           <Animated.View

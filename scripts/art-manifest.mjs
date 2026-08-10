@@ -14,9 +14,12 @@
  * symbols (SEVEN, BAR, WILD, SCATTER) are not themed at all, which is why the
  * same 7 turns up in every machine.
  *
- * No amount of code fixes that. It is 23 x 9 pictures, and the only thing worth
- * automating is knowing exactly which ones are missing and what each should be
- * — so that generating them is a morning's work rather than an audit.
+ * Part of that IS fixed in code: the three cheapest symbols are now the card
+ * royals A, K and Q, drawn from a per-game material, which is what every
+ * cabinet worth copying does. What no amount of code fixes is the pictures — a
+ * pharaoh, a dragon, a mermaid — so this lists exactly which of those are
+ * missing and what each should be, turning the question from an audit into a
+ * morning.
  *
  * The briefs below are written to be pasted into an image generator as-is. The
  * technical constraints are not decoration: `scripts/check-art.mjs` rejects
@@ -33,17 +36,24 @@ const { SLOT_CATALOGUE } = await import(
   resolve(root, 'packages/engine/dist/games/slot-catalogue.js')
 );
 
-/** Every symbol a game shows. All nine, not the five a theme covers today. */
+/**
+ * What still has to be PAINTED.
+ *
+ * Not nine symbols a game. Every cabinet worth copying — including the one this
+ * is measured against — puts card royals underneath a handful of painted
+ * characters, and the royals are typography: they are drawn in code from a
+ * per-game material (see components/symbols/materials.ts), so CHERRY, PLUM and
+ * LEMON are already an A, a K and a Q cut from ice, sandstone or neon.
+ *
+ * That leaves four images a game rather than nine. SEVEN, BAR, WILD and
+ * SCATTER are drawn too and take the game's colour, so they are listed as
+ * optional upgrades rather than gaps.
+ */
 const SYMBOLS = [
-  ['DIAMOND', 'the top-paying picture: the game\'s hero'],
-  ['BELL', 'second picture'],
-  ['CHERRY', 'third picture'],
-  ['PLUM', 'fourth picture'],
-  ['LEMON', 'fifth picture, the commonest'],
-  ['SEVEN', 'the numeral 7, built from the theme\'s material'],
-  ['BAR', 'a BAR plate, built from the theme\'s material'],
-  ['WILD', 'the wild, with the word WILD readable across it'],
-  ['SCATTER', 'the scatter, with the word SCATTER readable across it'],
+  ['DIAMOND', 'the top-paying picture: the game\'s hero, the thing on the lobby tile'],
+  ['BELL', 'second picture: the theme\'s other main character or object'],
+  ['WILD', 'the wild — a themed object with the word WILD readable across it'],
+  ['SCATTER', 'the scatter — a themed object with the word SCATTER readable across it'],
 ];
 
 /**
@@ -104,12 +114,16 @@ for (const [art, names] of Object.entries(shared).sort((a, b) => b[1].length - a
 }
 lines.push('');
 lines.push(
-  'On top of that, SEVEN, BAR, WILD and SCATTER are not themed by any set, so those four are identical in every game. Their COLOUR now comes from each game\'s accent, which helps, but the shapes are shared.',
+  'The three cheapest symbols are no longer borrowed pictures at all: CHERRY, PLUM and LEMON are now drawn as the card royals A, K and Q, cut from a per-game material — ice, sandstone, neon, jade, ember, gunmetal, gold or enamel. That is what every cabinet worth copying does, and it is why the number below is four rather than nine.',
+);
+lines.push('');
+lines.push(
+  'SEVEN and BAR are drawn too and take the game\'s accent colour, so they differ between games without being commissioned. Replacing them with painted versions is an upgrade, not a gap.',
 );
 lines.push('');
 lines.push('## What a complete game needs');
 lines.push('');
-lines.push('Nine PNGs per game, named `<game-id>_<symbol>.png`:');
+lines.push('**Four** painted PNGs per game, named `<game-id>_<symbol>.png`:');
 lines.push('');
 for (const [id, note] of SYMBOLS) lines.push(`- \`${id}\` — ${note}`);
 lines.push('');
@@ -122,7 +136,7 @@ lines.push('- **Transparent background.** An opaque one shows as a grey box on a
 lines.push('- **512x512, square,** subject centred and filling ~80% of the frame.');
 lines.push('- **Consistent subject size across the set,** or symbols visibly rescale as the reel spins.');
 lines.push('- **Distinct silhouettes.** Two symbols with the same outline and colour cannot be told apart at speed, and players dispute the result.');
-lines.push('- **Under 200KB each.** Nine per game across 23 games is a real download.');
+lines.push('- **Under 200KB each.** Four per game across 23 games is still a real download.');
 lines.push('- **Readable at 46 points.** That is the actual drawn size on a phone.');
 lines.push('');
 lines.push('## Per-game briefs');
