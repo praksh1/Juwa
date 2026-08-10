@@ -72,6 +72,29 @@ const CASCADE_DROP_SECONDS = 0.32;
 /** The refill falls two symbols, not the ten a full landing covers. */
 const CASCADE_TRAVEL = 2;
 
+/**
+ * How long auto-spin waits after being switched on, before spending anything.
+ *
+ * Long enough to press STOP having changed your mind, which is the whole
+ * point: the previous version started a round almost immediately, so realising
+ * you meant to set the stake first cost you a spin.
+ */
+const AUTO_GRACE_MS = 2_600;
+/**
+ * The gap between automatic spins, by what the last one paid.
+ *
+ * A win cleared by the next spin was not shown at all, and the bigger it was
+ * the more there is to take in — so the pause grows with it. Two losing spins
+ * have nothing between them worth waiting for.
+ */
+const AUTO_PAUSE_MS: Record<WinTier, number> = {
+  none: 900,
+  win: 1_800,
+  burst: 2_600,
+  big: 4_000,
+  mega: 5_500,
+};
+
 /** What the drops after the first grid are worth, in stake multiples. */
 function dropSum(steps: readonly { totalMultiplier: number }[]): number {
   return steps.reduce((sum, step) => sum + step.totalMultiplier, 0);
@@ -214,8 +237,11 @@ export function SlotsScreen() {
    * have finished.
    */
   const [auto, setAuto] = useState(false);
+  /** True until the grace period after pressing AUTO has elapsed. */
+  const [autoStarting, setAutoStarting] = useState(false);
   /** The machine this game is built as: frame, room, and which controls. */
   const cabinet = useMemo(() => cabinetFor(gameId), [gameId]);
+
   /**
    * Resolved by the LAST reel's own stop callback. This is the handshake that
    * keeps the sound and the readout tied to what is actually on screen.
@@ -237,6 +263,38 @@ export function SlotsScreen() {
   });
   const celebrationRound = useRef(0);
   const shake = useCabinetShake(celebration.tier, celebration.round);
+
+  /**
+   * How long auto-spin waits before the next round.
+   *
+   * Three things it has to respect, all of them the player's:
+   *
+   *   CHANGING YOUR MIND. Pressing AUTO used to start a spin almost at once,
+   *   which is a trap — the moment you realise you meant to change the stake
+   *   first, the money is already gone. The first round waits.
+   *
+   *   SEEING WHAT YOU WON. A win that is cleared by the next spin was not
+   *   shown. The pause scales with the size of it, because a mega win takes
+   *   longer to read and is the one you actually want to look at.
+   *
+   *   NOT DRAGGING. Between two losing spins there is nothing to look at, so
+   *   that gap stays short.
+   */
+  const autoDelay = useMemo(() => {
+    if (autoStarting) return AUTO_GRACE_MS;
+    return AUTO_PAUSE_MS[celebration.tier];
+  }, [autoStarting, celebration.tier]);
+
+  /** Start the grace period when auto is switched on, and clear it after. */
+  useEffect(() => {
+    if (!auto) {
+      setAutoStarting(false);
+      return;
+    }
+    setAutoStarting(true);
+    const timer = setTimeout(() => setAutoStarting(false), AUTO_GRACE_MS);
+    return () => clearTimeout(timer);
+  }, [auto]);
 
   const celebrate = useCallback((payout: number, stake: number) => {
     const tier = winTier(payout, stake);
@@ -650,9 +708,9 @@ export function SlotsScreen() {
       setAuto(false);
       return;
     }
-    const timer = setTimeout(() => { void spin(); }, 900);
+    const timer = setTimeout(() => { void spin(); }, autoDelay);
     return () => clearTimeout(timer);
-  }, [auto, spinning, bet, balance, spin]);
+  }, [auto, spinning, bet, balance, spin, autoDelay]);
 
   return (
     <View style={styles.screen}>
@@ -856,7 +914,13 @@ export function SlotsScreen() {
             </Txt>
           ) : (
             <Txt variant="bodySmall" color={colors.text.muted}>
-              Pick a bet and spin
+              {/* Say which control this machine is played with. A lever game
+                  that tells you to "spin" is describing a button it does not
+                  have — and a player who cannot find the control does not have
+                  a game. */}
+              {cabinet.controls === 'lever'
+                ? 'Pick a bet, then pull the lever'
+                : 'Pick a bet and spin'}
             </Txt>
           )}
         </View>

@@ -18,8 +18,8 @@
  *   another app will already know how to read.
  */
 
-import React, { useRef } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Easing, PanResponder, Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { colors, radius, spacing, typography } from '@juwa/ui';
 import { format, type Minor } from '@juwa/money';
@@ -52,12 +52,29 @@ export interface SlotControlsProps {
 /* ------------------------------------------------------------------ lever */
 
 /**
- * A pull handle.
+ * A pull handle you actually pull.
  *
- * Pressing it drives the knob down its slot and releases it, and the spin is
- * dispatched at the BOTTOM of the travel rather than on the press — so the
- * reels start when the handle reaches the end of its throw, which is the whole
- * reason a lever feels like it did something.
+ * The first version was a `Pressable` that played a pull animation when you
+ * tapped it, and the tap target was the whole column — so the way to use it was
+ * to tap the empty rail BELOW the knob. A player found it by accident and said
+ * so: "it looks like the player is not pulling the lever, just tapping under
+ * the lever. That's not user friendly. Kind of useless."
+ *
+ * They are right, and it is worse than either half. A control that looks
+ * mechanical and behaves like a button teaches you nothing, and one whose hit
+ * area is somewhere it does not look like is undiscoverable. So it is a drag
+ * now: put your thumb on the knob, pull it down past the detent, and the reels
+ * go on release. Short of the detent it springs back and nothing happens,
+ * which is exactly what a real handle does.
+ *
+ * The knob idles with a slow bob and the rail says PULL, because an affordance
+ * nobody can see is the same problem in a different costume.
+ *
+ * KEYBOARD AND SCREEN READERS still activate it, because a drag is not
+ * available to everyone. `detail === 0` distinguishes a click synthesised by
+ * assistive technology or the Enter key from a real pointer tap — so the
+ * people who need a non-drag path keep one, and the tap that made this
+ * confusing in the first place does nothing.
  */
 export function SpinLever({
   onSpin,
@@ -71,50 +88,105 @@ export function SpinLever({
   height: number;
 }) {
   const pull = useRef(new Animated.Value(0)).current;
+  const bob = useRef(new Animated.Value(0)).current;
   const reduceMotion = usePrefersReducedMotion();
-  const travel = height * 0.42;
+  const travel = Math.max(56, height * 0.5);
+  /** How far down counts as a pull. Below this it springs back unfired. */
+  const detent = travel * 0.62;
 
-  const handle = () => {
-    if (disabled || spinning) return;
-    if (reduceMotion) {
-      onSpin();
+  const locked = useRef(false);
+  locked.current = Boolean(disabled) || spinning;
+
+  const release = (dy: number) => {
+    const pulled = dy >= detent;
+    Animated.timing(pull, {
+      toValue: 0,
+      duration: pulled ? 420 : 220,
+      easing: pulled ? Easing.out(Easing.back(2.4)) : Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start();
+    if (pulled) onSpin();
+  };
+
+  const responder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => !locked.current,
+      onMoveShouldSetPanResponder: () => !locked.current,
+      onPanResponderMove: (_event, gesture) => {
+        if (locked.current) return;
+        // Downwards only, and never past the end of the rail.
+        pull.setValue(Math.max(0, Math.min(travelRef.current, gesture.dy)));
+      },
+      onPanResponderRelease: (_event, gesture) => {
+        if (locked.current) {
+          pull.setValue(0);
+          return;
+        }
+        releaseRef.current(gesture.dy);
+      },
+      onPanResponderTerminate: () => pull.setValue(0),
+    }),
+  ).current;
+
+  // The responder is created once; these keep it looking at current values
+  // instead of the ones captured on the first render.
+  const travelRef = useRef(travel);
+  travelRef.current = travel;
+  const releaseRef = useRef(release);
+  releaseRef.current = release;
+
+  /** The idle bob: the only thing on screen saying "this moves". */
+  useEffect(() => {
+    if (reduceMotion || locked.current) {
+      bob.setValue(0);
       return;
     }
-    Animated.sequence([
-      Animated.timing(pull, {
-        toValue: 1,
-        duration: 170,
-        easing: Easing.in(Easing.quad),
-        useNativeDriver: true,
-      }),
-      // Snap back under spring tension, as a real handle does once released.
-      Animated.timing(pull, {
-        toValue: 0,
-        duration: 420,
-        easing: Easing.out(Easing.back(2.5)),
-        useNativeDriver: true,
-      }),
-    ]).start();
-    // Fired at the bottom of the throw, not on the press.
-    setTimeout(onSpin, 170);
-  };
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(bob, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(bob, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.delay(1600),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [reduceMotion, spinning, disabled, bob]);
+
+  const knobShift = Animated.add(
+    pull,
+    bob.interpolate({ inputRange: [0, 1], outputRange: [0, 5] }),
+  );
 
   return (
     <Pressable
-      onPress={handle}
-      disabled={disabled || spinning}
+      style={[styles.leverArea, { height }]}
       accessibilityRole="button"
       accessibilityLabel={spinning ? 'Spinning' : 'Pull the lever to spin'}
-      style={[styles.leverArea, { height }, (disabled || spinning) && styles.leverDim]}
+      accessibilityHint="Drag the handle down, or press Enter"
+      onPress={(event) => {
+        /*
+         * Keyboard and assistive technology only.
+         *
+         * A click synthesised by Enter or by a screen reader reports
+         * `detail === 0`; a real pointer tap reports 1 or more. Gating on that
+         * keeps a non-drag path open for the people who need one WITHOUT
+         * reinstating the tap-anywhere behaviour that made this control
+         * unreadable in the first place.
+         */
+        const detail = (event.nativeEvent as unknown as { detail?: number }).detail;
+        if (detail === 0 && !locked.current) onSpin();
+      }}
     >
-      <View style={[styles.leverSlot, { height: height * 0.72 }]} />
+      <View style={[styles.leverSlot, { height: travel + 20 }]} />
       <Animated.View
+        {...responder.panHandlers}
         style={[
           styles.leverKnob,
-          { transform: [{ translateY: pull.interpolate({ inputRange: [0, 1], outputRange: [0, travel] }) }] },
+          (disabled || spinning) && styles.leverDim,
+          { transform: [{ translateY: knobShift }] },
         ]}
       >
-        <Svg width={34} height={34} viewBox="0 0 34 34">
+        <Svg width={38} height={38} viewBox="0 0 38 38">
           <Defs>
             <LinearGradient id="lever-knob" x1="0" y1="0" x2="0.4" y2="1">
               <Stop offset="0" stopColor="#FF6B6B" />
@@ -122,10 +194,17 @@ export function SpinLever({
               <Stop offset="1" stopColor="#6B0713" />
             </LinearGradient>
           </Defs>
-          <Circle cx={17} cy={17} r={15} fill="url(#lever-knob)" stroke="#2A0409" strokeWidth={2} />
-          <Circle cx={12} cy={11} r={4} fill="#FFFFFF" opacity={0.32} />
+          <Circle cx={19} cy={19} r={17} fill="url(#lever-knob)" stroke="#2A0409" strokeWidth={2} />
+          <Circle cx={13} cy={12} r={4.5} fill="#FFFFFF" opacity={0.34} />
         </Svg>
       </Animated.View>
+
+      {/* The instruction. Without it the control is a red ball on a stick. */}
+      <View style={styles.leverHint} pointerEvents="none">
+        <Txt variant="caption" color={colors.gold.light} style={styles.leverHintText}>
+          {spinning ? '' : 'PULL'}
+        </Txt>
+      </View>
     </Pressable>
   );
 }
@@ -287,18 +366,25 @@ const FRAMES = {
 
 const styles = StyleSheet.create({
   /* lever */
-  leverArea: { width: 46, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 6 },
+  leverArea: { width: 52, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 4 },
   leverDim: { opacity: 0.45 },
   leverSlot: {
     position: 'absolute',
-    top: 14,
-    width: 8,
-    borderRadius: 4,
+    top: 18,
+    width: 10,
+    borderRadius: 5,
     backgroundColor: '#1A1206',
     borderWidth: 1,
     borderColor: colors.gold.dark,
   },
-  leverKnob: { alignItems: 'center' },
+  leverKnob: {
+    alignItems: 'center',
+    // A comfortable thumb target on the KNOB itself, which is the part that
+    // looks draggable. The old version's target was the empty rail below it.
+    padding: 6,
+  },
+  leverHint: { position: 'absolute', bottom: 2, alignItems: 'center' },
+  leverHintText: { fontWeight: '900', letterSpacing: 1.5 },
 
   /* console */
   console: {
