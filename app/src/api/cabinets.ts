@@ -52,6 +52,22 @@ export interface CabinetSpec {
   controls: ControlStyle;
   frame: FrameStyle;
   /**
+   * How much of its cell a symbol fills, 0 to 1.
+   *
+   * The second of two levers on symbol size, and the one that is art direction
+   * rather than arithmetic. The first is the CELL, which comes from the grid:
+   * a three-reel machine has reels nearly twice as wide as a five-reel one, so
+   * its cells are far bigger before anyone chooses anything.
+   *
+   * This decides how much of that cell the symbol takes. A fruit machine wants
+   * chunky symbols that crowd their cells; a 720-ways diamond with nineteen of
+   * them on screen at once needs air between them or the grid reads as a wall.
+   *
+   * Only ever raised above the default, never below it — the baseline is
+   * already the smallest a symbol can be and still read on a phone.
+   */
+  symbolFill?: number;
+  /**
    * Room behind the reels, from `art/backgrounds`.
    *
    * Twelve of these have been sitting in the repository referenced by nothing
@@ -81,27 +97,27 @@ export const DEFAULT_CABINET: CabinetSpec = { controls: 'console', frame: 'gilt'
  */
 export const CABINETS: Record<string, CabinetSpec> = {
   // ---- the mechanical ones: a lever, timber, and a dim back-bar room ----
-  'juwa-classic-slots': { controls: 'lever', frame: 'timber', background: `${BG}/bg03.jpg` },
-  'slot-triple-bar': { controls: 'lever', frame: 'timber', background: `${BG}/bg08.jpg` },
-  'slot-fruit-stand': { controls: 'lever', frame: 'timber', background: `${BG}/bg05.jpg` },
-  'slot-lucky-sevens': { controls: 'lever', frame: 'timber', background: `${BG}/bg02.jpg` },
+  'juwa-classic-slots': { controls: 'lever', frame: 'timber', symbolFill: 0.94, background: `${BG}/bg03.jpg` },
+  'slot-triple-bar': { controls: 'lever', frame: 'timber', symbolFill: 0.94, background: `${BG}/bg08.jpg` },
+  'slot-fruit-stand': { controls: 'lever', frame: 'timber', symbolFill: 0.94, background: `${BG}/bg05.jpg` },
+  'slot-lucky-sevens': { controls: 'lever', frame: 'timber', symbolFill: 0.96, background: `${BG}/bg02.jpg` },
 
   // ---- temples, tombs and hoards: gold, and a room with pillars in it ----
   'slot-desert-mirage': { controls: 'console', frame: 'gilt', background: `${BG}/egypt.jpg` },
   'slot-pharaohs-vault': { controls: 'console', frame: 'gilt', background: `${BG}/egypt.jpg` },
   'slot-jade-temple': { controls: 'console', frame: 'gilt', background: `${BG}/bg09.jpg` },
-  'slot-dragons-hoard': { controls: 'console', frame: 'gilt', background: `${BG}/bg10.jpg` },
-  'slot-royal-flush': { controls: 'console', frame: 'gilt', background: `${BG}/bg11.jpg` },
-  'slot-midnight-gold': { controls: 'console', frame: 'gilt', background: `${BG}/bg04.jpg` },
+  'slot-dragons-hoard': { controls: 'console', frame: 'gilt', symbolFill: 0.9, background: `${BG}/bg10.jpg` },
+  'slot-royal-flush': { controls: 'console', frame: 'gilt', symbolFill: 0.88, background: `${BG}/bg11.jpg` },
+  'slot-midnight-gold': { controls: 'console', frame: 'gilt', symbolFill: 0.88, background: `${BG}/bg04.jpg` },
   'slot-spice-market': { controls: 'console', frame: 'gilt', background: `${BG}/bg06.jpg` },
   'slot-emerald-nights': { controls: 'console', frame: 'gilt', background: `${BG}/bg07.jpg` },
 
   // ---- cold, electric and airless: metal rather than gold ----
   'slot-frost-peak': { controls: 'console', frame: 'chrome', background: `${BG}/bg01.jpg` },
-  'slot-storm-chaser': { controls: 'console', frame: 'chrome', background: `${BG}/bg01.jpg` },
-  'slot-supernova': { controls: 'console', frame: 'chrome' },
+  'slot-storm-chaser': { controls: 'console', frame: 'chrome', symbolFill: 0.86, background: `${BG}/bg01.jpg` },
+  'slot-supernova': { controls: 'console', frame: 'chrome', symbolFill: 0.9 },
   'slot-aurora-borealis': { controls: 'console', frame: 'chrome' },
-  'slot-vault-breaker': { controls: 'console', frame: 'chrome', background: `${BG}/bg08.jpg` },
+  'slot-vault-breaker': { controls: 'console', frame: 'chrome', symbolFill: 0.88, background: `${BG}/bg08.jpg` },
   'slot-city-lights': { controls: 'console', frame: 'chrome' },
 
   // ---- the ones whose own artwork is the room ----

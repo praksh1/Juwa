@@ -137,6 +137,15 @@ export interface ReelProps {
   /** The substance this game's low symbols are cut from. */
   material?: Material;
   /**
+   * How much of its cell the symbol fills, 0 to 1.
+   *
+   * Separate from `size`, which is the cell. Two games can have identical cells
+   * and still look different if one crowds them and the other leaves air —
+   * which is the difference between a chunky fruit machine and a nineteen-cell
+   * diamond that would read as a wall if its symbols touched.
+   */
+  fill?: number;
+  /**
    * True once a win is being celebrated. Losing symbols dim so the winning
    * ones stand out — showing what DIDN'T pay at full strength is why players
    * miss small wins entirely on a busy grid.
@@ -210,6 +219,7 @@ export function Reel({
   family,
   tint,
   material,
+  fill = 0.79,
   onLanded,
 }: ReelProps) {
   const offset = useRef(new Animated.Value(0)).current;
@@ -446,7 +456,7 @@ export function Reel({
               */}
               <AnimatedSymbol
                 name={symbol}
-                size={size - 12}
+                size={Math.round(size * fill)}
                 state={state}
                 // Stable per cell, so a symbol keeps its breathing phase
                 // instead of restarting it on every parent render.

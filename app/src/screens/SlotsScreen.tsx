@@ -5,7 +5,7 @@ import { format, minor } from '@juwa/money';
 import { betOptions, suggestedBet } from '@juwa/economy';
 import { Card, Txt } from '../components/primitives';
 import { useRoute } from '@react-navigation/native';
-import { Reel, SPIN_UP_SECONDS, SYMBOL_SIZE, type ReelPhase } from '../components/Reel';
+import { Reel, SPIN_UP_SECONDS, type ReelPhase } from '../components/Reel';
 import { tintFromAccent } from '../components/SlotSymbol';
 import { materialFor } from '../components/symbols/materials';
 import { useCompactLayout } from '../layout';
@@ -19,7 +19,7 @@ import {
   RulesIntro,
   rulesDismissed,
 } from '../components/GameRules';
-import { WinLines, litCells, useWinCycle } from '../components/WinLines';
+import { REEL_GAP, WinLines, litCells, useWinCycle } from '../components/WinLines';
 import { ReelFrame, SlotConsole, SpinLever } from '../components/SlotControls';
 import { cabinetFor, roomFor } from '../api/cabinets';
 import { hasTileArt } from '../components/GameArt';
@@ -74,6 +74,18 @@ const CASCADE_HOLD_MS = 750;
 const CASCADE_DROP_SECONDS = 0.32;
 /** The refill falls two symbols, not the ten a full landing covers. */
 const CASCADE_TRAVEL = 2;
+
+/**
+ * The largest a cell may get.
+ *
+ * Well above the old 58, which was both the design size AND the ceiling — so
+ * every machine in the catalogue clamped to it and none of them could differ.
+ * A three-reel classic reaches about 108 on a 390-point phone; the ceiling is
+ * only here to stop a hypothetical two-reel game filling the screen.
+ */
+const MAX_SYMBOL_SIZE = 118;
+/** What a symbol fills of its cell unless the cabinet asks for more. */
+const DEFAULT_SYMBOL_FILL = 0.79;
 
 /**
  * How long auto-spin waits after being switched on, before spending anything.
@@ -425,11 +437,31 @@ export function SlotsScreen() {
     // the symbols had to shrink to 20 points to fit, which was playable and
     // did not look like a slot machine.
     const chrome = compact ? 120 : 300;
-    const ideal = Math.floor((viewportHeight - chrome) / MAX_ROWS);
-    // Never larger than the design size, and never so small the artwork stops
-    // reading — below about 26 points a symbol is a coloured smudge.
-    return Math.max(26, Math.min(SYMBOL_SIZE, ideal));
-  }, [viewportHeight, MAX_ROWS, compact]);
+    const byHeight = Math.floor((viewportHeight - chrome) / MAX_ROWS);
+
+    /*
+     * WIDTH MATTERS AS MUCH AS HEIGHT, and used not to count at all.
+     *
+     * Reels are laid out with `flex: 1`, so a three-reel machine's reels are
+     * nearly twice as wide as a five-reel one's. Sizing on height alone put a
+     * 58-point symbol in the middle of a 108-point-wide cell with empty space
+     * either side, and every machine in the catalogue came out at exactly 58
+     * because the old cap swallowed the height calculation whole — which is
+     * precisely why they all looked the same size.
+     *
+     * Taking the smaller of the two means the grid decides the scale: three
+     * reels give big chunky symbols, five give medium, and the 3-4-5-4-3
+     * diamond gives smaller ones because it has nineteen cells to fit.
+     */
+    const byWidth =
+      reelsWidth > 0
+        ? Math.floor((reelsWidth - REEL_GAP * (REELS - 1)) / REELS)
+        : byHeight;
+
+    // Never so small the artwork stops reading — below about 26 points a
+    // symbol is a coloured smudge — and never so large it stops fitting.
+    return Math.max(26, Math.min(MAX_SYMBOL_SIZE, Math.min(byHeight, byWidth)));
+  }, [viewportHeight, MAX_ROWS, compact, reelsWidth, REELS]);
 
   /**
    * The bonus-round re-theme.
@@ -812,6 +844,9 @@ export function SlotsScreen() {
               result={grid[i] ?? IDLE_GRID[i]!}
               litCells={lit}
               size={symbolSize}
+              // How much of the cell the artwork takes. Art direction rather
+              // than arithmetic — see `symbolFill` in api/cabinets.
+              fill={cabinet.symbolFill ?? DEFAULT_SYMBOL_FILL}
               {...(cascadeStep > 0 ? { travel: CASCADE_TRAVEL } : {})}
               // Free spins run at roughly half length all through, and a
               // spin-up left at its base duration would be most of one.
