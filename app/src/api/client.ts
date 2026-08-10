@@ -220,7 +220,12 @@ export interface AgentInvite {
 }
 
 export interface PlayApi {
-  getBalance(): Promise<{ balance: number; dailyStreak: number; vipLevel: number }>;
+  getBalance(): Promise<{
+    balance: number;
+    dailyStreak: number;
+    vipLevel: number;
+    bonusClaimedToday?: boolean;
+  }>;
   placeBet(request: {
     gameId: string;
     stake: number;
@@ -560,7 +565,12 @@ export class HttpPlayApi implements PlayApi {
   }
 
   getBalance() {
-    return this.request<{ balance: number; dailyStreak: number; vipLevel: number }>('/balance');
+    return this.request<{
+      balance: number;
+      dailyStreak: number;
+      vipLevel: number;
+      bonusClaimedToday?: boolean;
+    }>('/balance');
   }
 
   placeBet(request: {
@@ -839,7 +849,7 @@ export class DemoPlayApi implements PlayApi {
   }
 
   async getBalance() {
-    return { balance: this.balance, dailyStreak: 3, vipLevel: 2 };
+    return { balance: this.balance, dailyStreak: 3, vipLevel: 2, bonusClaimedToday: false };
   }
 
   async getProfile(): Promise<Profile> {

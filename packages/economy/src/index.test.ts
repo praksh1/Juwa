@@ -79,23 +79,37 @@ test('the web store nets meaningfully more than in-app purchase', () => {
 
 // ---------------------------------------------------------------- bonuses
 
-test('the daily ladder always climbs, then plateaus', () => {
+test('the daily ladder never shrinks, and holds past the end', () => {
+  // It is flat now rather than climbing — see the note on DAILY_STREAK_LADDER.
+  // The assertion that matters is that a longer streak is never worth LESS,
+  // which would be a straightforward bug whatever the shape of the curve.
   for (let day = 2; day <= MAX_STREAK_DAY; day++) {
     assert.ok(
-      dailyBonus(day) > dailyBonus(day - 1),
-      `day ${day} must beat day ${day - 1}`,
+      dailyBonus(day) >= dailyBonus(day - 1),
+      `day ${day} must not pay less than day ${day - 1}`,
     );
   }
-  // Past the end of the ladder it holds flat rather than growing forever.
   assert.equal(dailyBonus(MAX_STREAK_DAY + 1), dailyBonus(MAX_STREAK_DAY));
   assert.equal(dailyBonus(999), dailyBonus(MAX_STREAK_DAY));
   assert.throws(() => dailyBonus(0), RangeError);
   assert.throws(() => dailyBonus(1.5), RangeError);
 });
 
-test('day 7 is worth enough to make day 6 hurt to miss', () => {
-  // The whole streak mechanic depends on this ratio being steep.
-  assert.ok(dailyBonus(MAX_STREAK_DAY) >= dailyBonus(1) * 8);
+/**
+ * The free faucet must stay small next to what an agent hands out.
+ *
+ * Coins reach players through an agent's inventory now. A daily grant that
+ * rivals a real allocation would let anybody mint coins by opening the app,
+ * which is the thing a distributed inventory exists to prevent. Pinned as a
+ * test because "let's be a bit more generous" is a one-line change that would
+ * quietly undo the decision.
+ */
+test('the daily bonus stays a token, not a source of coins', () => {
+  const mostGenerousDay = dailyBonus(MAX_STREAK_DAY, 5);
+  assert.ok(
+    mostGenerousDay <= 1_000,
+    `the best possible daily bonus is ${mostGenerousDay}, which is no longer a token`,
+  );
 });
 
 test('VIP multiplies the daily bonus', () => {

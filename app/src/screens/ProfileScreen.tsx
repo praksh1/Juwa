@@ -4,6 +4,7 @@ import { colors, radius, spacing } from '@juwa/ui';
 import { Button, Card, Screen, SectionHeader, Txt } from '../components/primitives';
 import { createPlayApi, type Profile } from '../api/client';
 import { isMuted, setMuted, sounds, unlock } from '../sound';
+import { SignOutButton } from '../components/SignOutButton';
 
 /**
  * Profile wireframe.
@@ -236,6 +237,14 @@ export function ProfileScreen() {
           <Row label="Support" value="Contact" />
         </Card>
       </View>
+
+      <SignOutButton
+        hint={
+          agentName
+            ? `You will need your username and password. ${agentName} can help if you are stuck.`
+            : undefined
+        }
+      />
     </Screen>
   );
 }

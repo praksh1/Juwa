@@ -328,7 +328,12 @@ function totalStake(state: RoundState<unknown, unknown>, fallback: number): numb
 
 // ------------------------------------------------------------------- balance
 
-export async function getBalance(db: Db, ctx: PlayerContext): Promise<BalanceResponse> {
+export async function getBalance(
+  db: Db,
+  ctx: PlayerContext,
+  now: Date = new Date(),
+  utcOffsetMinutes = 0,
+): Promise<BalanceResponse> {
   const player = await db.getPlayer(ctx.playerId);
   if (!player) throw errors.notFound('Player');
   return {
@@ -337,6 +342,19 @@ export async function getBalance(db: Db, ctx: PlayerContext): Promise<BalanceRes
     vipLevel: tierForXp(player.lifetimeWagered).level,
     lifetimeWagered: player.lifetimeWagered,
     dailyStreak: player.dailyStreak,
+    /*
+     * Whether today's free coins are already gone.
+     *
+     * Sent so the button can be disabled BEFORE it is pressed. Without it the
+     * only way to find out is to tap and be told "already claimed today",
+     * which teaches a player that the button lies — and they keep tapping it
+     * every session because nothing on screen says otherwise.
+     *
+     * Compared in the PLAYER's local day, the same basis `claimDailyBonus`
+     * uses, so the button re-enables at their midnight rather than the
+     * server's.
+     */
+    bonusClaimedToday: player.lastBonusDate === localDateString(now, utcOffsetMinutes),
   };
 }
 

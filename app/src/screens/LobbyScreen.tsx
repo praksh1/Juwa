@@ -11,6 +11,8 @@ import { Badge, Button, Card, Screen, SectionHeader, Txt } from '../components/p
 import { GameCard } from '../components/GameCard';
 import { InstallPrompt } from '../components/InstallPrompt';
 import { LegalFooter } from '../components/LegalFooter';
+import { SignOutButton } from '../components/SignOutButton';
+import { sounds } from '../sound';
 import {
   CATEGORIES,
   PLAYABLE,
@@ -35,15 +37,30 @@ export function LobbyScreen() {
   const [category, setCategory] = useState<GameCategory | 'all'>('all');
 
   // The real balance, from the server. Never a local guess — see usePlayer.
-  const { balance, dailyStreak, vipLevel, claimDaily } = usePlayer();
+  const { balance, dailyStreak, vipLevel, bonusClaimedToday, claimDaily } = usePlayer();
   const [bonusMessage, setBonusMessage] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
+  /**
+   * Who to ask for more coins.
+   *
+   * The + on the balance used to be decoration. Coins now arrive from an agent,
+   * so the honest answer to "how do I get more" is their agent's name — and
+   * when there isn't one, saying so plainly beats a button that does nothing.
+   */
+  const [agentName, setAgentName] = useState<string | null>(null);
+  const [topUpNote, setTopUpNote] = useState<string | null>(null);
   const api = React.useRef(createPlayApi()).current;
 
   useEffect(() => {
     // Greet the player by the name they chose, not the placeholder left over
     // from the wireframe.
-    api.getProfile().then((profile) => setUsername(profile.username ?? null)).catch(() => {});
+    api
+      .getProfile()
+      .then((profile) => {
+        setUsername(profile.username ?? null);
+        setAgentName(profile.agentName ?? null);
+      })
+      .catch(() => {});
   }, [api]);
 
   const vip = VIP_TIERS[vipLevel] ?? VIP_TIERS[0]!;
@@ -52,8 +69,13 @@ export function LobbyScreen() {
   const bonus = dailyBonus(Math.max(1, dailyStreak + 1), vip.dailyBonusMultiplier);
 
   const collect = async () => {
+    if (bonusClaimedToday) return;
     const result = await claimDaily();
-    setBonusMessage(result.granted ? null : (result.reason ?? 'Come back tomorrow'));
+    setBonusMessage(
+      result.granted
+        ? 'Collected. Come back tomorrow for more.'
+        : (result.reason ?? 'Come back tomorrow'),
+    );
   };
   const games = useMemo(() => gamesInCategory(category), [category]);
 
@@ -82,8 +104,16 @@ export function LobbyScreen() {
 
         <Pressable
           style={styles.balancePill}
+          onPress={() => {
+            sounds.tap();
+            setTopUpNote(
+              agentName
+                ? `Contact ${agentName} for more coins.`
+                : 'Coins come from your agent. Ask whoever set up your account.',
+            );
+          }}
           accessibilityRole="button"
-          accessibilityLabel={`Balance ${format(balance, 'GC')}. Tap to add coins.`}
+          accessibilityLabel={`Balance ${format(balance, 'GC')}. Tap to find out how to get more coins.`}
         >
           <Txt variant="money" color={colors.gold.default}>
             {format(balance, 'GC')}
@@ -95,6 +125,19 @@ export function LobbyScreen() {
           </View>
         </Pressable>
       </View>
+
+      {topUpNote ? (
+        <Pressable onPress={() => setTopUpNote(null)} accessibilityRole="button">
+          <Card style={styles.topUpNote}>
+            <Txt variant="bodySmall" color={colors.gold.light}>
+              {topUpNote}
+            </Txt>
+            <Txt variant="caption" color={colors.text.muted}>
+              Tap to dismiss
+            </Txt>
+          </Card>
+        </Pressable>
+      ) : null}
 
       {/* The bonus is a strip, not a billboard. As a full-width stacked card it
           was 40% of the first screen and pushed every game below the fold. */}
@@ -112,13 +155,26 @@ export function LobbyScreen() {
           <View style={styles.heroText}>
             <Badge label={`day ${dailyStreak} streak`} color={colors.gold.default} />
             <Txt variant="h2" style={styles.heroTitle}>
-              Collect {format(bonus, 'GC')}
+              {bonusClaimedToday ? 'Collected today' : `Collect ${format(bonus, 'GC')}`}
             </Txt>
             <Txt variant="caption" color={colors.text.primary} style={styles.heroSub}>
-              {bonusMessage ?? `${vip.name} bonus applied`}
+              {bonusMessage ??
+                (bonusClaimedToday
+                  ? 'Log in again tomorrow for more free coins'
+                  : `${vip.name} bonus applied`)}
             </Txt>
           </View>
-          <Button label="Collect" onPress={collect} />
+          {/*
+            Disabled once it is gone, rather than pressable and refusing.
+            A button that accepts a press and then says "already claimed today"
+            teaches the player it lies, and they keep pressing it every session
+            because nothing on screen ever said otherwise.
+          */}
+          <Button
+            label={bonusClaimedToday ? 'Collected' : 'Collect'}
+            onPress={collect}
+            disabled={bonusClaimedToday}
+          />
         </View>
       </Card>
 
@@ -203,12 +259,19 @@ export function LobbyScreen() {
         <Button label="Verify a round" variant="secondary" onPress={() => {}} />
       </Card>
 
+      <SignOutButton />
       <LegalFooter />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  topUpNote: {
+    gap: 2,
+    borderWidth: 1,
+    borderColor: colors.gold.default,
+    backgroundColor: 'rgba(200,164,77,0.10)',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

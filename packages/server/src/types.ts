@@ -73,6 +73,8 @@ export interface BalanceResponse {
   vipLevel: number;
   lifetimeWagered: number;
   dailyStreak: number;
+  /** True once today's free coins have been taken, in the player's own day. */
+  bonusClaimedToday: boolean;
 }
 
 export interface FairnessProof {

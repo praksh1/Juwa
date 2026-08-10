@@ -14,6 +14,8 @@ export interface PlayerState {
   balance: Minor;
   dailyStreak: number;
   vipLevel: number;
+  /** True once today's free coins are gone, so the button can be disabled. */
+  bonusClaimedToday: boolean;
   loading: boolean;
   error: string | null;
 }
@@ -39,6 +41,10 @@ export function usePlayer() {
     balance: minor(0),
     dailyStreak: 0,
     vipLevel: 0,
+    // Assumed CLAIMED until the server says otherwise. An enabled button that
+    // turns out to be dead is worse than a disabled one that lights up a moment
+    // later — the first teaches the player the button lies.
+    bonusClaimedToday: true,
     loading: true,
     error: null,
   });
@@ -50,6 +56,7 @@ export function usePlayer() {
         balance: minor(result.balance),
         dailyStreak: result.dailyStreak,
         vipLevel: result.vipLevel,
+        bonusClaimedToday: result.bonusClaimedToday ?? false,
         loading: false,
         error: null,
       });
@@ -74,13 +81,16 @@ export function usePlayer() {
   const claimDaily = useCallback(async () => {
     try {
       const result = await api.claimDailyBonus();
-      if (result.granted) {
-        setState((current) => ({
-          ...current,
-          balance: minor(result.balance),
-          dailyStreak: result.streakDay,
-        }));
-      }
+      // The flag is set whatever the answer. Granted means it is gone; refused
+      // almost always means it was already gone, and in both cases the button
+      // must stop being pressable.
+      setState((current) => ({
+        ...current,
+        bonusClaimedToday: true,
+        ...(result.granted
+          ? { balance: minor(result.balance), dailyStreak: result.streakDay }
+          : {}),
+      }));
       return result;
     } catch (caught) {
       return {

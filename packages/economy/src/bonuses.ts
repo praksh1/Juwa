@@ -17,21 +17,25 @@ import { minor, type Minor } from '@juwa/money';
 // ------------------------------------------------------------- daily bonus
 
 /**
- * Seven-day streak ladder. Day 7 is worth ten times day 1, which is what makes
- * missing day 6 feel expensive — that asymmetry is the entire mechanic.
+ * A flat 100 coins a day, and the flatness is the decision.
  *
- * A missed day resets the streak to day 1. Harsh, and it works; softening it
- * ("keep your streak with one skip") measurably reduces daily returns.
+ * This used to be a seven-day ladder climbing 5,000 to 50,000, on the classic
+ * social-casino logic that a steep streak makes missing day 6 feel expensive.
+ * That logic assumes the free faucet IS the economy — the thing that keeps a
+ * player in the loop until they buy a pack.
+ *
+ * It is not the economy here any more. Coins reach players through their AGENT,
+ * who is handed inventory by an operator and distributes it in person. A 50,000
+ * coin daily grant sitting beside that does two bad things: it dwarfs what a
+ * small allocation is worth, and it lets anybody mint coins by opening the app,
+ * which undercuts the whole point of a distributed inventory.
+ *
+ * So this is now a token — enough to be worth opening the app for, not enough
+ * to be a source of coins. The streak still counts and is still shown; it just
+ * no longer multiplies. If the free faucet ever becomes the main route again,
+ * the ladder is the thing to bring back.
  */
-const DAILY_STREAK_LADDER: number[] = [
-  5_000,
-  8_000,
-  12_000,
-  20_000,
-  30_000,
-  40_000,
-  50_000,
-];
+const DAILY_STREAK_LADDER: number[] = [100, 100, 100, 100, 100, 100, 100];
 
 export const MAX_STREAK_DAY = DAILY_STREAK_LADDER.length;
 

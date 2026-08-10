@@ -310,7 +310,9 @@ export function createServer(config: ServerConfig) {
 
   const routes: Record<string, (ctx: Ctx) => Promise<unknown>> = {
     'GET /balance': async (ctx) => {
-      const balance = await getBalance(config.db, ctx.player);
+      // The offset is passed so `bonusClaimedToday` turns over at the player's
+      // midnight, matching when the claim itself becomes available again.
+      const balance = await getBalance(config.db, ctx.player, new Date(), ctx.utcOffset);
       const tier = tierForXp(balance.lifetimeWagered);
       return { ...balance, vip: { level: tier.level, name: tier.name } };
     },
