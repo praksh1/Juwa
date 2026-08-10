@@ -209,6 +209,18 @@ paperwork before the agents, rather than after.
 
 ---
 
+## The free daily bonus
+
+Reduced to **100 coins a day**, from a streak ladder that climbed to 50,000.
+Coins reach players through their agent now, and a large free grant both dwarfs
+what a real allocation is worth and lets anybody mint coins by opening the app.
+The streak still counts and is still shown; it no longer multiplies.
+
+The **top-up** in the Store is a separate faucet — up to 4 claims of 2,500 coins
+a day, only when a player is below 2,000. Worth revisiting for the same reason,
+but it is gated on being nearly broke rather than on simply showing up, so it is
+much less of a leak. Left alone for now.
+
 ## Where the code is
 
 | Thing | File |
