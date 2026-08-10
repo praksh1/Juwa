@@ -173,6 +173,14 @@ export interface Profile {
    * "who gave me these coins" without opening a support ticket.
    */
   agentName?: string | null;
+  /**
+   * True while a temporary password set by an agent is still in force.
+   *
+   * The app blocks everything else until the player replaces it — that flag is
+   * the only thing that stops an agent-set password from working for the life
+   * of the account, so it is not a nag that can be dismissed.
+   */
+  mustSetPassword?: boolean;
 }
 
 export interface AgentSummary {
@@ -274,6 +282,29 @@ export interface PlayApi {
   getAgentTransactions(): Promise<{ transactions: AgentTxn[] }>;
   getAgentInvites(): Promise<{ invites: AgentInvite[] }>;
   createAgentInvite(label?: string): Promise<{ token: string; id: string; expiresAt: string }>;
+  /**
+   * Create a player account on their behalf.
+   *
+   * The agent chooses the username and a temporary password and hands both over
+   * in person. The account comes back flagged `mustSetPassword`.
+   */
+  createAgentPlayer(details: {
+    username: string;
+    password: string;
+    dateOfBirth: string;
+    country: string;
+    region: string;
+  }): Promise<{
+    playerId: string;
+    username: string;
+    balance: number;
+    signInWith: string;
+    mustSetPassword: boolean;
+  }>;
+  /** Ask to become an agent. Creates a pending application, which grants nothing. */
+  applyToBeAgent(displayName: string, notes?: string): Promise<{ status: string }>;
+  /** Record that the player has replaced their temporary password. */
+  confirmPasswordSet(): Promise<{ ok: boolean }>;
 }
 
 /** Demo mode plays any slot; the ids come from the same generated list the lobby uses. */
@@ -635,6 +666,33 @@ export class HttpPlayApi implements PlayApi {
       ...(label ? { label } : {}),
     });
   }
+
+  createAgentPlayer(details: {
+    username: string;
+    password: string;
+    dateOfBirth: string;
+    country: string;
+    region: string;
+  }) {
+    return this.request<{
+      playerId: string;
+      username: string;
+      balance: number;
+      signInWith: string;
+      mustSetPassword: boolean;
+    }>('/agent/players', details);
+  }
+
+  applyToBeAgent(displayName: string, notes?: string) {
+    return this.request<{ status: string }>('/agent/apply', {
+      displayName,
+      ...(notes ? { notes } : {}),
+    });
+  }
+
+  confirmPasswordSet() {
+    return this.request<{ ok: boolean }>('/agent/password-set', {});
+  }
 }
 
 // ------------------------------------------------------------------- demo
@@ -804,6 +862,7 @@ export class DemoPlayApi implements PlayApi {
        */
       agent: null,
       agentName: null,
+      mustSetPassword: false,
     };
   }
 
@@ -1145,6 +1204,15 @@ export class DemoPlayApi implements PlayApi {
     this.noAgentInDemo();
   }
   async createAgentInvite(): Promise<never> {
+    this.noAgentInDemo();
+  }
+  async createAgentPlayer(): Promise<never> {
+    this.noAgentInDemo();
+  }
+  async applyToBeAgent(): Promise<never> {
+    this.noAgentInDemo();
+  }
+  async confirmPasswordSet(): Promise<never> {
     this.noAgentInDemo();
   }
 }

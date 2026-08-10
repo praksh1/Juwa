@@ -31,6 +31,8 @@ import { colors, radius, spacing } from '@juwa/ui';
 import { Badge, Button, Card, Screen, SectionHeader, Txt } from '../components/primitives';
 import { useAgentDesk } from '../api/useAgent';
 import type { AgentPlayer } from '../api/client';
+import { StatePicker } from '../components/StatePicker';
+import { selectableStates } from '@juwa/economy';
 import { sounds } from '../sound';
 
 const coins = (value: number) => Math.round(value).toLocaleString('en-US');
@@ -49,6 +51,8 @@ export function AgentScreen() {
   const [notice, setNotice] = useState<{ text: string; good: boolean } | null>(null);
   const [invite, setInvite] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [made, setMade] = useState<{ username: string; password: string } | null>(null);
 
   const parsed = Number(amount.replace(/[^0-9]/g, ''));
   const valid = Number.isInteger(parsed) && parsed > 0;
@@ -213,6 +217,76 @@ export function AgentScreen() {
               <Txt variant="bodySmall" color={colors.text.muted}>
                 Pick a player below to send them coins. Coins you send cannot be taken back.
               </Txt>
+            </View>
+          )}
+        </Card>
+      </View>
+
+      {/* ------------------------------------------------- new player account */}
+
+      <View>
+        <SectionHeader title="New player" />
+        <Card style={styles.group}>
+          {made ? (
+            /*
+              Shown once, and it is the only moment both halves of the sign-in
+              exist together on a screen. The password is echoed back from what
+              the agent typed rather than fetched from anywhere — the server
+              never returns it, because the server does not have it.
+            */
+            <View style={styles.send}>
+              <Txt variant="caption" color={colors.gold.light}>
+                ACCOUNT CREATED — READ THIS TO THEM
+              </Txt>
+              <View style={styles.handover}>
+                <Txt variant="caption" color={colors.text.muted}>
+                  USERNAME
+                </Txt>
+                <Txt variant="h3">{made.username}</Txt>
+                <Txt variant="caption" color={colors.text.muted} style={styles.handoverGap}>
+                  TEMPORARY PASSWORD
+                </Txt>
+                <Txt variant="h3">{made.password}</Txt>
+              </View>
+              <Txt variant="caption" color={colors.text.muted}>
+                They sign in with the username — no email needed. The app will make them choose
+                their own password straight away, and this one stops working then.
+              </Txt>
+              <Button label="Done" variant="secondary" onPress={() => setMade(null)} />
+            </View>
+          ) : creating ? (
+            <NewPlayerForm
+              busy={busy}
+              onCancel={() => setCreating(false)}
+              onCreate={async (details) => {
+                setBusy(true);
+                setNotice(null);
+                const result = await desk.createPlayer(details);
+                setBusy(false);
+                if (result.ok) {
+                  sounds.tap();
+                  setCreating(false);
+                  setMade({ username: details.username, password: details.password });
+                } else {
+                  setNotice({ text: result.message ?? 'Could not create that account', good: false });
+                }
+              }}
+            />
+          ) : (
+            <View style={styles.send}>
+              <Txt variant="bodySmall" color={colors.text.muted}>
+                Set up an account for someone who is with you now. You choose a username and a
+                first password and read them out; they pick their own password immediately after.
+              </Txt>
+              <Button
+                label="Create a player account"
+                disabled={summary.status !== 'active'}
+                onPress={() => {
+                  sounds.tap();
+                  setMade(null);
+                  setCreating(true);
+                }}
+              />
             </View>
           )}
         </Card>
@@ -408,7 +482,162 @@ function inviteUrl(token: string): string {
   return `${origin}/?invite=${token}`;
 }
 
+/**
+ * The account-creation form.
+ *
+ * Date of birth and state are here because the age gate is not relaxed for
+ * accounts an agent makes: the server runs exactly the same checks it runs on a
+ * self-service sign-up, and refuses a minor or a restricted state. The
+ * difference is that the attestation is now attributable to a named agent, so
+ * an agent typing a date they have not actually checked is doing so on the
+ * record.
+ */
+function NewPlayerForm({
+  busy,
+  onCancel,
+  onCreate,
+}: {
+  busy: boolean;
+  onCancel: () => void;
+  onCreate: (details: {
+    username: string;
+    password: string;
+    dateOfBirth: string;
+    region: string;
+  }) => void;
+}) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [day, setDay] = useState('');
+  const [month, setMonth] = useState('');
+  const [year, setYear] = useState('');
+  const [region, setRegion] = useState('');
+  const [problem, setProblem] = useState<string | null>(null);
+  const states = useMemo(() => selectableStates(), []);
+
+  const dateOfBirth = useMemo(() => {
+    if (!/^\d{1,2}$/.test(day) || !/^\d{1,2}$/.test(month) || !/^\d{4}$/.test(year)) return null;
+    const iso = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    const parsed = new Date(`${iso}T00:00:00Z`);
+    // Rejects 31 February, which JS would silently roll forward to 3 March.
+    if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== iso) return null;
+    return iso;
+  }, [day, month, year]);
+
+  const submit = () => {
+    setProblem(null);
+    if (!/^[a-z0-9_]{3,24}$/i.test(username.trim())) {
+      setProblem('Username: 3–24 letters, numbers or underscores. No spaces.');
+      return;
+    }
+    if (password.length < 8) {
+      setProblem('The temporary password needs at least 8 characters.');
+      return;
+    }
+    if (!dateOfBirth) {
+      setProblem('Enter their real date of birth.');
+      return;
+    }
+    if (!region) {
+      setProblem('Choose the state they live in.');
+      return;
+    }
+    onCreate({ username: username.trim(), password, dateOfBirth, region });
+  };
+
+  return (
+    <View style={styles.send}>
+      <TextInput
+        value={username}
+        onChangeText={setUsername}
+        placeholder="Username they will sign in with"
+        placeholderTextColor={colors.text.muted}
+        autoCapitalize="none"
+        maxLength={24}
+        style={styles.input}
+        accessibilityLabel="Player username"
+      />
+      <TextInput
+        value={password}
+        onChangeText={setPassword}
+        placeholder="Temporary password"
+        placeholderTextColor={colors.text.muted}
+        autoCapitalize="none"
+        style={styles.input}
+        accessibilityLabel="Temporary password"
+      />
+
+      <Txt variant="caption" color={colors.text.muted}>
+        THEIR DATE OF BIRTH
+      </Txt>
+      <View style={styles.dobRow}>
+        <TextInput
+          value={day}
+          onChangeText={(next) => setDay(next.replace(/\D/g, ''))}
+          placeholder="DD"
+          placeholderTextColor={colors.text.muted}
+          keyboardType="number-pad"
+          inputMode="numeric"
+          maxLength={2}
+          style={[styles.input, styles.dobBox]}
+          accessibilityLabel="Day of birth"
+        />
+        <TextInput
+          value={month}
+          onChangeText={(next) => setMonth(next.replace(/\D/g, ''))}
+          placeholder="MM"
+          placeholderTextColor={colors.text.muted}
+          keyboardType="number-pad"
+          inputMode="numeric"
+          maxLength={2}
+          style={[styles.input, styles.dobBox]}
+          accessibilityLabel="Month of birth"
+        />
+        <TextInput
+          value={year}
+          onChangeText={(next) => setYear(next.replace(/\D/g, ''))}
+          placeholder="YYYY"
+          placeholderTextColor={colors.text.muted}
+          keyboardType="number-pad"
+          inputMode="numeric"
+          maxLength={4}
+          style={[styles.input, styles.dobYear]}
+          accessibilityLabel="Year of birth"
+        />
+      </View>
+
+      <StatePicker states={states} value={region} onChange={setRegion} />
+
+      <Txt variant="caption" color={colors.text.muted}>
+        You are confirming they are 18 or over. This is recorded against your agent account.
+      </Txt>
+
+      {problem ? (
+        <Txt variant="caption" color={colors.feedback.loss}>
+          {problem}
+        </Txt>
+      ) : null}
+
+      <View style={styles.sendRow}>
+        <Button label="Cancel" variant="secondary" onPress={onCancel} style={styles.flex} />
+        <Button label="Create account" onPress={submit} loading={busy} style={styles.flex2} />
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  handover: {
+    padding: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.gold.default,
+    backgroundColor: 'rgba(200,164,77,0.08)',
+  },
+  handoverGap: { marginTop: spacing.sm },
+  dobRow: { flexDirection: 'row', gap: spacing.sm },
+  dobBox: { flex: 1 },
+  dobYear: { flex: 1.6 },
   centre: { alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl },
   hero: { gap: spacing.xs, paddingVertical: spacing.lg },
   heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

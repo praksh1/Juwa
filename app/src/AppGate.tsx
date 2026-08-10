@@ -4,6 +4,7 @@ import { colors } from '@juwa/ui';
 import { AuthScreen } from './screens/AuthScreen';
 import { LandingScreen } from './screens/LandingScreen';
 import { RegisterScreen } from './screens/RegisterScreen';
+import { SetPasswordScreen } from './screens/SetPasswordScreen';
 import { onAuthChange, type Session } from './api/auth';
 import { PlayApiError, createPlayApi } from './api/client';
 import { PurchaseWatcher } from './components/PurchaseWatcher';
@@ -40,6 +41,14 @@ export function AppGate({ children }: { children: React.ReactNode }) {
    */
   const [entry, setEntry] = useState<'landing' | 'signup' | 'signin'>('landing');
   const [registered, setRegistered] = useState<boolean | null>(null);
+  /**
+   * Set while an agent-chosen temporary password is still in force.
+   *
+   * Gates the whole app rather than showing a banner, because until it is
+   * cleared somebody else knows a working password for this account. See
+   * SetPasswordScreen.
+   */
+  const [mustSetPassword, setMustSetPassword] = useState(false);
   const [loading, setLoading] = useState(true);
   const api = React.useRef(createPlayApi()).current;
 
@@ -57,7 +66,11 @@ export function AppGate({ children }: { children: React.ReactNode }) {
     let alive = true;
     api
       .getProfile()
-      .then((profile) => alive && setRegistered(profile.registered))
+      .then((profile) => {
+        if (!alive) return;
+        setRegistered(profile.registered);
+        setMustSetPassword(profile.mustSetPassword === true);
+      })
       // A failure here is far more likely to be an unreachable API than a
       // genuinely unregistered player, but showing the age gate is the safe
       // wrong answer: it cannot let anyone play who should not.
@@ -121,6 +134,13 @@ export function AppGate({ children }: { children: React.ReactNode }) {
     );
   }
   if (!registered) return <RegisterScreen onRegister={register} />;
+
+  /*
+   * Before the lobby, before anything. A player whose password is still the one
+   * their agent typed does not get to use the app until they have replaced it —
+   * every second in this state is a second somebody else can sign in as them.
+   */
+  if (mustSetPassword) return <SetPasswordScreen onDone={() => setMustSetPassword(false)} />;
 
   return (
     <View style={styles.app}>

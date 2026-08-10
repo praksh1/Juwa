@@ -74,10 +74,46 @@ Next time they open the app they have an **Agent** tab.
 
 ## How an agent gets players
 
-They press **Create invite link** and send the link to somebody. It works
-**once** and expires after **seven days**. The person who opens it sees "Invited
-by <agent name>" on the sign-up screen and is attached to that agent the moment
-they finish registering.
+**Two ways**, and an agent can use either.
+
+**1. Create the account there and then.** The agent taps *Create a player
+account*, types a username, a temporary password and the player's date of birth
+and state, and reads the username and password back to them. No email needed.
+The player signs in with the **username** — not an email — and the app forces
+them to choose their own password before it will let them do anything else.
+
+> The forced password change is not decoration. Between creating the account and
+> that change, the agent knows a working password for somebody else's balance.
+> The change is what closes that window, which is why it blocks the whole app
+> rather than showing a dismissible prompt. Every account made this way is also
+> permanently stamped with which agent made it.
+
+**2. Send an invite link.** It works **once** and expires after **seven days**.
+The person who opens it sees "Invited by <agent name>" on the sign-up screen and
+is attached to that agent the moment they finish registering. They use their own
+email and their own password, so nobody ever knows their credentials but them.
+
+Prefer the link where the player has an email. Use account creation where they
+do not.
+
+## Fixing a mistake
+
+An agent who sends 500,000 instead of 50,000 cannot undo it — there is no
+agent-facing route that moves coins back, on purpose. **You** can, from the
+operator console: it posts an opposite transaction rather than editing anything,
+so the ledger still balances and both the mistake and the correction stay on the
+record. It refuses to run twice, and it fails if the player has already spent
+the coins, because a correction must never push somebody below zero.
+
+## Becoming an agent
+
+Somebody who wants to be an agent signs up as an ordinary player, opens
+**Profile → Agents → Apply to become an agent**, and picks the name their
+players will see. They appear at the top of the Agents section in your console
+with a **pending** badge, and you approve with one tap.
+
+Pending grants nothing at all — they cannot allocate, invite, or create
+accounts until you activate them. You never have to search for anybody.
 
 Players who signed up before any of this existed, or who signed up directly,
 have no agent. That is fine and nothing breaks — free coins, the daily bonus and
@@ -101,6 +137,9 @@ are not related, because the function that moves them refuses.
 | Rule | Enforced by |
 | --- | --- |
 | An agent can only fund their own players | `allocate_to_player` ownership check |
+| An agent-set password stops working at first sign-in | `must_set_password`, checked by the app gate and cleared only by the server |
+| An agent cannot create an account for a minor or in a restricted state | `complete_registration`, unchanged, inside `create_agent_player` |
+| A reversal cannot run twice or push a player negative | `reverse_allocation` plus the non-negative trigger |
 | An agent can never allocate more than they hold | `account_balance_cache` non-negative trigger |
 | Two simultaneous allocations cannot both spend the last coins | row lock in `post_transfer`, taken in id order |
 | A suspended agent can do nothing | status check in `allocate_to_player` |
@@ -120,7 +159,9 @@ None of these exist as endpoints. They are not unbuilt features.
 - A player cannot withdraw, redeem, cash out, sell, or transfer coins.
 - A player cannot send coins back to their agent.
 - A player cannot change which agent they belong to.
-- An agent cannot take coins back from a player.
+- An agent cannot take coins back from a player, including one they created.
+- An agent cannot reverse their own allocation. Only an operator can.
+- An agent cannot see or reset a player's password after the player has set it.
 - An agent cannot transfer inventory to another agent.
 - An agent cannot create another agent, or grant themselves inventory.
 
@@ -134,6 +175,15 @@ state it operates in.
 ## ⚠️ Two things to take to a lawyer before this goes live
 
 Both are about the agent system specifically, not about the app in general.
+
+**0. Agents creating accounts and setting the first password.** This was a
+deliberate choice, made with the trade-off in front of you, so it is recorded
+here rather than argued again. Between creation and the player's first sign-in,
+the agent knows a working credential for that account; `must_set_password`
+closes that window at first contact and `created_by_agent` records who opened
+it. What it cannot do is change how the arrangement looks from outside: an agent
+who issues credentials and loads balances is doing something a regulator will
+recognise, and the mitigation is the agent agreement, not the schema.
 
 **1. Agents distributing coins that were bought with money.** Coins in this
 product are sold through the app store and through Stripe. An agent handing out
@@ -165,6 +215,9 @@ paperwork before the agents, rather than after.
 | --- | --- |
 | Schema, and every rule that cannot be bypassed | `db/migrations/0009_agents.sql` |
 | Audit attribution | `db/migrations/0010_agent_audit_actor.sql` |
+| Agent-created accounts, reversals, applications | `db/migrations/0011_agent_created_players.sql` |
+| Supabase admin access | `packages/api/src/supabase-admin.ts` |
+| Forced password change | `app/src/screens/SetPasswordScreen.tsx` |
 | Data layer | `packages/server/src/agents.ts` |
 | HTTP routes | `packages/api/src/agent-routes.ts` |
 | Operator console section | `packages/api/src/admin-console.ts` |

@@ -376,7 +376,23 @@ function renderAgents(agents) {
   section.querySelector('#mkagent').addEventListener('click', create);
 
   const tbody = section.querySelector('tbody');
-  for (const agent of agents) {
+  /*
+   * Applications first, always.
+   *
+   * Somebody who has asked to become an agent is waiting on a decision; an
+   * agent who has been running for months is not. Sorting by status puts the
+   * only rows that need an action at the top, which is what makes this a queue
+   * rather than a list to scroll.
+   */
+  const waiting = agents.filter((a) => a.status === 'pending').length;
+  if (waiting) {
+    section.querySelector('h2').textContent =
+      'Agents — ' + waiting + ' waiting for approval';
+  }
+  const ordered = [...agents].sort((a, b) =>
+    (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1),
+  );
+  for (const agent of ordered) {
     const row = $(\`<tr>
       <td>\${agent.displayName}<div class="hint">\${agent.agentId}</div></td>
       <td><span class="pill \${agent.status}">\${agent.status}</span></td>

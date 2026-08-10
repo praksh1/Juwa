@@ -30,8 +30,26 @@ export function AuthScreen({
 
   const submit = async () => {
     setMessage(null);
-    if (!email.includes('@')) {
+    /*
+     * Signing IN accepts a username as well as an email; signing UP still
+     * requires a real address.
+     *
+     * Players an agent creates in person have no email — their account is
+     * `<username>@<synthetic domain>` and they are told only the username. This
+     * check used to demand an '@' in both modes, which meant every such player
+     * was told "Enter a valid email address" and could not get into the account
+     * that had just been made for them. Creating accounts they cannot sign into
+     * is worse than not creating them.
+     *
+     * Sign-up is unchanged: it sends a confirmation link, and a link sent to a
+     * synthetic address goes nowhere.
+     */
+    if (mode === 'signup' && !email.includes('@')) {
       setMessage('Enter a valid email address.');
+      return;
+    }
+    if (mode === 'login' && email.trim().length < 3) {
+      setMessage('Enter your email address or username.');
       return;
     }
     if (password.length < 6) {
@@ -81,15 +99,15 @@ export function AuthScreen({
 
         <TextInput
           style={styles.input}
-          placeholder="Email"
+          placeholder={mode === 'signup' ? 'Email' : 'Email or username'}
           placeholderTextColor={colors.text.muted}
           autoCapitalize="none"
-          autoComplete="email"
-          keyboardType="email-address"
-          inputMode="email"
+          autoComplete={mode === 'signup' ? 'email' : 'username'}
+          keyboardType={mode === 'signup' ? 'email-address' : 'default'}
+          inputMode={mode === 'signup' ? 'email' : 'text'}
           value={email}
           onChangeText={setEmail}
-          accessibilityLabel="Email address"
+          accessibilityLabel={mode === 'signup' ? 'Email address' : 'Email address or username'}
         />
         <TextInput
           style={styles.input}

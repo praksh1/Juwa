@@ -121,10 +121,62 @@ export async function signUp(email: string, password: string): Promise<AuthResul
   }
 }
 
-export async function signIn(email: string, password: string): Promise<AuthResult> {
-  if (!supabase) return demoSignIn(email);
+/**
+ * Where an agent-created player's synthetic address lives.
+ *
+ * Players an agent signs up in person have no email, so their account is made
+ * as `<username>@<this domain>` — see `supabase-admin.ts` on the API. The app
+ * needs to know the domain for one reason only: so somebody handed the words
+ * "your username is wes" can type `wes` into the sign-in box and have it work.
+ *
+ * It must match PLAYER_EMAIL_DOMAIN on the API. Both default to the same value,
+ * so a deployment that never sets either is still consistent.
+ */
+const PLAYER_EMAIL_DOMAIN = (
+  process.env['EXPO_PUBLIC_PLAYER_EMAIL_DOMAIN'] ?? 'players.juwa.invalid'
+)
+  .trim()
+  .replace(/^@/, '');
+
+/**
+ * Turn what somebody typed into the address Supabase knows them by.
+ *
+ * An `@` means they typed an email and it is used as-is. Anything else is a
+ * username, and gets the synthetic domain appended. This is the whole of
+ * "sign in with a username" — there is no second credential system behind it,
+ * which is exactly the point.
+ */
+export function toSignInEmail(identifier: string): string {
+  const trimmed = identifier.trim();
+  return trimmed.includes('@') ? trimmed : `${trimmed.toLowerCase()}@${PLAYER_EMAIL_DOMAIN}`;
+}
+
+export async function signIn(identifier: string, password: string): Promise<AuthResult> {
+  if (!supabase) return demoSignIn(identifier);
   try {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({
+      email: toSignInEmail(identifier),
+      password,
+    });
+    if (error) return { ok: false, message: friendly(error.message) };
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, message: friendly((error as Error).message) };
+  }
+}
+
+/**
+ * Replace the password on the signed-in account.
+ *
+ * Used by the forced change a player is put through the first time they sign in
+ * with an agent-set temporary password. It goes to Supabase with the player's
+ * OWN session — the API never sees a password, and the agent's copy stops
+ * working the moment this succeeds.
+ */
+export async function changePassword(password: string): Promise<AuthResult> {
+  if (!supabase) return { ok: true };
+  try {
+    const { error } = await supabase.auth.updateUser({ password });
     if (error) return { ok: false, message: friendly(error.message) };
     return { ok: true };
   } catch (error) {

@@ -73,6 +73,12 @@ export interface AgentDesk {
   refresh: () => Promise<void>;
   allocate: (playerId: string, amount: number) => Promise<{ ok: boolean; message?: string }>;
   createInvite: (label?: string) => Promise<{ ok: boolean; token?: string; message?: string }>;
+  createPlayer: (details: {
+    username: string;
+    password: string;
+    dateOfBirth: string;
+    region: string;
+  }) => Promise<{ ok: boolean; signInWith?: string; message?: string }>;
 }
 
 export function useAgentDesk(): AgentDesk {
@@ -166,6 +172,31 @@ export function useAgentDesk(): AgentDesk {
     [api, refresh],
   );
 
+  /**
+   * Create an account for a player standing in front of the agent.
+   *
+   * The agent types a username and a first password and reads both back to the
+   * player. The account comes back flagged so the app makes the player replace
+   * that password before it will let them do anything else — which is what
+   * stops the agent's copy from working for the life of the account.
+   */
+  const createPlayer = useCallback(
+    async (details: { username: string; password: string; dateOfBirth: string; region: string }) => {
+      try {
+        const result = await api.createAgentPlayer({ ...details, country: 'US' });
+        void refresh();
+        return { ok: true, signInWith: result.signInWith };
+      } catch (caught) {
+        return {
+          ok: false,
+          message:
+            caught instanceof PlayApiError ? caught.message : 'Could not create that account',
+        };
+      }
+    },
+    [api, refresh],
+  );
+
   return useMemo(
     () => ({
       summary,
@@ -177,7 +208,19 @@ export function useAgentDesk(): AgentDesk {
       refresh,
       allocate,
       createInvite,
+      createPlayer,
     }),
-    [summary, players, transactions, invites, loading, error, refresh, allocate, createInvite],
+    [
+      summary,
+      players,
+      transactions,
+      invites,
+      loading,
+      error,
+      refresh,
+      allocate,
+      createInvite,
+      createPlayer,
+    ],
   );
 }

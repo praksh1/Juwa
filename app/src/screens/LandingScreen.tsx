@@ -11,7 +11,7 @@
  */
 
 import React from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, spacing, typography } from '@juwa/ui';
 import { Button, Card, Txt } from '../components/primitives';
@@ -84,6 +84,26 @@ export function LandingScreen({
           <View style={styles.heroButtons}>
             <Button label="Browse games" variant="secondary" onPress={onSignIn} />
             <Button label="Create account" onPress={onCreateAccount} />
+          </View>
+          {/*
+            The agent door.
+            
+            Deliberately a link into the SAME sign-in the players use, not a
+            second login box. Being an agent is a property of an account that
+            the server checks on every request — a separate credential system
+            would add two places for a password to leak and two password-reset
+            flows, and would buy nothing. What an agent actually needs is a
+            visible way in and a way to apply, which is what this is.
+          */}
+          <View style={styles.agentRow}>
+            <Txt variant="caption" color={colors.text.muted}>
+              Working with us as an agent?{' '}
+            </Txt>
+            <Pressable onPress={onSignIn} accessibilityRole="link">
+              <Txt variant="caption" color={colors.neon.cyan}>
+                Sign in here
+              </Txt>
+            </Pressable>
           </View>
         </View>
 
@@ -186,6 +206,7 @@ const styles = StyleSheet.create({
   heroTitle: { letterSpacing: 1 },
   heroSub: { maxWidth: 460 },
   heroButtons: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, flexWrap: 'wrap' },
+  agentRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.md, flexWrap: 'wrap' },
   statStrip: {
     flexDirection: 'row',
     flexWrap: 'wrap',

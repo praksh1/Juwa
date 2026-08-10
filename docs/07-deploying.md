@@ -288,6 +288,41 @@ Prices live in `packages/economy/src/packs.ts`, not in Stripe. The client sends
 a pack **id** and the server looks up the amount, so a modified client cannot
 name its own price.
 
+## 3b-bis. Letting agents create player accounts
+
+Optional. Without it agents can still invite players by link; with it they can
+create an account and set a temporary password for somebody standing in front of
+them.
+
+Set on the API service:
+
+```
+SUPABASE_SERVICE_ROLE_KEY   from Supabase → Project Settings → API
+PLAYER_EMAIL_DOMAIN         optional, defaults to players.juwa.invalid
+```
+
+⚠️ **The service-role key bypasses every security policy in your Supabase
+project.** It is more powerful than the database password. It goes in the API
+service's environment box and nowhere else — never the app, never a repository,
+never a chat message. If it ever leaks, rotate it in the Supabase dashboard
+immediately.
+
+`PLAYER_EMAIL_DOMAIN` must be a domain that **cannot receive mail**. Accounts
+made this way have no real email, so they are stored as
+`<username>@<that domain>`; a routable domain would mean password-reset links
+for real player accounts being delivered to whoever owns that mailbox. The
+default ends in `.invalid`, which is reserved by the standards body precisely so
+it can never resolve.
+
+The app needs the same value as `EXPO_PUBLIC_PLAYER_EMAIL_DOMAIN` at build time
+if you change it from the default, so that typing a username into the sign-in
+box works.
+
+One consequence worth knowing before you switch this on: a player created this
+way **cannot reset their own password by email**, because there is no mailbox.
+Recovery is an operator action. That is inherent to accounts without email
+addresses and cannot be fixed in code.
+
 ## 3c. The operator panel
 
 The panel lives at **`https://api.yourdomain.com/admin`** — on the API, not on
