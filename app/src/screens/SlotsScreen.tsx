@@ -1008,6 +1008,7 @@ export function SlotsScreen() {
               spinUp={inFreeSpins ? SPIN_UP_SECONDS * FS_SPEED : SPIN_UP_SECONDS}
               anticipating={anticipating[i] ?? false}
               {...(details?.art ? { family: details.art } : {})}
+              gameId={gameId}
               tint={symbolTint}
               material={material}
               // Dimming needs something to contrast AGAINST. A scatter win
@@ -1035,6 +1036,7 @@ export function SlotsScreen() {
             cellHeight={cellHeight}
             rows={ROWS}
             ways={details?.pays === 'ways'}
+            gameId={gameId}
             {...(details?.art ? { family: details.art } : {})}
           />
         </View>

@@ -75,6 +75,7 @@ interface AnimatedSymbolProps {
   /** Cell size in points. The symbol is drawn inside it with room to grow. */
   size: number;
   family?: string;
+  gameId?: string;
   /** The metal the drawn symbols are cast in, from the game's accent. */
   tint?: SymbolTint;
   /** The substance this game's low symbols are cut from. */
@@ -87,7 +88,16 @@ interface AnimatedSymbolProps {
   seed: number;
 }
 
-export function AnimatedSymbol({ name, size, family, tint, material, state, seed }: AnimatedSymbolProps) {
+export function AnimatedSymbol({
+  name,
+  size,
+  family,
+  gameId,
+  tint,
+  material,
+  state,
+  seed,
+}: AnimatedSymbolProps) {
   const reduceMotion = usePrefersReducedMotion();
   const scale = useRef(new Animated.Value(1)).current;
   const shine = useRef(new Animated.Value(0)).current;
@@ -215,6 +225,7 @@ export function AnimatedSymbol({ name, size, family, tint, material, state, seed
           name={name}
           size={size}
           {...(family ? { family } : {})}
+          {...(gameId ? { gameId } : {})}
           {...(tint ? { tint } : {})}
           {...(material ? { material } : {})}
         />

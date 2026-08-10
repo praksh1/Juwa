@@ -132,6 +132,8 @@ export interface ReelProps {
    * no family and are meant to keep the vector symbols.
    */
   family?: string;
+  /** Which game is dealing, so it can use its own symbols. */
+  gameId?: string;
   /** The metal the drawn symbols are cast in. Comes from the game's accent. */
   tint?: SymbolTint;
   /** The substance this game's low symbols are cut from. */
@@ -226,6 +228,7 @@ export function Reel({
   settled = false,
   round = 0,
   family,
+  gameId,
   tint,
   material,
   fill = 0.86,
@@ -473,6 +476,7 @@ export function Reel({
                 // instead of restarting it on every parent render.
                 seed={index * 31 + i}
                 {...(family ? { family } : {})}
+                {...(gameId ? { gameId } : {})}
                 {...(tint ? { tint } : {})}
                 {...(material ? { material } : {})}
               />

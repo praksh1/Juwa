@@ -22,6 +22,8 @@ import { hexToHsl, hslToHex } from '@juwa/ui';
 import { symbolDisplayName, symbolImage } from '../art/symbol-art';
 import { ROYAL_FOR_SYMBOL, RoyalSymbol } from './symbols/Royals';
 import type { Material } from './symbols/materials';
+import { MOTIFS, MotifDefs } from './symbols/motifs';
+import { motifDisplayName, motifFor, paletteFor } from './symbols/game-motifs';
 
 const uid = (symbol: string, name: string) => `sym-${symbol}-${name}`;
 
@@ -346,6 +348,7 @@ export function SlotSymbol({
   family,
   tint,
   material,
+  gameId,
 }: {
   name: string;
   size: number;
@@ -355,18 +358,49 @@ export function SlotSymbol({
   /**
    * The substance this game's low symbols are cut from.
    *
-   * When given, the three cheapest symbols are drawn as card royals in that
-   * material instead of as borrowed fruit — which is what every cabinet this
-   * is modelled on does, and what stops six games dealing the same medallions.
+   * LAST RESORT, and it is worth being blunt about why, because this was got
+   * badly wrong once. Card royals are what a real cabinet puts under four or
+   * five painted characters — they are the CHEAP half of the pattern, and they
+   * only work when the expensive half exists. Wired up so that a royal beat a
+   * painted picture, they did the exact opposite of their purpose: Desert
+   * Mirage stopped dealing a pharaoh, a scarab and a pyramid and started
+   * dealing A, K and Q, as did the other sixteen games with real artwork. The
+   * one thing every game had that was its own was replaced by the one thing
+   * they could all share.
+   *
+   * So artwork wins, always. A royal is drawn only where a game has no picture
+   * for that symbol at all, and then it is better than the borrowed fruit it
+   * replaced.
    */
   material?: Material;
+  /**
+   * Which GAME is dealing this symbol.
+   *
+   * The game outranks its art family, and has to: a family is shared and the
+   * complaint being answered is that shared art makes every game the same one.
+   * Where a game has motifs of its own they win over anything borrowed.
+   */
+  gameId?: string;
 }) {
-  // Royals win over a family image: a themed picture for a LOW symbol is the
-  // slot that borrowed pirate hats for a mermaid game.
-  const royal = material ? ROYAL_FOR_SYMBOL[name] : undefined;
-  if (royal && material) {
-    return <RoyalSymbol glyph={royal} material={material} size={size} />;
+  // This game's own symbol, if it has one. Checked FIRST — a game with its own
+  // reef should never fall through to a shared set of pirate hats.
+  const motif = motifFor(gameId, name);
+  const palette = paletteFor(gameId);
+  if (motif && palette && MOTIFS[motif]) {
+    const Draw = MOTIFS[motif]!;
+    return (
+      <Svg
+        width={size}
+        height={size}
+        viewBox="0 0 100 100"
+        accessibilityLabel={motifDisplayName(gameId, name)}
+      >
+        <MotifDefs p={palette} />
+        {Draw(palette)}
+      </Svg>
+    );
   }
+
   const image = symbolImage(family, name);
   if (image) {
     return (
@@ -383,6 +417,13 @@ export function SlotSymbol({
         accessibilityLabel={symbolDisplayName(family, name)}
       />
     );
+  }
+
+  // No picture for this symbol. A royal in the game's own material beats the
+  // borrowed fruit that used to fill the gap — but only here, at the bottom.
+  const royal = material ? ROYAL_FOR_SYMBOL[name] : undefined;
+  if (royal && material) {
+    return <RoyalSymbol glyph={royal} material={material} size={size} />;
   }
 
   const Drawing = SYMBOLS[name];

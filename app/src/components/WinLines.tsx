@@ -219,6 +219,8 @@ interface WinLinesProps {
   ways?: boolean;
   /** Art family, so the badge can draw the symbol the reels are showing. */
   family?: string;
+  /** Which game, so the badge draws that game's own symbol. */
+  gameId?: string;
 }
 
 /**
@@ -237,6 +239,7 @@ export function WinLines({
   rows,
   ways = false,
   family,
+  gameId,
 }: WinLinesProps) {
   const fade = useRef(new Animated.Value(0)).current;
   const shown =
@@ -370,6 +373,7 @@ export function WinLines({
           centreY={centreY}
           width={width}
           {...(family ? { family } : {})}
+          {...(gameId ? { gameId } : {})}
         />
       ) : null}
     </Animated.View>
@@ -389,6 +393,7 @@ function LineBadge({
   cellHeight,
   centreY,
   family,
+  gameId,
   width,
 }: {
   win: LineWin;
@@ -396,6 +401,8 @@ function LineBadge({
   cellHeight: number;
   centreY: (reel: number, row: number) => number;
   family?: string;
+  /** Which game, so the badge draws that game's own symbol. */
+  gameId?: string;
   width: number;
 }) {
   const cells = win.cells ?? [];
@@ -430,7 +437,12 @@ function LineBadge({
         there. Drawing the actual symbol cannot be wrong in any theme, because
         it is the same picture the reel is showing.
       */}
-      <SlotSymbol name={win.symbol} size={16} {...(family ? { family } : {})} />
+      <SlotSymbol
+        name={win.symbol}
+        size={16}
+        {...(family ? { family } : {})}
+        {...(gameId ? { gameId } : {})}
+      />
       <Txt variant="caption" color={colors.feedback.winBright}>
         ×{win.count}
       </Txt>
