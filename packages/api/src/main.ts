@@ -13,7 +13,7 @@ import { CERT_FAILURE_ADVICE, decideSsl, isCertificateError, sslOptionFor } from
 import { describeProblems, parseAllowedOrigins } from './origins.js';
 import { JwksCache, jwksUrlForSupabase } from './jwks.js';
 import { bootstrapOperator } from './bootstrap-operator.js';
-import { supabaseAdminFromEnv } from './supabase-admin.js';
+import { isConfigured, supabaseAdminFromEnv } from './supabase-admin.js';
 
 function required(name: string): string {
   const value = process.env[name];
@@ -138,12 +138,14 @@ console.log(
  * Absent, agent-created accounts return 503 and invite links still work. One
  * missing optional credential must disable one feature, not the product.
  */
-const supabaseAdmin = supabaseAdminFromEnv();
+const supabaseAdminEnv = supabaseAdminFromEnv();
+const supabaseAdmin = isConfigured(supabaseAdminEnv) ? supabaseAdminEnv : undefined;
 console.log(
   supabaseAdmin
     ? `Agent-created player accounts: on, signing in at @${supabaseAdmin.playerEmailDomain}.`
-    : 'Agent-created player accounts: off — set SUPABASE_SERVICE_ROLE_KEY to enable. ' +
-      'Invite links work either way.',
+    : `Agent-created player accounts: off — still needs ${
+        isConfigured(supabaseAdminEnv) ? '' : supabaseAdminEnv.missing.join(' and ')
+      }. Agents can still invite players by link.`,
 );
 
 const { server } = createServer({

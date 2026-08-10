@@ -64,17 +64,40 @@ export interface SupabaseAdminConfig {
  */
 export function supabaseAdminFromEnv(
   env: NodeJS.ProcessEnv = process.env,
-): SupabaseAdminConfig | undefined {
+): SupabaseAdminConfig | { missing: string[] } {
   const url = env['SUPABASE_URL']?.trim().replace(/\/+$/, '');
   const serviceRoleKey = env['SUPABASE_SERVICE_ROLE_KEY']?.trim();
-  if (!url || !serviceRoleKey) return undefined;
+
+  /*
+   * Which one is missing, not just that something is.
+   *
+   * This needs BOTH variables — the key to authenticate and the URL to know
+   * which project to authenticate against — and a project can easily have the
+   * URL unset, because token verification also accepts the legacy
+   * SUPABASE_JWT_SECRET instead. The first version of this logged "set
+   * SUPABASE_SERVICE_ROLE_KEY to enable" whatever was absent, which is the
+   * worst possible message for somebody who has just set exactly that and is
+   * looking at the log to find out why nothing changed.
+   */
+  const missing: string[] = [];
+  if (!url) missing.push('SUPABASE_URL');
+  if (!serviceRoleKey) missing.push('SUPABASE_SERVICE_ROLE_KEY');
+  if (missing.length > 0) return { missing };
+
   return {
-    url,
-    serviceRoleKey,
+    url: url!,
+    serviceRoleKey: serviceRoleKey!,
     playerEmailDomain: (
       env['PLAYER_EMAIL_DOMAIN']?.trim() || DEFAULT_PLAYER_EMAIL_DOMAIN
     ).replace(/^@/, ''),
   };
+}
+
+/** Narrow the result of `supabaseAdminFromEnv`. */
+export function isConfigured(
+  result: SupabaseAdminConfig | { missing: string[] },
+): result is SupabaseAdminConfig {
+  return !('missing' in result);
 }
 
 /** The address an agent-created player signs in with. */
