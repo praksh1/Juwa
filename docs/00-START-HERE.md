@@ -158,3 +158,4 @@ reason I chose this toolset for you.
 | What happens when I tap SPIN? | [The Play Path](06-the-play-path.md) |
 | How do I put it online? | [Deploying](07-deploying.md) |
 | What do I say to the lawyer? | [Legal Language](08-legal-language.md) |
+| How do agents and players work? | [Agents](12-agents.md) |
