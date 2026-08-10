@@ -82,6 +82,13 @@ export function unlock(): void {
 
 export function setMuted(next: boolean): void {
   muted = next;
+  // The bed is the one sound that is already playing when this is called; every
+  // other effect simply checks `muted` the next time it fires.
+  if (bedGain && ctx) {
+    bedGain.gain.cancelScheduledValues(ctx.currentTime);
+    bedGain.gain.setValueAtTime(Math.max(0.0001, bedGain.gain.value), ctx.currentTime);
+    bedGain.gain.exponentialRampToValueAtTime(next ? 0.0001 : BED_GAIN, ctx.currentTime + 0.4);
+  }
   if (!isWeb()) return;
   try {
     window.localStorage.setItem(MUTE_KEY, next ? '1' : '0');
@@ -121,6 +128,64 @@ export function isMuted(): boolean {
 const sampleBuffers = new Map<string, AudioBuffer>();
 const sampleLoads = new Map<string, Promise<void>>();
 
+/** Below this a sample is silence as far as anybody listening is concerned. */
+const SILENCE = 0.006;
+/**
+ * Kept in front of the first audible sample.
+ *
+ * Cutting exactly on the threshold clips the very start of the transient, which
+ * on a click is most of what makes it a click.
+ */
+const PREROLL_MS = 4;
+
+/**
+ * Cut the silence off both ends of a decoded sample.
+ *
+ * ## Why this is not optional
+ *
+ * A generator pads its output to a round length. Of the reel-stop recordings,
+ * one carries 374 MILLISECONDS of silence before the click and 1.36 seconds
+ * after it — and a reel stop is booked to fire at the exact instant the reel
+ * lands. Played untrimmed, every fifth reel would click a third of a second
+ * late, which is not a subtle defect: it is the sound arriving after the
+ * picture. The coin tick is worse in a different way — two seconds of file for
+ * eighty milliseconds of sound, fifteen times a second during a roll-up.
+ *
+ * Doing it here rather than in the files means the uploads stay exactly as they
+ * were generated. Nothing is re-encoded, nothing loses quality, and a
+ * regenerated file needs no preparation before it is dropped in.
+ */
+function trimSilence(audio: Ctx, buffer: AudioBuffer): AudioBuffer {
+  const channels = buffer.numberOfChannels;
+  const data: Float32Array[] = [];
+  for (let c = 0; c < channels; c++) data.push(buffer.getChannelData(c));
+
+  const loud = (i: number) => {
+    for (let c = 0; c < channels; c++) if (Math.abs(data[c]![i]!) > SILENCE) return true;
+    return false;
+  };
+
+  let first = 0;
+  while (first < buffer.length && !loud(first)) first++;
+  // Entirely silent. Hand it back untouched rather than build a zero-length
+  // buffer, which throws.
+  if (first >= buffer.length) return buffer;
+
+  let last = buffer.length - 1;
+  while (last > first && !loud(last)) last--;
+
+  const preroll = Math.round((PREROLL_MS / 1000) * buffer.sampleRate);
+  const start = Math.max(0, first - preroll);
+  const length = last - start + 1;
+  if (length >= buffer.length - preroll) return buffer;
+
+  const out = audio.createBuffer(channels, length, buffer.sampleRate);
+  for (let c = 0; c < channels; c++) {
+    out.getChannelData(c).set(data[c]!.subarray(start, start + length));
+  }
+  return out;
+}
+
 export function preloadSample(url: string): Promise<void> {
   if (sampleBuffers.has(url)) return Promise.resolve();
   const already = sampleLoads.get(url);
@@ -132,7 +197,7 @@ export function preloadSample(url: string): Promise<void> {
     .then((res) => (res.ok ? res.arrayBuffer() : Promise.reject(new Error(String(res.status)))))
     .then((bytes) => audio.decodeAudioData(bytes))
     .then((buffer) => {
-      sampleBuffers.set(url, buffer);
+      sampleBuffers.set(url, trimSilence(audio, buffer));
     })
     .catch(() => {
       // A missing or undecodable sound must never break a spin. The caller
@@ -154,7 +219,26 @@ export function preloadSamples(urls: readonly string[]): Promise<void> {
  */
 function playSample(
   url: string | undefined,
-  { when, gain = 0.55, rate = 1 }: { when?: number; gain?: number; rate?: number } = {},
+  {
+    when,
+    gain = 0.55,
+    rate = 1,
+    tail,
+  }: {
+    when?: number;
+    gain?: number;
+    rate?: number;
+    /**
+     * Play only the LAST `tail` seconds.
+     *
+     * For the anticipation riser, which has to climax exactly as the reel
+     * lands. The hold is 0.6 seconds and the recording is three, so playing it
+     * from the start would leave it still climbing after the reel had stopped,
+     * and speeding it up five-fold turns a riser into a chirp. Starting it
+     * partway in plays its most intense stretch and resolves on the beat.
+     */
+    tail?: number;
+  } = {},
 ): boolean {
   if (!url) return false;
   const audio = context();
@@ -173,8 +257,90 @@ function playSample(
   env.gain.value = gain;
   source.connect(env);
   env.connect(master);
-  source.start(Math.max(audio.currentTime, when ?? audio.currentTime));
+
+  const at = Math.max(audio.currentTime, when ?? audio.currentTime);
+  const offset = tail === undefined ? 0 : Math.max(0, buffer.duration - tail);
+  source.start(at, offset);
   return true;
+}
+
+/* -------------------------------------------------------------- music bed */
+
+let bedSource: AudioBufferSourceNode | null = null;
+let bedGain: GainNode | null = null;
+let bedUrl: string | null = null;
+
+/** How long a bed takes to arrive and to leave. */
+const BED_FADE = 1.2;
+/**
+ * Music sits well under the effects.
+ *
+ * A bed the player notices is a bed that is too loud: its whole job is to make
+ * a room feel like a place, and it competes with every sound that carries
+ * information — the reel stops, the counter, the win.
+ */
+const BED_GAIN = 0.22;
+
+/**
+ * Start a looping music bed, crossfading from whatever was playing.
+ *
+ * Idempotent on the same URL, which matters because the screen re-runs its
+ * effect on every re-render: restarting the music each time the balance
+ * changed would be a stutter every spin.
+ */
+export function playBed(url: string): void {
+  if (bedUrl === url && bedSource) return;
+  const audio = context();
+  if (!audio || !master) return;
+
+  const buffer = sampleBuffers.get(url);
+  if (!buffer) {
+    // Fetch it, then come back. A 700KB bed is not worth blocking anything for.
+    void preloadSample(url).then(() => {
+      if (bedUrl === url || sampleBuffers.has(url)) playBed(url);
+    });
+    bedUrl = url;
+    return;
+  }
+
+  stopBed();
+  bedUrl = url;
+
+  const gain = audio.createGain();
+  gain.gain.setValueAtTime(0.0001, audio.currentTime);
+  gain.gain.exponentialRampToValueAtTime(muted ? 0.0001 : BED_GAIN, audio.currentTime + BED_FADE);
+  gain.connect(master);
+
+  const source = audio.createBufferSource();
+  source.buffer = buffer;
+  source.loop = true;
+  source.connect(gain);
+  source.start();
+
+  bedSource = source;
+  bedGain = gain;
+}
+
+export function stopBed(): void {
+  const audio = context();
+  const source = bedSource;
+  const gain = bedGain;
+  bedSource = null;
+  bedGain = null;
+  bedUrl = null;
+  if (!source || !gain || !audio) return;
+
+  // Faded rather than cut. A loop stopping dead is the most obvious edit there
+  // is, and leaving the screen should not sound like a mistake.
+  const end = audio.currentTime + BED_FADE * 0.5;
+  gain.gain.cancelScheduledValues(audio.currentTime);
+  gain.gain.setValueAtTime(Math.max(0.0001, gain.gain.value), audio.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.0001, end);
+  try {
+    source.stop(end + 0.05);
+  } catch {
+    // Already stopped. Nothing to do.
+  }
 }
 
 /**
@@ -198,6 +364,30 @@ export interface SoundSet {
   mega?: string;
   /** A bonus round starting. */
   bonus?: string;
+  /** The looping music underneath everything. */
+  bed?: string;
+  /**
+   * Reel stops, one per reel.
+   *
+   * A LIST rather than one file, and it is the difference between a machine
+   * with five reels and a machine with one moving part heard five times. Each
+   * reel takes the entry at its own index.
+   */
+  stops?: readonly string[];
+  /** The riser under a reel that could still complete a bonus. */
+  tension?: string;
+  /** A scatter landing. */
+  scatter?: string;
+  /** Two scatters and no third. */
+  nearMiss?: string;
+  /** A coin sticking during hold and spin. */
+  coinLock?: string;
+  /** Winning symbols clearing on a tumble. */
+  cascade?: string;
+  /** The counter rolling up. */
+  tick?: string;
+  /** Any button. */
+  tap?: string;
 }
 
 /**
@@ -217,7 +407,22 @@ let currentSet: SoundSet = {};
 
 export function useSoundSet(set: SoundSet): void {
   currentSet = set;
-  void preloadSamples(Object.values(set).filter(Boolean) as string[]);
+  const urls: string[] = [];
+  for (const value of Object.values(set)) {
+    if (typeof value === 'string') urls.push(value);
+    else if (Array.isArray(value)) urls.push(...value);
+  }
+  /*
+   * The bed is fetched LAST and separately.
+   *
+   * It is 700KB against about 40KB for every effect put together, so loading it
+   * in the same breath would delay the sounds a player hears in the first two
+   * seconds behind the one they will not notice for thirty.
+   */
+  const bed = set.bed;
+  void preloadSamples(urls.filter((u) => u !== bed)).then(() => {
+    if (bed) void preloadSample(bed).then(() => { if (currentSet.bed === bed) playBed(bed); });
+  });
 }
 
 // ----------------------------------------------------------------- building
@@ -319,6 +524,7 @@ function noise({
 export const sounds = {
   /** Any button. Short and bright so it reads as responsive, not as an event. */
   tap(): void {
+    if (playSample(currentSet.tap, { gain: 0.5 })) return;
     tone(660, { type: 'triangle', duration: 0.06, gain: 0.25 });
   },
 
@@ -352,6 +558,7 @@ export const sounds = {
    * physical rather than like a spreadsheet updating.
    */
   reelStop(index = 0): void {
+    if (playSample(currentSet.stops?.[index % (currentSet.stops.length || 1)], { gain: 0.85 })) return;
     noise({ duration: 0.035, gain: 0.3, frequency: 2600, q: 1.6 });
     // Each reel lands slightly lower than the last, so the run has a shape.
     tone(150 - index * 8, { type: 'sine', duration: 0.09, gain: 0.32 });
@@ -367,6 +574,8 @@ export const sounds = {
    * start — which is what made the old version drift by the network round trip.
    */
   reelStopAt(index: number, when: number): void {
+    const stops = currentSet.stops;
+    if (stops?.length && playSample(stops[index % stops.length], { when, gain: 0.85 })) return;
     noise({ when, duration: 0.035, gain: 0.3, frequency: 2600, q: 1.6 });
     tone(150 - index * 8, { when, type: 'sine', duration: 0.09, gain: 0.32 });
   },
@@ -378,8 +587,43 @@ export const sounds = {
    * lands. Also booked in advance, for the same reason.
    */
   tensionAt(when: number, duration: number): void {
+    // `tail` so the riser CLIMAXES as the reel lands rather than starting there
+    // — see the note on `playSample`.
+    if (playSample(currentSet.tension, { when, gain: 0.6, tail: duration })) return;
     tone(220, { when, type: 'sawtooth', duration, gain: 0.1, sweepTo: 880 });
     noise({ when, duration, gain: 0.05, frequency: 1200, q: 0.6, type: 'bandpass' });
+  },
+
+  /** A scatter landing — the symbol that triggers everything. */
+  scatter(): void {
+    if (playSample(currentSet.scatter, { gain: 0.7 })) return;
+    tone(880, { type: 'triangle', duration: 0.18, gain: 0.3 });
+    tone(1320, { type: 'sine', at: 0.06, duration: 0.22, gain: 0.18 });
+  },
+
+  /**
+   * Two scatters and no third.
+   *
+   * Marked because real cabinets mark it, and kept QUIET because a near miss is
+   * a loss. A machine that celebrates one is telling the player something that
+   * is not true.
+   */
+  nearMiss(): void {
+    if (playSample(currentSet.nearMiss, { gain: 0.4 })) return;
+    tone(400, { type: 'triangle', duration: 0.3, gain: 0.14, sweepTo: 280 });
+  },
+
+  /** A coin sticking during hold and spin. */
+  coinLock(): void {
+    if (playSample(currentSet.coinLock, { gain: 0.6 })) return;
+    noise({ duration: 0.06, gain: 0.24, frequency: 3200, q: 1.4 });
+    tone(210, { type: 'square', duration: 0.12, gain: 0.26, sweepTo: 150 });
+  },
+
+  /** Winning symbols clearing on a tumble. */
+  cascade(): void {
+    if (playSample(currentSet.cascade, { gain: 0.6 })) return;
+    noise({ duration: 0.12, gain: 0.16, frequency: 4200, q: 1.1 });
   },
 
   /**
@@ -389,6 +633,7 @@ export const sounds = {
    * roll-up, and anything with a tail turns into a buzz rather than a count.
    */
   tick(): void {
+    if (playSample(currentSet.tick, { gain: 0.3, rate: 0.95 + Math.random() * 0.1 })) return;
     tone(1800 + Math.random() * 300, { type: 'square', duration: 0.02, gain: 0.06 });
   },
 

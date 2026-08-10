@@ -10,7 +10,7 @@ import { tintFromAccent } from '../components/SlotSymbol';
 import { materialFor } from '../components/symbols/materials';
 import { useCompactLayout } from '../layout';
 import { scatterTrigger, slotDetails, slotPaytable } from '../api/games';
-import { sounds, spinNow, unlock, useSoundSet } from '../sound';
+import { sounds, spinNow, stopBed, unlock, useSoundSet } from '../sound';
 import { soundSetFor } from '../api/sound-sets';
 import { winTier, rollUpDuration, type WinTier } from '../motion';
 import { CoinCounter } from '../components/CoinCounter';
@@ -385,6 +385,10 @@ export function SlotsScreen() {
    */
   useEffect(() => {
     useSoundSet(soundSetFor(gameId));
+    // Leaving the game takes its music with it, faded rather than cut. Without
+    // this, backing out to the lobby leaves the last cabinet still playing
+    // underneath it.
+    return () => stopBed();
   }, [gameId]);
 
   /**
@@ -857,6 +861,8 @@ export function SlotsScreen() {
         if (superseded()) return;
 
         setCascadeStep(step.stepMultiplier);
+        // Symbols clearing. One per drop, so a chain reads as a chain.
+        sounds.cascade();
         await landReels(step.grid, 1, true);
         if (superseded()) return;
         setReelPhase('idle');
@@ -867,6 +873,22 @@ export function SlotsScreen() {
         sounds.coins(3);
       }
       setCascadeStep(0);
+
+      /*
+       * The scatter moment.
+       *
+       * Announced when the grid has landed rather than per reel: the engine
+       * reports a count for the whole spin, and inventing a per-reel timing the
+       * server never sent would be a sound describing something that did not
+       * happen.
+       *
+       * Two scatters with no third is a NEAR MISS, and it gets its own quiet
+       * marker. Quiet on purpose — a near miss is a loss, and a machine that
+       * celebrates one is telling the player something untrue.
+       */
+      const scatters = state.baseSpin.scatterCount;
+      if (scatters >= 3) sounds.scatter();
+      else if (scatters === 2) sounds.nearMiss();
 
       const baseWin = spinWin(state.baseSpin.totalMultiplier);
       celebrate(baseWin, bet);

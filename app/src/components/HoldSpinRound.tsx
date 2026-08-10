@@ -28,6 +28,7 @@ import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { colors, radius, spacing } from '@juwa/ui';
 import { Txt } from './primitives';
 import { usePrefersReducedMotion } from '../motion';
+import { sounds } from '../sound';
 import type { HeldCoin, HoldSpinStep } from '../api/client';
 
 /** How long one respin is held on screen. */
@@ -75,6 +76,9 @@ export function HoldSpinRound({
     }
     const next = steps[step + 1];
     const wait = step < 0 ? 700 : (next?.gained.length ?? 0) > 0 ? HIT_MS : STEP_MS;
+    // One clunk per coin that stuck on the step just shown. This is the sound
+    // the whole mechanic is built around.
+    for (const _ of step >= 0 ? (steps[step]?.gained ?? []) : []) sounds.coinLock();
     const t = setTimeout(() => setStep((s) => s + 1), wait);
     return () => clearTimeout(t);
   }, [step, steps, reduced, onDone]);
