@@ -10,7 +10,8 @@ import { tintFromAccent } from '../components/SlotSymbol';
 import { materialFor } from '../components/symbols/materials';
 import { useCompactLayout } from '../layout';
 import { scatterTrigger, slotDetails, slotPaytable } from '../api/games';
-import { sounds, spinNow, unlock } from '../sound';
+import { sounds, spinNow, unlock, useSoundSet } from '../sound';
+import { soundSetFor } from '../api/sound-sets';
 import { winTier, rollUpDuration, type WinTier } from '../motion';
 import { CoinCounter } from '../components/CoinCounter';
 import { CoinBurst } from '../components/CoinBurst';
@@ -372,6 +373,19 @@ export function SlotsScreen() {
   const symbolTint = useMemo(() => tintFromAccent(details?.theme.accent), [details?.theme.accent]);
   /** What this game's low symbols are cut from. See symbols/materials. */
   const material = useMemo(() => materialFor(gameId), [gameId]);
+
+  /*
+   * This machine's own recordings.
+   *
+   * Chosen on entry and preloaded immediately, which is why it is an effect
+   * rather than something the spin handler does: decoding happens happily on a
+   * suspended audio context, so the whole set is ready before the player has
+   * finished reading the rules card and the first spin is never the one that
+   * waits for a download.
+   */
+  useEffect(() => {
+    useSoundSet(soundSetFor(gameId));
+  }, [gameId]);
 
   /**
    * Resolved by the LAST reel's own stop callback. This is the handshake that

@@ -32,6 +32,7 @@ import { colors, radius, spacing, typography } from '@juwa/ui';
 import { format, type Minor } from '@juwa/money';
 import { Txt } from './primitives';
 import { usePrefersReducedMotion } from '../motion';
+import { sounds } from '../sound';
 import type { Material } from './symbols/materials';
 
 export interface SlotControlsProps {
@@ -113,7 +114,12 @@ export function SpinLever({
       easing: pulled ? Easing.out(Easing.back(2.4)) : Easing.out(Easing.quad),
       useNativeDriver: true,
     }).start();
-    if (pulled) onSpin();
+    if (pulled) {
+      // The mechanism engaging, which is a different moment from the reels
+      // going — see `sounds.lever`.
+      sounds.lever();
+      onSpin();
+    }
   };
 
   const responder = useRef(
@@ -182,7 +188,10 @@ export function SpinLever({
          * unreadable in the first place.
          */
         const detail = (event.nativeEvent as unknown as { detail?: number }).detail;
-        if (detail === 0 && !locked.current) onSpin();
+        if (detail === 0 && !locked.current) {
+          sounds.lever();
+          onSpin();
+        }
       }}
     >
       <View style={[styles.leverSlot, { height: travel + 20 }]} />

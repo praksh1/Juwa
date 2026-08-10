@@ -168,17 +168,34 @@ console.log('wrote _headers so cache and security rules are not tied to one host
  * back to the vector symbols. That is what keeps the game working while art is
  * arriving family by family.
  */
+/** Files under a directory, recursively. Shared by both copies below. */
+const count = (dir) =>
+  readdirSync(dir, { withFileTypes: true }).reduce(
+    (n, e) => n + (e.isDirectory() ? count(resolve(dir, e.name)) : 1),
+    0,
+  );
+
 const artSource = resolve(appRoot, '..', 'art');
 if (existsSync(artSource)) {
   cpSync(artSource, resolve(dist, 'art'), { recursive: true });
-  const count = (dir) =>
-    readdirSync(dir, { withFileTypes: true }).reduce(
-      (n, e) => n + (e.isDirectory() ? count(resolve(dir, e.name)) : 1),
-      0,
-    );
   console.log(`copied ${count(artSource)} art files into the build`);
 } else {
   console.log('no art/ directory — the build will use vector symbols');
+}
+
+/*
+ * The sound library, copied on the same terms as the art.
+ *
+ * Absent is not an error: `sound.ts` falls back to its synthesised effects for
+ * every recording it cannot load, so a clone without audio still plays and
+ * still makes noise.
+ */
+const audioSource = resolve(appRoot, '..', 'audio');
+if (existsSync(audioSource)) {
+  cpSync(audioSource, resolve(dist, 'audio'), { recursive: true });
+  console.log(`copied ${count(audioSource)} audio files into the build`);
+} else {
+  console.log('no audio/ directory — the build will use synthesised sound');
 }
 
 // ------------------------------------------------------- configuration check

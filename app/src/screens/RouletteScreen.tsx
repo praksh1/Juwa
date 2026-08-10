@@ -3,7 +3,8 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
 import { Button, Card, Txt } from '../components/primitives';
-import { sounds, spinNow, unlock } from '../sound';
+import { playCue, sounds, spinNow, unlock, useSoundSet } from '../sound';
+import { ROULETTE_SOUNDS } from '../api/sound-sets';
 import { RouletteWheel, type WheelPhase } from '../components/RouletteWheel';
 import { ROULETTE_GAME_ID } from '../api/games';
 import {
@@ -93,6 +94,18 @@ export function RouletteScreen() {
   const [spinning, setSpinning] = useState(false);
   const [display, setDisplay] = useState<number | null>(null);
   const [round, setRound] = useState<RoundResponse | null>(null);
+  /*
+   * The table's own sounds.
+   *
+   * The four roulette recordings are the only files in the library that name a
+   * specific game, and a ball rattling into a pocket under a slot reel would be
+   * a sound from a different table — so they are wired here and nowhere else.
+   * `spin` carries the wheel, `win` the winning number.
+   */
+  useEffect(() => {
+    useSoundSet({ spin: ROULETTE_SOUNDS.wheel, win: ROULETTE_SOUNDS.win, big: ROULETTE_SOUNDS.win });
+  }, []);
+
   const [error, setError] = useState<string | null>(null);
   /**
    * The wheel's own phase, and where it has been told to stop.
@@ -164,6 +177,8 @@ export function RouletteScreen() {
 
     unlock();
     sounds.spinStart();
+    // The ball running round the rim, under the wheel.
+    playCue(ROULETTE_SOUNDS.ball, 0.5);
     setSpinning(true);
     setError(null);
     setRound(null);
@@ -205,6 +220,8 @@ export function RouletteScreen() {
       setDisplay(state.winningNumber);
       setRound(result);
       setBalance(minor(result.balance));
+      // The ball into the pocket, over the mechanical stop the slots use.
+      playCue(ROULETTE_SOUNDS.drop, 0.7);
       sounds.reelStop(0);
 
       // The felt is long, so by the time a player has placed bets they are

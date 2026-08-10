@@ -94,6 +94,132 @@ export function isMuted(): boolean {
   return muted;
 }
 
+// ------------------------------------------------------------------ samples
+
+/**
+ * Recorded sound, layered over the synthesised sound below.
+ *
+ * ## Why both, rather than replacing one with the other
+ *
+ * The synthesised effects are good at the SHORT mechanical things — a reel
+ * click, a counter tick, a button — because those need to fire at an exact
+ * instant, five or fifty times a spin, with no attack delay and no file to
+ * fetch first. They are bad at the big moments, where a player expects a
+ * recorded fanfare and a square wave sounds like a toy.
+ *
+ * So the samples take the moments and the synthesiser keeps the mechanics. A
+ * sample that has not finished loading falls back to its synthesised version
+ * rather than playing nothing: a spin must never be silent because a network
+ * request was slow.
+ *
+ * ## Decoding before the first gesture
+ *
+ * `decodeAudioData` works on a suspended context, so the whole set can be
+ * fetched and decoded while the player is still reading the rules card. Only
+ * PLAYBACK needs the context running, which is what `unlock()` is for.
+ */
+const sampleBuffers = new Map<string, AudioBuffer>();
+const sampleLoads = new Map<string, Promise<void>>();
+
+export function preloadSample(url: string): Promise<void> {
+  if (sampleBuffers.has(url)) return Promise.resolve();
+  const already = sampleLoads.get(url);
+  if (already) return already;
+  const audio = context();
+  if (!audio) return Promise.resolve();
+
+  const load = fetch(url)
+    .then((res) => (res.ok ? res.arrayBuffer() : Promise.reject(new Error(String(res.status)))))
+    .then((bytes) => audio.decodeAudioData(bytes))
+    .then((buffer) => {
+      sampleBuffers.set(url, buffer);
+    })
+    .catch(() => {
+      // A missing or undecodable sound must never break a spin. The caller
+      // falls back to the synthesised version and nobody hears a problem.
+      sampleLoads.delete(url);
+    });
+
+  sampleLoads.set(url, load);
+  return load;
+}
+
+export function preloadSamples(urls: readonly string[]): Promise<void> {
+  return Promise.all(urls.map(preloadSample)).then(() => undefined);
+}
+
+/**
+ * Play a decoded sample. Returns false if it was not ready, so the caller can
+ * fall back rather than drop the sound.
+ */
+function playSample(
+  url: string | undefined,
+  { when, gain = 0.55, rate = 1 }: { when?: number; gain?: number; rate?: number } = {},
+): boolean {
+  if (!url) return false;
+  const audio = context();
+  if (!audio || !master || muted) return false;
+
+  const buffer = sampleBuffers.get(url);
+  if (!buffer) {
+    void preloadSample(url);
+    return false;
+  }
+
+  const source = audio.createBufferSource();
+  source.buffer = buffer;
+  source.playbackRate.value = rate;
+  const env = audio.createGain();
+  env.gain.value = gain;
+  source.connect(env);
+  env.connect(master);
+  source.start(Math.max(audio.currentTime, when ?? audio.currentTime));
+  return true;
+}
+
+/**
+ * Which recordings the game currently on screen uses.
+ *
+ * One set at a time, swapped when a game is opened. Held here rather than
+ * threaded through every call site because a sound effect has no business
+ * being a prop: `sounds.win()` is called from six places and none of them
+ * should have to know which cabinet they are inside.
+ */
+export interface SoundSet {
+  /** The reels turning. */
+  spin?: string;
+  /** The handle, on the machines that have one. */
+  lever?: string;
+  /** An ordinary win. */
+  win?: string;
+  /** A big one. */
+  big?: string;
+  /** The largest. Longest file in the set. */
+  mega?: string;
+  /** A bonus round starting. */
+  bonus?: string;
+}
+
+/**
+ * Fire one named recording directly.
+ *
+ * For the sounds that belong to a specific moment in a specific game rather
+ * than to the six slots of a `SoundSet` — the roulette ball rattling into its
+ * pocket, for instance. Silently does nothing if the file has not loaded, and
+ * the caller is expected to have a synthesised effect alongside it, exactly as
+ * the set-based effects do.
+ */
+export function playCue(url: string, gain = 0.6): void {
+  playSample(url, { gain });
+}
+
+let currentSet: SoundSet = {};
+
+export function useSoundSet(set: SoundSet): void {
+  currentSet = set;
+  void preloadSamples(Object.values(set).filter(Boolean) as string[]);
+}
+
 // ----------------------------------------------------------------- building
 
 /** A note with an attack-decay envelope. Everything below is made of these. */
@@ -198,8 +324,25 @@ export const sounds = {
 
   /** The reel starting to move: a soft rising whoosh. */
   spinStart(): void {
+    // The recording runs for the whole spin rather than just its start, so the
+    // synthesised whoosh is NOT layered under it — two spin sounds at once is
+    // one spin sound and a mistake.
+    if (playSample(currentSet.spin, { gain: 0.4 })) return;
     noise({ duration: 0.35, gain: 0.14, frequency: 700, q: 0.7, type: 'lowpass' });
     tone(180, { type: 'sine', duration: 0.3, gain: 0.14, sweepTo: 420 });
+  },
+
+  /**
+   * The handle being pulled.
+   *
+   * Its own effect rather than a variant of `spinStart`, because on a lever
+   * machine the two are different moments: the mechanism engages under the
+   * player's hand, and then the reels go.
+   */
+  lever(): void {
+    if (playSample(currentSet.lever, { gain: 0.7 })) return;
+    noise({ duration: 0.12, gain: 0.2, frequency: 900, q: 1.1 });
+    tone(90, { type: 'square', duration: 0.16, gain: 0.22, sweepTo: 60 });
   },
 
   /**
@@ -251,12 +394,14 @@ export const sounds = {
 
   /** A modest win: a short major third. */
   win(): void {
+    if (playSample(currentSet.win)) return;
     tone(523.25, { type: 'triangle', duration: 0.12, gain: 0.35 });
     tone(659.25, { type: 'triangle', at: 0.08, duration: 0.16, gain: 0.35 });
   },
 
   /** A big win: a rising arpeggio with a shimmer on top. */
   bigWin(): void {
+    if (playSample(currentSet.big)) return;
     const notes = [523.25, 659.25, 783.99, 1046.5];
     notes.forEach((freq, i) => {
       tone(freq, { type: 'triangle', at: i * 0.09, duration: 0.3, gain: 0.34 });
@@ -272,6 +417,7 @@ export const sounds = {
    * instead of like a different machine.
    */
   megaWin(): void {
+    if (playSample(currentSet.mega, { gain: 0.6 })) return;
     const notes = [523.25, 659.25, 783.99, 1046.5, 1318.5, 1567.98, 2093];
     notes.forEach((freq, i) => {
       tone(freq, { type: 'triangle', at: i * 0.085, duration: 0.42, gain: 0.32 });
@@ -291,6 +437,7 @@ export const sounds = {
 
   /** Free spins triggered — the biggest moment in the base game. */
   bonus(): void {
+    if (playSample(currentSet.bonus, { gain: 0.6 })) return;
     tone(392, { type: 'sawtooth', duration: 0.5, gain: 0.22, sweepTo: 1568 });
     [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((freq, i) => {
       tone(freq, { type: 'triangle', at: 0.35 + i * 0.07, duration: 0.35, gain: 0.3 });
