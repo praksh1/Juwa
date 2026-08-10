@@ -418,7 +418,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
         "id": "WILD",
         "kind": "wild",
         "pays": {
-          "3": 341.8,
+          "3": 402.72,
           "4": 0,
           "5": 0
         }
@@ -427,7 +427,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
         "id": "SEVEN",
         "kind": "normal",
         "pays": {
-          "3": 170.9,
+          "3": 201.36,
           "4": 0,
           "5": 0
         }
@@ -436,7 +436,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
         "id": "BAR",
         "kind": "normal",
         "pays": {
-          "3": 51.27,
+          "3": 60.41,
           "4": 0,
           "5": 0
         }
@@ -445,7 +445,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
         "id": "BELL",
         "kind": "normal",
         "pays": {
-          "3": 34.18,
+          "3": 40.27,
           "4": 0,
           "5": 0
         }
@@ -454,7 +454,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
         "id": "CHERRY",
         "kind": "normal",
         "pays": {
-          "3": 17.09,
+          "3": 20.14,
           "4": 0,
           "5": 0
         }
@@ -463,7 +463,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
         "id": "PLUM",
         "kind": "normal",
         "pays": {
-          "3": 10.25,
+          "3": 12.08,
           "4": 0,
           "5": 0
         }
@@ -472,7 +472,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
         "id": "LEMON",
         "kind": "normal",
         "pays": {
-          "3": 6.84,
+          "3": 8.05,
           "4": 0,
           "5": 0
         }

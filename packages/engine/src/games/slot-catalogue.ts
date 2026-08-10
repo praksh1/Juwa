@@ -235,7 +235,16 @@ const THREE_REEL_SYMBOLS: SymbolSpec[] = [
  */
 const THREE_REEL_BONUS_SYMBOLS: SymbolSpec[] = [
   ...THREE_REEL_SYMBOLS,
-  { id: 'SCATTER', kind: 'scatter', weights: [2, 2, 2], pays: { 3: 0, 4: 0, 5: 0 } },
+  /*
+   * Weight 4, not 2, and the difference is the whole feature.
+   *
+   * At 2 the wheel fired on 0.13% of spins — one in seven hundred and seventy.
+   * Triple Bar and Fruit Stand have NO other bonus at all, so their single
+   * feature was, in practice, unreachable: a player spun six times, saw a
+   * three-reel machine, and asked where the wheel from the lobby tile had gone.
+   * They were right to.
+   */
+  { id: 'SCATTER', kind: 'scatter', weights: [4, 4, 4], pays: { 3: 0, 4: 0, 5: 0 } },
 ];
 
 
@@ -364,14 +373,23 @@ export const SLOT_MODELS: Record<string, SlotModel> = {
   'classic-3x3': {
     id: 'classic-3x3',
     volatility: 'medium',
-    rtp: 0.9481,
+    rtp: 0.9479,
     math: {
       reels: 3, rows: 3, paylines: LINES_5, symbols: THREE_REEL_BONUS_SYMBOLS,
-      payoutScale: 0.8545,
+      payoutScale: 1.0068,
       scatterPays: {},
       freeSpinsAwarded: {},
       freeSpinMultiplier: 1,
-      stripLength: 26,
+      /*
+       * 34, not 26.
+       *
+       * Strip length is the resolution of the frequency dial. A symbol's count
+       * is `round(weight / total * length)`, so on a 26-position strip the
+       * scatter can only be 1 or 2 — one gives a bonus every 770 spins and two
+       * gives one every 80, with nothing in between. 34 puts a usable value
+       * within reach.
+       */
+      stripLength: 34,
       /*
        * A prize wheel — the oldest bonus there is, and the right one for a
        * machine with three reels and nothing to read.
