@@ -1869,8 +1869,16 @@ $$;
 
 -- Existing house rows would otherwise sit frozen at their last value and be
 -- reported as drift forever.
+-- `kind::text` rather than `kind`, and 'agent' named explicitly, so that this
+-- stays correct if it is ever re-run after 0009 exists. Agent inventory IS
+-- cached and IS read on every allocation; deleting those rows would report an
+-- agent as having nothing and refuse every allocation they attempted. The cast
+-- keeps the statement valid on a database where the enum value does not exist
+-- yet, which is the case when this file runs in order on a fresh install.
 delete from account_balance_cache
-where account_id in (select id from accounts where kind <> 'player');
+where account_id in (
+  select id from accounts where kind::text not in ('player', 'agent')
+);
 
 -- ------------------------------------------- 2. one deterministic lock order
 
@@ -2516,3 +2524,26 @@ drop trigger if exists player_agents_audited on player_agents;
 create trigger player_agents_audited
   after insert or update on player_agents
   for each row execute function audit_player_agent_change();
+
+-- ------------------------------------------------------- cache reconciliation
+
+/**
+ * Rebuild the balance cache for every owned account from the ledger.
+ *
+ * Belt and braces, and cheap. The cache is a derived convenience — the ledger
+ * is the truth — but `post_transfer` reads the cache to decide whether an agent
+ * has enough inventory, so a missing row reads as zero and refuses a perfectly
+ * good allocation. That can happen if 0008's one-time cleanup is ever re-run
+ * after agents exist, or if a row is lost any other way.
+ *
+ * Recomputing from `ledger_entries` is always correct because the ledger is
+ * append-only, and running it again changes nothing.
+ */
+insert into account_balance_cache (account_id, balance, updated_at)
+select a.id, coalesce(sum(e.amount), 0), now()
+from accounts a
+left join ledger_entries e on e.account_id = a.id
+where a.kind::text in ('player', 'agent')
+group by a.id
+on conflict (account_id) do update
+  set balance = excluded.balance, updated_at = now();

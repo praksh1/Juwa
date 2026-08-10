@@ -540,3 +540,26 @@ drop trigger if exists player_agents_audited on player_agents;
 create trigger player_agents_audited
   after insert or update on player_agents
   for each row execute function audit_player_agent_change();
+
+-- ------------------------------------------------------- cache reconciliation
+
+/**
+ * Rebuild the balance cache for every owned account from the ledger.
+ *
+ * Belt and braces, and cheap. The cache is a derived convenience — the ledger
+ * is the truth — but `post_transfer` reads the cache to decide whether an agent
+ * has enough inventory, so a missing row reads as zero and refuses a perfectly
+ * good allocation. That can happen if 0008's one-time cleanup is ever re-run
+ * after agents exist, or if a row is lost any other way.
+ *
+ * Recomputing from `ledger_entries` is always correct because the ledger is
+ * append-only, and running it again changes nothing.
+ */
+insert into account_balance_cache (account_id, balance, updated_at)
+select a.id, coalesce(sum(e.amount), 0), now()
+from accounts a
+left join ledger_entries e on e.account_id = a.id
+where a.kind::text in ('player', 'agent')
+group by a.id
+on conflict (account_id) do update
+  set balance = excluded.balance, updated_at = now();

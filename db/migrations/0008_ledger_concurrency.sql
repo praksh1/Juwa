@@ -85,8 +85,16 @@ $$;
 
 -- Existing house rows would otherwise sit frozen at their last value and be
 -- reported as drift forever.
+-- `kind::text` rather than `kind`, and 'agent' named explicitly, so that this
+-- stays correct if it is ever re-run after 0009 exists. Agent inventory IS
+-- cached and IS read on every allocation; deleting those rows would report an
+-- agent as having nothing and refuse every allocation they attempted. The cast
+-- keeps the statement valid on a database where the enum value does not exist
+-- yet, which is the case when this file runs in order on a fresh install.
 delete from account_balance_cache
-where account_id in (select id from accounts where kind <> 'player');
+where account_id in (
+  select id from accounts where kind::text not in ('player', 'agent')
+);
 
 -- ------------------------------------------- 2. one deterministic lock order
 
