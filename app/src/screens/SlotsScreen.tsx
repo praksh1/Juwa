@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Animated, Image, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { BASE_CABINET, anticipatingReels, bonusCabinet, colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
 import { betOptions, suggestedBet } from '@juwa/economy';
-import { Button, Card, Txt } from '../components/primitives';
+import { Card, Txt } from '../components/primitives';
 import { useRoute } from '@react-navigation/native';
 import { Reel, SPIN_UP_SECONDS, SYMBOL_SIZE, type ReelPhase } from '../components/Reel';
 import { useCompactLayout } from '../layout';
@@ -18,6 +18,8 @@ import {
   rulesDismissed,
 } from '../components/GameRules';
 import { WinLines, litCells, useWinCycle } from '../components/WinLines';
+import { ReelFrame, SlotConsole, SpinLever } from '../components/SlotControls';
+import { cabinetFor } from '../api/cabinets';
 import { WinOverlay, useCabinetShake } from '../components/WinOverlay';
 import {
   PlayApiError,
@@ -203,6 +205,17 @@ export function SlotsScreen() {
    * watching: without it a fourth drop looks exactly like a first one.
    */
   const [cascadeStep, setCascadeStep] = useState(0);
+  /**
+   * Auto-spin.
+   *
+   * Held here rather than inside the console, because it has to survive the
+   * spin it triggers and because stopping it has to be possible mid-round —
+   * a player who wants out of an auto-spin wants out now, not after the reels
+   * have finished.
+   */
+  const [auto, setAuto] = useState(false);
+  /** The machine this game is built as: frame, room, and which controls. */
+  const cabinet = useMemo(() => cabinetFor(gameId), [gameId]);
   /**
    * Resolved by the LAST reel's own stop callback. This is the handshake that
    * keeps the sound and the readout tied to what is actually on screen.
@@ -618,6 +631,29 @@ export function SlotsScreen() {
     }
   }, [api, balance, bet, spinning, celebrate]);
 
+  /**
+   * Auto-spin: keep going until the player stops it or the money does.
+   *
+   * Driven from an effect keyed on `spinning` rather than by chaining the next
+   * spin onto the end of the last one, so pressing STOP takes effect at the
+   * end of the round in flight instead of being swallowed by a promise that
+   * was already going to fire. A short beat between rounds keeps it readable
+   * as a sequence of spins rather than one continuous blur.
+   *
+   * It stops itself when the next bet is no longer affordable. An auto-spin
+   * that silently does nothing while the player watches is worse than one that
+   * visibly ends.
+   */
+  useEffect(() => {
+    if (!auto || spinning) return;
+    if (bet > balance) {
+      setAuto(false);
+      return;
+    }
+    const timer = setTimeout(() => { void spin(); }, 900);
+    return () => clearTimeout(timer);
+  }, [auto, spinning, bet, balance, spin]);
+
   return (
     <View style={styles.screen}>
       {showRules && details && paytable ? (
@@ -661,7 +697,25 @@ export function SlotsScreen() {
       <View style={compact ? styles.landscapeRow : undefined}>
       <Card style={[styles.machine, compact && styles.machineCompact, cabinetStyle]}>
         <Animated.View style={{ transform: [{ translateX: shake }] }}>
+        {/*
+          The room, the surround, and the lever.
+
+          The background images have been in the repository referenced by
+          nothing at all. They are deliberately dark and low-contrast, which is
+          what lets a symbol read on top of one — so they work as a room the
+          machine stands in rather than as a picture competing with the game.
+        */}
+        <View style={styles.machineRow}>
+        <ReelFrame style={cabinet.frame}>
         <Animated.View style={[styles.reelBay, compact && styles.reelBayCompact, bayStyle]}>
+        {cabinet.background ? (
+          <Image
+            source={{ uri: cabinet.background }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+            accessibilityElementsHidden
+          />
+        ) : null}
         <View
           style={styles.reels}
           onLayout={(e) => setReelsWidth(e.nativeEvent.layout.width)}
@@ -717,6 +771,18 @@ export function SlotsScreen() {
             but below anything a player can press. */}
         <CoinBurst tier={celebration.tier} round={celebration.round} />
         </Animated.View>
+        </ReelFrame>
+        {/* The handle sits beside the reels, at their height, so pulling it
+            reads as working the machine rather than pressing a control. */}
+        {cabinet.controls === 'lever' ? (
+          <SpinLever
+            onSpin={spin}
+            spinning={spinning}
+            disabled={bet > balance}
+            height={symbolSize * MAX_ROWS}
+          />
+        ) : null}
+        </View>
         </Animated.View>
 
         <View
@@ -803,41 +869,27 @@ export function SlotsScreen() {
       </Card>
 
       <View style={compact ? styles.controlsColumn : undefined}>
-      <View style={styles.betRow}>
-        {options.map((option) => {
-          const active = option === bet;
-          const affordable = option <= balance;
-          return (
-            <Pressable
-              key={option}
-              onPress={() => setBet(option)}
-              disabled={spinning || !affordable}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active, disabled: !affordable }}
-              style={[
-                styles.chip,
-                active && styles.chipActive,
-                !affordable && styles.chipDisabled,
-              ]}
-            >
-              <Txt
-                variant="caption"
-                color={active ? colors.text.inverse : colors.text.secondary}
-              >
-                {format(option, 'GC')}
-              </Txt>
-            </Pressable>
-          );
-        })}
-      </View>
+        {/*
+          The cabinet's own controls.
 
-      <Button
-        label={spinning ? 'Spinning…' : `Spin ${format(bet, 'GC')}`}
-        onPress={spin}
-        disabled={spinning || bet > balance}
-        loading={spinning}
-        style={[styles.spin, compact && styles.spinCompact]}
-      />
+          Which cluster a game gets is data — see api/cabinets. The lever games
+          keep the console for the bet and the balance but spin from the handle
+          beside the reels, because a lever with no way to change your stake is
+          a museum piece rather than a machine.
+        */}
+        <SlotConsole
+          bet={bet}
+          balance={balance}
+          win={runningWin}
+          options={options}
+          onBet={setBet}
+          onSpin={spin}
+          spinning={spinning}
+          auto={auto}
+          onToggleAuto={() => setAuto((on) => !on)}
+          compact={compact}
+          {...(cabinet.controls === 'lever' ? { hideSpin: true } : {})}
+        />
       </View>
       </View>
 
@@ -911,7 +963,8 @@ const styles = StyleSheet.create({
   // Still above the 44-point touch minimum; only the generous padding goes.
   spinCompact: { paddingVertical: spacing.xs, minHeight: 44 },
   reelBayCompact: { padding: spacing.xs },
-  betRow: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'center', flexWrap: 'wrap' },
+  /** The machine and its lever, side by side. */
+  machineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   chip: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,

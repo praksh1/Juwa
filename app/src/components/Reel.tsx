@@ -467,7 +467,10 @@ const styles = StyleSheet.create({
     flex: 1,
     // The strip is taller than the window; this is what turns it into a window.
     overflow: 'hidden',
-    backgroundColor: '#05091A',
+    // Translucent, not opaque: each game now stands in a themed room drawn
+    // behind the machine, and an opaque reel window covers the whole of it.
+    // Dark enough that a symbol still reads on top of a bright background.
+    backgroundColor: 'rgba(5, 9, 26, 0.72)',
     borderRadius: radius.sm,
     // The result sits at the bottom of the strip, so the window shows the end.
     justifyContent: 'flex-end',
