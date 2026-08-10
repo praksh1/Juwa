@@ -694,6 +694,9 @@ export function SlotsScreen() {
               // cycle keeps running until the next spin, and a lit line on an
               // undimmed grid is barely a highlight at all.
               celebrating={lit.size > 0}
+              // Stops the pulse and the shine once the walk has finished,
+              // without un-marking what won.
+              settled={winPhase.kind === 'settled'}
               onLanded={() => handleReelLanded(i)}
             />
           ))}
@@ -705,6 +708,7 @@ export function SlotsScreen() {
             width={reelsWidth}
             cellHeight={symbolSize}
             rows={ROWS}
+            ways={details?.pays === 'ways'}
           />
         </View>
 

@@ -2,7 +2,13 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { symbolState, type SymbolState, type SymbolStateInput } from './symbol-state.js';
 
-const base: SymbolStateInput = { reelIdle: true, row: 0, paying: false, celebrating: false };
+const base: SymbolStateInput = {
+  reelIdle: true,
+  row: 0,
+  paying: false,
+  celebrating: false,
+  settled: false,
+};
 
 test('the whole truth table', () => {
   // Every combination of the four inputs, stated once, so a change to the
@@ -10,18 +16,23 @@ test('the whole truth table', () => {
   const cases: [Partial<SymbolStateInput>, SymbolState][] = [
     // A settled reel with nothing paying anywhere.
     [{}, 'resting'],
-    // A settled reel, this cell paid.
+    // A settled reel, this cell paid, presentation still running.
     [{ paying: true, celebrating: true }, 'winning'],
+    // Same cell once the presentation has finished: lit, but still.
+    [{ paying: true, celebrating: true, settled: true }, 'won'],
     // A settled reel, something else paid.
     [{ celebrating: true }, 'dimmed'],
+    [{ celebrating: true, settled: true }, 'dimmed'],
     // Turning: every cell is still, whatever else is true of it.
     [{ reelIdle: false }, 'moving'],
     [{ reelIdle: false, paying: true, celebrating: true }, 'moving'],
     [{ reelIdle: false, celebrating: true }, 'moving'],
+    [{ reelIdle: false, paying: true, celebrating: true, settled: true }, 'moving'],
     // Off the end of the window: filler scrolling past is never part of a win.
     [{ row: -1 }, 'moving'],
     [{ row: -4, paying: true, celebrating: true }, 'moving'],
     [{ row: -1, celebrating: true }, 'moving'],
+    [{ row: -2, paying: true, celebrating: true, settled: true }, 'moving'],
   ];
   for (const [overrides, expected] of cases) {
     const input = { ...base, ...overrides };
@@ -59,4 +70,21 @@ test('every visible row behaves the same as every other', () => {
     assert.equal(symbolState({ ...base, row, paying: true, celebrating: true }), 'winning');
     assert.equal(symbolState({ ...base, row, celebrating: true }), 'dimmed');
   }
+});
+
+test('a win stops moving but never stops being marked', () => {
+  /*
+   * The bug this state exists for, reported twice by a player: "the animation
+   * keeps looping until I spin again."
+   *
+   * Once settled, a winning cell must still be distinguishable from every
+   * other cell on the machine — the player has to be able to look up late and
+   * see what paid — while being in a state the animation layer treats as
+   * static. Collapsing it to 'resting' would lose the marking; leaving it as
+   * 'winning' is the loop.
+   */
+  const settled = symbolState({ ...base, paying: true, celebrating: true, settled: true });
+  assert.equal(settled, 'won');
+  assert.notEqual(settled, 'resting', 'a settled win must still be marked');
+  assert.notEqual(settled, 'winning', 'a settled win must not still be animating');
 });

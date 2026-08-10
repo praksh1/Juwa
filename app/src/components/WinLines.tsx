@@ -50,9 +50,22 @@ export const CELL_HEIGHT = 58;
 export const REEL_GAP = spacing.xs;
 
 /** How long the combined total is shown before the per-line walk begins. */
-const TOTAL_HOLD_MS = 1500;
+const TOTAL_HOLD_MS = 1400;
 /** How long each individual line is held during the walk. */
-const LINE_HOLD_MS = 1100;
+const LINE_HOLD_MS = 850;
+/**
+ * A hard ceiling on the whole walk, whatever the win looks like.
+ *
+ * The repeat count alone is not a bound, because the walk is repeats TIMES the
+ * number of winning lines: three lines at three passes and 1.1 seconds a line
+ * came to eleven and a half seconds of flashing, which a player reports — twice
+ * — as "it loops until I spin again". They are right. It was technically
+ * finite and that is not the same thing as ending.
+ *
+ * Bounding the TIME rather than the passes is what makes a five-line win and a
+ * two-line win both stop while they are still saying something.
+ */
+const MAX_WALK_MS = 4_200;
 /**
  * How many times the walk repeats before it settles.
  *
@@ -67,14 +80,23 @@ const LINE_HOLD_MS = 1100;
  * winning symbols stay lit and the amount stays on screen until the next spin.
  * Nothing is lost, it just stops moving.
  */
-const WALK_REPEATS = 3;
+const WALK_REPEATS = 2;
 
 export type WinPhase =
   | { kind: 'idle' }
   /** Everything that paid, lit at once. */
   | { kind: 'total' }
   /** One line, by index into the win list. */
-  | { kind: 'line'; index: number };
+  | { kind: 'line'; index: number }
+  /**
+   * The presentation is over.
+   *
+   * Every winning cell is still lit and every line is still drawn — the player
+   * can look up at any point before the next spin and see exactly what paid —
+   * but NOTHING moves any more. That distinction is the whole fix: the machine
+   * should end up holding a picture of the win, not performing it forever.
+   */
+  | { kind: 'settled' };
 
 /**
  * Drives the phase sequence above.
@@ -99,17 +121,29 @@ export function useWinCycle(wins: LineWin[], enabled: boolean): WinPhase {
     }
 
     setPhase({ kind: 'total' });
-    // One line needs no walk: it is already fully explained by the total.
-    if (wins.length < 2) return;
+
+    let timer: ReturnType<typeof setTimeout>;
+    /*
+     * A single winning line needs no walk — it is already fully explained by
+     * the total — but it DOES need to settle. The previous version returned
+     * here and left the phase on `total` for good, which is the state the
+     * symbols pulse and catch the light in. So the commonest win on the
+     * machine, the one-line win, was also the one that never stopped moving.
+     */
+    if (wins.length < 2) {
+      timer = setTimeout(() => {
+        if (generation.current === mine) setPhase({ kind: 'settled' });
+      }, TOTAL_HOLD_MS);
+      return () => clearTimeout(timer);
+    }
 
     let index = 0;
-    const steps = wins.length * WALK_REPEATS;
-    let timer: ReturnType<typeof setTimeout>;
+    // Whichever runs out first: the passes, or the clock. See MAX_WALK_MS.
+    const steps = Math.min(wins.length * WALK_REPEATS, Math.floor(MAX_WALK_MS / LINE_HOLD_MS));
     const step = () => {
       if (generation.current !== mine) return;
       if (index >= steps) {
-        // Settle on the total: every winning line lit, nothing animating.
-        setPhase({ kind: 'total' });
+        setPhase({ kind: 'settled' });
         return;
       }
       setPhase({ kind: 'line', index: index % wins.length });
@@ -127,7 +161,10 @@ export function useWinCycle(wins: LineWin[], enabled: boolean): WinPhase {
 export function litCells(wins: LineWin[], phase: WinPhase): Set<string> {
   const keys = new Set<string>();
   if (phase.kind === 'idle') return keys;
-  const shown = phase.kind === 'total' ? wins : [wins[phase.index]].filter(Boolean);
+  const shown =
+    phase.kind === 'total' || phase.kind === 'settled'
+      ? wins
+      : [wins[phase.index]].filter(Boolean);
   for (const win of shown) {
     for (const [reel, row] of win?.cells ?? []) keys.add(`${reel},${row}`);
   }
@@ -155,6 +192,17 @@ interface WinLinesProps {
    * empty space above the symbols it is meant to be connecting.
    */
   rows?: readonly number[];
+  /**
+   * This game pays by adjacency rather than along lines.
+   *
+   * Then there is no line to draw, and drawing one is a lie about the
+   * mechanic: an "all ways pay" win counts a symbol wherever it lands on each
+   * reel, so joining the cells asserts an order and a path that do not exist.
+   * A ways win with one cell per reel looks exactly like a payline unless the
+   * game says otherwise, which is why this is a flag rather than something
+   * inferred from the shape of the win.
+   */
+  ways?: boolean;
 }
 
 /**
@@ -171,9 +219,15 @@ export function WinLines({
   width,
   cellHeight = CELL_HEIGHT,
   rows,
+  ways = false,
 }: WinLinesProps) {
   const fade = useRef(new Animated.Value(0)).current;
-  const shown = phase.kind === 'idle' ? [] : phase.kind === 'total' ? wins : [wins[phase.index]!];
+  const shown =
+    phase.kind === 'idle'
+      ? []
+      : phase.kind === 'line'
+        ? [wins[phase.index]!]
+        : wins;
 
   // Re-pulse on every phase change so a walk between two lines that overlap is
   // still visibly a change rather than a static picture.
@@ -181,6 +235,12 @@ export function WinLines({
   useEffect(() => {
     if (phase.kind === 'idle') {
       fade.setValue(0);
+      return;
+    }
+    if (phase.kind === 'settled') {
+      // Arrive at full strength with no fade. A pulse here would be one last
+      // flash after the presentation was supposed to have finished.
+      fade.setValue(1);
       return;
     }
     fade.setValue(0.35);
@@ -224,9 +284,14 @@ export function WinLines({
            * itself and implies an order the mechanic does not have. What it
            * actually means is "these cells, all of them", so those get nodes
            * and a glow and no connecting line at all.
+           *
+           * The shape of the win is not enough to tell: a ways win that happens
+           * to land one cell per reel is indistinguishable from a payline, and
+           * the diamond games were drawing zig-zag lines across a machine that
+           * has no paylines on it at all. The GAME has to say.
            */
           const perReel = new Set(cells.map(([reel]) => reel));
-          const isLine = perReel.size === cells.length;
+          const isLine = !ways && perReel.size === cells.length;
           const points = cells
             .map(([reel, row]) => `${centreX(reel)},${centreY(reel, row)}`)
             .join(' ');

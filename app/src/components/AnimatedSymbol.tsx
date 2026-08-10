@@ -87,7 +87,16 @@ export function AnimatedSymbol({ name, size, family, state, seed }: AnimatedSymb
   const scale = useRef(new Animated.Value(1)).current;
   const shine = useRef(new Animated.Value(0)).current;
 
+  /** Actively celebrating: pulsing and catching the light. */
   const winning = state === 'winning';
+  /**
+   * Paid, and finished celebrating.
+   *
+   * Held at full size so the win is still marked, with nothing running. This
+   * is the difference between a machine that explains a win and one a player
+   * describes — accurately — as looping until they spin again.
+   */
+  const held = state === 'won';
   // Only landed symbols that are not being dimmed for someone else's win.
   const breathing = state === 'resting';
 
@@ -100,11 +109,12 @@ export function AnimatedSymbol({ name, size, family, state, seed }: AnimatedSymb
   const phase = useMemo(() => ((seed * 2654435761) % 1000) / 1000, [seed]);
 
   useEffect(() => {
-    if (reduceMotion) {
+    if (held || reduceMotion) {
       // Still SAY which symbol won — the win marking is information, and
-      // removing it because someone asked for less movement would take the
-      // meaning with it. It simply does not move.
-      scale.setValue(winning ? WIN_SCALE : 1);
+      // removing it because someone asked for less movement, or because the
+      // celebration is over, would take the meaning with it. It simply does
+      // not move.
+      scale.setValue(winning || held ? WIN_SCALE : 1);
       return;
     }
 
@@ -167,7 +177,7 @@ export function AnimatedSymbol({ name, size, family, state, seed }: AnimatedSymb
 
     scale.setValue(1);
     return;
-  }, [winning, breathing, reduceMotion, phase, scale]);
+  }, [winning, held, breathing, reduceMotion, phase, scale]);
 
   useEffect(() => {
     if (!winning || reduceMotion) {

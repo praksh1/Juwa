@@ -137,6 +137,14 @@ export interface ReelProps {
    */
   celebrating?: boolean;
   /**
+   * The win presentation has finished.
+   *
+   * Winners stay lit and stay large; they simply stop moving. Without this the
+   * pulse and the shine run until the next spin, which is precisely the
+   * "it loops forever" a player reported.
+   */
+  settled?: boolean;
+  /**
    * This reel could still complete the bonus, and is being made to say so.
    *
    * Set on every reel that has not yet stopped once enough scatters are
@@ -191,6 +199,7 @@ export function Reel({
   spinUp = SPIN_UP_SECONDS,
   anticipating = false,
   celebrating = false,
+  settled = false,
   round = 0,
   family,
   onLanded,
@@ -407,6 +416,7 @@ export function Reel({
             row: resultRow,
             paying: litCells?.has(`${index},${resultRow}`) ?? false,
             celebrating,
+            settled,
           });
 
           return (
@@ -415,7 +425,7 @@ export function Reel({
               style={[
                 styles.cell,
                 { height: size },
-                state === 'winning' && styles.cellWinning,
+                (state === 'winning' || state === 'won') && styles.cellWinning,
                 state === 'dimmed' && styles.cellDimmed,
               ]}
             >
