@@ -3,7 +3,9 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
 import { Button, Card, Txt } from '../components/primitives';
-import { sounds, unlock } from '../sound';
+import { sounds, spinNow, unlock } from '../sound';
+import { RouletteWheel, type WheelPhase } from '../components/RouletteWheel';
+import { ROULETTE_GAME_ID } from '../api/games';
 import {
   PlayApiError,
   createPlayApi,
@@ -11,7 +13,7 @@ import {
   type RoundResponse,
 } from '../api/client';
 
-const GAME_ID = 'juwa-roulette-eu';
+const GAME_ID = ROULETTE_GAME_ID;
 const MIN_BET = minor(50);
 const MAX_BET = minor(500_000);
 
@@ -55,6 +57,11 @@ interface Bet {
   amount: number;
 }
 
+/** How long the wheel takes to come to rest once it has its answer. */
+const WHEEL_LAND_SECONDS = 3.4;
+/** Big enough that the painted numbers are readable on a phone. */
+const WHEEL_SIZE = 230;
+
 /** Payout quoted as "X to 1"; the stake comes back on top. */
 const ODDS: Record<BetType, number> = {
   straight: 35, dozen: 2, column: 2,
@@ -87,7 +94,19 @@ export function RouletteScreen() {
   const [display, setDisplay] = useState<number | null>(null);
   const [round, setRound] = useState<RoundResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const ticker = useRef<ReturnType<typeof setInterval> | null>(null);
+  /**
+   * The wheel's own phase, and where it has been told to stop.
+   *
+   * Separate from `spinning` because the two end at different moments: the
+   * request is finished long before the wheel is, and the result must not be
+   * announced while the ball is still running. `spinning` gates the controls;
+   * this drives the picture.
+   */
+  const [wheelPhase, setWheelPhase] = useState<WheelPhase>('idle');
+  const [wheelTarget, setWheelTarget] = useState<number | null>(null);
+  const [wheelPlan, setWheelPlan] = useState({ from: 0, duration: WHEEL_LAND_SECONDS });
+  /** Resolved by the wheel's own stop, so the readout can never run ahead. */
+  const wheelStopped = useRef<(() => void) | null>(null);
   const scroller = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -98,7 +117,6 @@ export function RouletteScreen() {
       .catch(() => alive && setError('Could not load your balance'));
     return () => {
       alive = false;
-      if (ticker.current) clearInterval(ticker.current);
     };
   }, [api]);
 
@@ -151,9 +169,12 @@ export function RouletteScreen() {
     setRound(null);
     setBalance((current) => minor(current - total));
 
-    // The number flickers while the request is in flight, so the round trip
-    // hides inside the animation the player is already watching.
-    ticker.current = setInterval(() => setDisplay(Math.floor(Math.random() * 37)), 70);
+    // The wheel starts turning on the tap, so the round trip hides inside an
+    // animation the player was going to watch anyway — the same trick the
+    // reels use, and the reason a spin feels instant on a slow connection.
+    setDisplay(null);
+    setWheelTarget(null);
+    setWheelPhase('spinning');
 
     try {
       const result = await api.placeBet({
@@ -163,11 +184,24 @@ export function RouletteScreen() {
         idempotencyKey: `${Date.now()}-roulette`,
       });
 
-      // Let the wheel run a moment even when the server was instant.
-      await new Promise((resolve) => setTimeout(resolve, 2_200));
-      if (ticker.current) clearInterval(ticker.current);
-
       const state = result.state as { winningNumber: number; winningBets: number[] };
+
+      /*
+       * Hand the wheel its answer and wait for the BALL to stop.
+       *
+       * Not a fixed `setTimeout`: that timer started when the server replied
+       * while the wheel started on the tap, so every spin was out of step by
+       * the round-trip time — and the number could appear while the ball was
+       * still travelling. The wheel resolves this promise from its own final
+       * frame, so the result is announced exactly when it is visibly true.
+       */
+      await new Promise<void>((resolve) => {
+        wheelStopped.current = resolve;
+        setWheelTarget(state.winningNumber);
+        setWheelPlan({ from: spinNow() + 0.04, duration: WHEEL_LAND_SECONDS });
+        setWheelPhase('landing');
+      });
+
       setDisplay(state.winningNumber);
       setRound(result);
       setBalance(minor(result.balance));
@@ -186,7 +220,7 @@ export function RouletteScreen() {
         else sounds.lose();
       }, 220);
     } catch (caught) {
-      if (ticker.current) clearInterval(ticker.current);
+      setWheelPhase('idle');
       setDisplay(null);
       setBalance((current) => minor(current + total));
       sounds.error();
@@ -283,6 +317,21 @@ export function RouletteScreen() {
 
       {/* The result */}
       <Card style={styles.wheel}>
+        <RouletteWheel
+          size={WHEEL_SIZE}
+          phase={wheelPhase}
+          target={wheelTarget}
+          landFrom={wheelPlan.from}
+          landDuration={wheelPlan.duration}
+          onLanded={() => {
+            setWheelPhase('idle');
+            wheelStopped.current?.();
+            wheelStopped.current = null;
+          }}
+        />
+        {/* The number, under the wheel rather than inside it: at this size the
+            pocket the ball is sitting in is legible as a colour but not as a
+            two-digit number, and the payout depends on the number. */}
         <View
           style={[
             styles.ball,
@@ -291,7 +340,7 @@ export function RouletteScreen() {
             display !== null && colourOf(display) === 'green' && styles.green,
           ]}
         >
-          <Txt variant="display">{display ?? '—'}</Txt>
+          <Txt variant="h1">{display ?? '—'}</Txt>
         </View>
         <View style={styles.readout} accessibilityLiveRegion="polite">
           {spinning ? (
@@ -445,9 +494,9 @@ const styles = StyleSheet.create({
   },
   wheel: { alignItems: 'center', gap: spacing.md, borderColor: colors.gold.dark },
   ball: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surface.overlay,

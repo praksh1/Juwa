@@ -261,6 +261,15 @@ const OTHER_GAMES: GameSummary[] = [
 export const GAMES: GameSummary[] = [...SLOT_SUMMARIES, ...OTHER_GAMES];
 
 /** Theme and reel geometry for a slot, or undefined for a non-slot. */
+/**
+ * The roulette table's id.
+ *
+ * Exported so the screen and the demo adapter cannot disagree about it. They
+ * did: the demo matched on a guessed 'european-roulette' and silently never
+ * handled the game, which is invisible until someone taps Spin.
+ */
+export const ROULETTE_GAME_ID = 'juwa-roulette-eu';
+
 export function slotDetails(id: string): SlotGame | undefined {
   return SLOT_GAMES.find((game) => game.id === id);
 }

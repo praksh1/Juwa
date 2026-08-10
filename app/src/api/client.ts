@@ -23,7 +23,7 @@
 
 import { getAccessToken } from './auth';
 import { SLOT_GAMES } from './slot-games.generated';
-import { slotPaytable, type SlotModelInfo } from './games';
+import { ROULETTE_GAME_ID, slotPaytable, type SlotModelInfo } from './games';
 import { demoAct, demoPlaceBet, isInstantGame } from './demo-instant';
 
 export type RoundStatus = 'awaiting-action' | 'settled';
@@ -157,6 +157,56 @@ export interface PlayApi {
 /** Demo mode plays any slot; the ids come from the same generated list the lobby uses. */
 function isSlotGame(gameId: string): boolean {
   return SLOT_GAMES.some((game) => game.id === gameId);
+}
+
+/**
+ * The demo's roulette table.
+ *
+ * Roulette used to be refused in demo mode outright — "not available, sign
+ * in" — which meant that on the only build most of this app is ever looked at
+ * in, the wheel could not turn at all. That is how a game shipped with a
+ * spinner that was a `setInterval` flicking random numbers into a disc: nobody
+ * could see it not working, because nobody could reach it.
+ *
+ * The same warning applies as to the slots demo: this is Math.random() on the
+ * device with no ledger and no fairness proof. It exists so the wheel, the
+ * felt and the settlement can be exercised without a server.
+ */
+const ROULETTE_RED = new Set([
+  1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36,
+]);
+/** Quoted as "X to 1"; the stake comes back on top. Mirrors the engine. */
+const ROULETTE_ODDS: Record<string, number> = {
+  straight: 35, split: 17, street: 11, corner: 8, line: 5,
+  dozen: 2, column: 2, red: 1, black: 1, odd: 1, even: 1, low: 1, high: 1,
+};
+
+interface DemoBet {
+  type: string;
+  selection: number[];
+  amount: number;
+}
+
+/** Whether a bet covers a pocket. Mirrors `covers` in the engine exactly. */
+function demoCovers(bet: DemoBet, n: number): boolean {
+  switch (bet.type) {
+    case 'red': return n !== 0 && ROULETTE_RED.has(n);
+    case 'black': return n !== 0 && !ROULETTE_RED.has(n);
+    case 'odd': return n !== 0 && n % 2 === 1;
+    case 'even': return n !== 0 && n % 2 === 0;
+    case 'low': return n >= 1 && n <= 18;
+    case 'high': return n >= 19 && n <= 36;
+    case 'dozen': {
+      const d = bet.selection[0] ?? 0;
+      return n >= d * 12 + 1 && n <= d * 12 + 12;
+    }
+    case 'column': {
+      const c = bet.selection[0] ?? 0;
+      return n !== 0 && (n - 1) % 3 === c;
+    }
+    default:
+      return bet.selection.includes(n);
+  }
 }
 
 /**
@@ -588,6 +638,47 @@ export class DemoPlayApi implements PlayApi {
     };
   }
 
+  /** See the note by ROULETTE_ODDS. Math.random() on the device, no ledger. */
+  private demoRoulette(request: {
+    gameId: string;
+    stake: number;
+    action?: { type: string; [key: string]: unknown };
+  }): RoundResponse {
+    const bets = ((request.action?.['bets'] as DemoBet[] | undefined) ?? []).filter(
+      (bet) => bet && Array.isArray(bet.selection) && typeof bet.amount === 'number',
+    );
+    const winningNumber = Math.floor(Math.random() * 37);
+
+    const winningBets: number[] = [];
+    let payout = 0;
+    for (const [i, bet] of bets.entries()) {
+      if (!demoCovers(bet, winningNumber)) continue;
+      winningBets.push(i);
+      payout += Math.floor(bet.amount * ((ROULETTE_ODDS[bet.type] ?? 0) + 1));
+    }
+
+    this.balance = this.balance - request.stake + payout;
+    return {
+      roundId: `demo-${Date.now()}`,
+      gameId: request.gameId,
+      status: 'settled' as const,
+      state: {
+        winningNumber,
+        color: winningNumber === 0 ? 'green' : ROULETTE_RED.has(winningNumber) ? 'red' : 'black',
+        bets,
+        winningBets,
+      },
+      availableActions: [],
+      settlement: {
+        stake: request.stake,
+        payout,
+        multiplier: request.stake === 0 ? 0 : payout / request.stake,
+      },
+      balance: this.balance,
+      fairness: { serverSeedHash: 'demo-mode-no-fairness-proof', clientSeed: 'demo', nonce: 0 },
+    };
+  }
+
   async getHistory() {
     const now = Date.now();
     return {
@@ -610,7 +701,9 @@ export class DemoPlayApi implements PlayApi {
     // the server, so a demo that only knew the flagship left twenty-two games
     // in the lobby that could be opened and not played.
     //
-    // Table games still need the server. Faking a roulette wheel on the device
+    if (request.gameId === ROULETTE_GAME_ID) return this.demoRoulette(request);
+
+    // Other table games still need the server. Faking a card game on the device
     // would mean the client deciding outcomes, which is the one thing the whole
     // architecture exists to prevent.
     if (!isSlotGame(request.gameId) && !isInstantGame(request.gameId)) {
