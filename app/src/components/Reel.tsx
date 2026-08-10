@@ -127,6 +127,16 @@ export interface ReelProps {
   anticipating?: boolean;
   /** Symbol height in points. Shrinks on short screens; see `SYMBOL_SIZE`. */
   size?: number;
+  /**
+   * How far the reel travels during its landing, in symbols.
+   *
+   * A full spin covers ten, which is what makes a landing read as a reel
+   * decelerating. A cascade refill covers two: the symbols that paid have just
+   * vanished and the ones above them are dropping into the hole, so a long run
+   * would read as a second spin and throw away the connection between the win
+   * and the symbols that replaced it.
+   */
+  travel?: number;
   /** Increments once per spin, so each spin is a distinct animation. */
   round?: number;
   /** Fires when this reel physically stops. */
@@ -146,6 +156,7 @@ export function Reel({
   landDuration = 1,
   litCells,
   size = SYMBOL_SIZE,
+  travel = LANDING_FILLER,
   anticipating = false,
   celebrating = false,
   round = 0,
@@ -209,7 +220,9 @@ export function Reel({
   const loopSpan = LOOP_SYMBOLS * size;
 
   const landingStrip = [...landingFiller, ...result];
-  const landingTravel = LANDING_FILLER * size;
+  // Clamped to what the strip can actually show: asking for more travel than
+  // there is filler above the result would start the reel on empty space.
+  const landingTravel = Math.min(travel, LANDING_FILLER) * size;
 
   // ------------------------------------------------------------------- loop
   useEffect(() => {

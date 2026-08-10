@@ -166,10 +166,20 @@ function isSlotGame(gameId: string): boolean {
  * flat 5x3 for an unknown id is deliberate — the demo should still render
  * something rather than deal a grid with no cells in it.
  */
-function slotShape(gameId: string): { reels: number; rows: number[]; ways: boolean } {
+function slotShape(gameId: string): {
+  reels: number;
+  rows: number[];
+  ways: boolean;
+  cascades: boolean;
+} {
   const game = SLOT_GAMES.find((g) => g.id === gameId);
-  if (!game) return { reels: 5, rows: [3, 3, 3, 3, 3], ways: false };
-  return { reels: game.reels, rows: [...game.rows], ways: game.pays === 'ways' };
+  if (!game) return { reels: 5, rows: [3, 3, 3, 3, 3], ways: false, cascades: false };
+  return {
+    reels: game.reels,
+    rows: [...game.rows],
+    ways: game.pays === 'ways',
+    cascades: game.cascades === true,
+  };
 }
 
 export class PlayApiError extends Error {
@@ -640,15 +650,55 @@ export class DemoPlayApi implements PlayApi {
     // three-reel classics and 3-4-5-4-3 diamonds as well as 5x3s, and a stub
     // that always dealt a flat rectangle would render columns and rows the
     // game does not have.
-    const { reels, rows, ways } = slotShape(request.gameId);
+    const { reels, rows, ways, cascades: tumbles } = slotShape(request.gameId);
     const grid: string[][] = rows.map((height) =>
       Array.from({ length: height }, () => weightedSymbol()),
     );
 
     const paytable = slotPaytable(request.gameId);
-    const { lineWins, baseMultiplier } = ways
-      ? demoWaysWins(grid, paytable)
-      : demoLineWins(grid, reels, rows[0] ?? 3, paytable);
+    const score = (g: string[][]) =>
+      ways ? demoWaysWins(g, paytable) : demoLineWins(g, reels, rows[0] ?? 3, paytable);
+    const { lineWins, baseMultiplier } = score(grid);
+
+    /*
+     * Tumbles, for the models that have them.
+     *
+     * Worth faking properly rather than skipping. Three of the catalogue's
+     * games cascade, and a demo that settled them as a single grid would leave
+     * the entire playback path — the hold, the drop, the climbing ladder,
+     * the running total — unexercised on the only build most of this work is
+     * ever looked at in.
+     */
+    const cascades: CascadeStep[] = [];
+    if (tumbles) {
+      const ladder = paytable?.cascade?.ladder ?? [2, 3, 5];
+      const maxDrops = paytable?.cascade?.maxDrops ?? 4;
+      let current = grid.map((reel) => [...reel]);
+      let previous = lineWins;
+      for (let drop = 0; drop < maxDrops && previous.length > 0; drop++) {
+        const cleared = new Set(
+          previous.flatMap((w) => (w.cells ?? []).map(([r, row]) => `${r},${row}`)),
+        );
+        current = current.map((reel, r) => {
+          const survivors = reel.filter((_, row) => !cleared.has(`${r},${row}`));
+          const fresh = Array.from({ length: reel.length - survivors.length }, () =>
+            weightedSymbol(),
+          );
+          return [...fresh, ...survivors];
+        });
+        const step = ladder[Math.min(drop, ladder.length - 1)] ?? 1;
+        const scored = score(current);
+        previous = scored.lineWins;
+        if (previous.length === 0) break;
+        cascades.push({
+          grid: current.map((reel) => [...reel]),
+          lineWins: scored.lineWins,
+          stepMultiplier: step,
+          totalMultiplier: scored.baseMultiplier * step,
+        });
+      }
+    }
+    const cascadeTotal = cascades.reduce((sum, step) => sum + step.totalMultiplier, 0);
 
     /**
      * The bonus round, occasionally.
@@ -675,8 +725,15 @@ export class DemoPlayApi implements PlayApi {
       };
     });
 
+    // The cascades are part of what this spin paid, not an extra on top of a
+    // settled figure. `baseSpin.totalMultiplier` below carries them for the
+    // same reason the engine's does: the screen subtracts the drops back out
+    // to find what the first grid alone was worth, and pays them in as each
+    // one lands.
     const totalMultiplier =
-      baseMultiplier + freeSpins.reduce((sum, spin) => sum + spin.totalMultiplier, 0);
+      baseMultiplier +
+      cascadeTotal +
+      freeSpins.reduce((sum, spin) => sum + spin.totalMultiplier, 0);
     const payout = Math.floor(request.stake * totalMultiplier);
 
     this.balance = this.balance - request.stake + payout;
@@ -687,7 +744,8 @@ export class DemoPlayApi implements PlayApi {
         lineWins,
         scatterCount,
         scatterMultiplier: 0,
-        totalMultiplier: baseMultiplier,
+        totalMultiplier: baseMultiplier + cascadeTotal,
+        cascades,
       },
       freeSpins,
       freeSpinsAwarded,

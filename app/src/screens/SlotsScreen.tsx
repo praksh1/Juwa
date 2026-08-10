@@ -42,6 +42,23 @@ const STAGGER_SECONDS = 0.27;
 const ANTICIPATION_SECONDS = 0.6;
 /** Booked slightly ahead so the audio thread receives the schedule in time. */
 const LEAD_IN_SECONDS = 0.04;
+/**
+ * How long the winning symbols stay lit before they are cleared by a tumble.
+ *
+ * Short, because the chain has to keep moving to read as a chain, but not zero:
+ * symbols that vanish the instant they are announced were never shown at all,
+ * and the player is left with a grid that changed for no visible reason.
+ */
+const CASCADE_HOLD_MS = 750;
+/** How long the refill takes to fall. All reels together — see `landReels`. */
+const CASCADE_DROP_SECONDS = 0.32;
+/** The refill falls two symbols, not the ten a full landing covers. */
+const CASCADE_TRAVEL = 2;
+
+/** What the drops after the first grid are worth, in stake multiples. */
+function dropSum(steps: readonly { totalMultiplier: number }[]): number {
+  return steps.reduce((sum, step) => sum + step.totalMultiplier, 0);
+}
 
 
 /** What the machine shows before the first spin. */
@@ -164,6 +181,13 @@ export function SlotsScreen() {
   const [schedule, setSchedule] = useState<{ from: number; duration: number }[]>([]);
   /** Which reels are lit for the bonus on the spin currently animating. */
   const [anticipating, setAnticipating] = useState<boolean[]>([]);
+  /**
+   * The ladder rung the current tumble is paying at, or 0 when not tumbling.
+   *
+   * Shown on the machine because it is the entire reason a chain is worth
+   * watching: without it a fourth drop looks exactly like a first one.
+   */
+  const [cascadeStep, setCascadeStep] = useState(0);
   /**
    * Resolved by the LAST reel's own stop callback. This is the handshake that
    * keeps the sound and the readout tied to what is actually on screen.
@@ -360,6 +384,7 @@ export function SlotsScreen() {
     setRunningWin(0);
     runningWinRef.current = 0;
     setFreeSpinsTotal(0);
+    setCascadeStep(0);
     setCelebration({ tier: 'none', amount: 0, round: celebrationRound.current });
     setReelRound((n) => n + 1);
 
@@ -379,7 +404,7 @@ export function SlotsScreen() {
      * but the reels started on the tap. Every spin was out of step by the
      * round-trip time, and that time is different every spin.
      */
-    const landReels = (next: string[][], speedScale: number) =>
+    const landReels = (next: string[][], speedScale: number, drop = false) =>
       new Promise<void>((resolve) => {
         landingResolver.current = resolve;
 
@@ -389,7 +414,30 @@ export function SlotsScreen() {
         // without it the first stop can be requested for a moment that has
         // already passed and fires late.
         const t0 = spinNow() + LEAD_IN_SECONDS;
-        const anticipate = anticipatingReels(next, scatterTriggerCount);
+        /*
+         * A tumble is not a spin and must not be staggered like one.
+         *
+         * Reels stop one after another because they are separate physical
+         * reels decelerating. Symbols falling into the gaps a win left behind
+         * are one event on one grid: staggering them would say the reels had
+         * turned again, which is the opposite of what a cascade means. So
+         * every reel drops together, over a short distance, and none of the
+         * anticipation machinery runs.
+         */
+        const anticipate = drop
+          ? Array.from({ length: REELS }, () => false)
+          : anticipatingReels(next, scatterTriggerCount);
+        if (drop) {
+          setAnticipating(anticipate);
+          setSchedule(
+            Array.from({ length: REELS }, () => ({ from: t0, duration: CASCADE_DROP_SECONDS })),
+          );
+          setGrid(next);
+          setReelRound((n) => n + 1);
+          setReelPhase('landing');
+          sounds.reelStopAt(0, t0 + CASCADE_DROP_SECONDS);
+          return;
+        }
 
         // Each anticipating reel adds to every reel after it, so the delay
         // accumulates and the machine visibly slows the closer it gets. A flat
@@ -440,9 +488,43 @@ export function SlotsScreen() {
 
       setReelPhase('idle');
       setRound(result);
-      const baseTotal = spinWin(state.baseSpin.totalMultiplier);
-      setRunningWin(baseTotal);
-      runningWinRef.current = baseTotal;
+
+      /*
+       * The tumbles, one at a time.
+       *
+       * The server settled the whole chain in the same request, so this is
+       * presentation — but it is presentation the player is owed. A cascade
+       * shown only in its final state is a large win with no explanation, and
+       * the escalating ladder that makes a chain worth watching becomes
+       * invisible. Worse, the money would already be in the balance: the
+       * machine would pay for four drops and show one.
+       *
+       * The running total climbs as each drop lands, so the number on screen
+       * and the number in the balance are the same number at every moment.
+       */
+      const drops = state.baseSpin.cascades ?? [];
+      let stepTotal = spinWin(state.baseSpin.totalMultiplier - dropSum(drops));
+      setRunningWin(stepTotal);
+      runningWinRef.current = stepTotal;
+
+      for (const step of drops) {
+        // Hold on the win first. The symbols about to vanish are the ones the
+        // player is being told paid, and clearing them immediately means they
+        // were never really shown.
+        await wait(CASCADE_HOLD_MS);
+        if (superseded()) return;
+
+        setCascadeStep(step.stepMultiplier);
+        await landReels(step.grid, 1, true);
+        if (superseded()) return;
+        setReelPhase('idle');
+
+        stepTotal += spinWin(step.totalMultiplier);
+        setRunningWin(stepTotal);
+        runningWinRef.current = stepTotal;
+        sounds.coins(3);
+      }
+      setCascadeStep(0);
 
       const baseWin = spinWin(state.baseSpin.totalMultiplier);
       celebrate(baseWin, bet);
@@ -564,6 +646,7 @@ export function SlotsScreen() {
               result={grid[i] ?? IDLE_GRID[i]!}
               litCells={lit}
               size={symbolSize}
+              {...(cascadeStep > 0 ? { travel: CASCADE_TRAVEL } : {})}
               anticipating={anticipating[i] ?? false}
               {...(details?.art ? { family: details.art } : {})}
               // Dimming needs something to contrast AGAINST. A scatter win
@@ -600,7 +683,24 @@ export function SlotsScreen() {
           style={[styles.readout, compact && styles.readoutCompact]}
           accessibilityLiveRegion="polite"
         >
-          {phase === 'fs-intro' ? (
+          {cascadeStep > 0 ? (
+            /*
+             * The rung, while a chain is running.
+             *
+             * Takes priority over everything else in the readout because it is
+             * the only thing on screen that explains why the same symbols are
+             * suddenly worth more, and it is on screen for well under a second
+             * at a time.
+             */
+            <View style={styles.fsRow}>
+              <Txt variant="bodySmall" color={colors.neon.cyan}>
+                TUMBLE · {cascadeStep}× WINS
+              </Txt>
+              <Txt variant="money" color={colors.feedback.winBright}>
+                {format(minor(runningWin), 'GC')}
+              </Txt>
+            </View>
+          ) : phase === 'fs-intro' ? (
             <Txt variant="h3" color={colors.neon.magenta}>
               {freeSpinsTotal} FREE SPINS
             </Txt>
