@@ -68,6 +68,22 @@ export interface CabinetSpec {
    */
   symbolFill?: number;
   /**
+   * How much taller than wide a cell is.
+   *
+   * A NUDGE, and it is worth saying why, because this was over-turned once
+   * already. Five reels across a phone fix the cell WIDTH at about 72 points
+   * whatever anyone wants, and symbols are square, so every point of aspect
+   * above 1 is empty space around a symbol that cannot grow into it. Set to 1.5
+   * the machine did fill the screen — with a sparse grid of small pictures,
+   * which is the opposite of what was asked for.
+   *
+   * Surplus height belongs to the top glass, not to the cells. This says only
+   * how much air a cabinet wants around its symbols: a chunky three-reeler
+   * almost none, a nineteen-cell diamond a little more so the shape reads.
+   * Clamped to 1.0–1.34 by the screen regardless of what is written here.
+   */
+  rowAspect?: number;
+  /**
    * Room behind the reels, from `art/backgrounds`.
    *
    * Twelve of these have been sitting in the repository referenced by nothing
@@ -97,35 +113,40 @@ export const DEFAULT_CABINET: CabinetSpec = { controls: 'console', frame: 'gilt'
  */
 export const CABINETS: Record<string, CabinetSpec> = {
   // ---- the mechanical ones: a lever, timber, and a dim back-bar room ----
-  'juwa-classic-slots': { controls: 'lever', frame: 'timber', symbolFill: 0.94, background: `${BG}/bg03.jpg` },
-  'slot-triple-bar': { controls: 'lever', frame: 'timber', symbolFill: 0.94, background: `${BG}/bg08.jpg` },
-  'slot-fruit-stand': { controls: 'lever', frame: 'timber', symbolFill: 0.94, background: `${BG}/bg05.jpg` },
-  'slot-lucky-sevens': { controls: 'lever', frame: 'timber', symbolFill: 0.96, background: `${BG}/bg02.jpg` },
+  // Three reels and a full-width machine give these the biggest cells in the
+  // catalogue, and they are the games that want them: a fruit machine's
+  // symbols crowd their windows, they do not float in them.
+  'juwa-classic-slots': { controls: 'lever', frame: 'timber', symbolFill: 1.0, rowAspect: 1.06, background: `${BG}/bg03.jpg` },
+  'slot-triple-bar': { controls: 'lever', frame: 'timber', symbolFill: 1.0, rowAspect: 1.04, background: `${BG}/bg08.jpg` },
+  'slot-fruit-stand': { controls: 'lever', frame: 'timber', symbolFill: 1.0, rowAspect: 1.04, background: `${BG}/bg05.jpg` },
+  'slot-lucky-sevens': { controls: 'lever', frame: 'timber', symbolFill: 1.0, rowAspect: 1.0, background: `${BG}/bg02.jpg` },
 
   // ---- temples, tombs and hoards: gold, and a room with pillars in it ----
-  'slot-desert-mirage': { controls: 'console', frame: 'gilt', background: `${BG}/egypt.jpg` },
-  'slot-pharaohs-vault': { controls: 'console', frame: 'gilt', background: `${BG}/egypt.jpg` },
-  'slot-jade-temple': { controls: 'console', frame: 'gilt', background: `${BG}/bg09.jpg` },
-  'slot-dragons-hoard': { controls: 'console', frame: 'gilt', symbolFill: 0.9, background: `${BG}/bg10.jpg` },
-  'slot-royal-flush': { controls: 'console', frame: 'gilt', symbolFill: 0.88, background: `${BG}/bg11.jpg` },
-  'slot-midnight-gold': { controls: 'console', frame: 'gilt', symbolFill: 0.88, background: `${BG}/bg04.jpg` },
-  'slot-spice-market': { controls: 'console', frame: 'gilt', background: `${BG}/bg06.jpg` },
-  'slot-emerald-nights': { controls: 'console', frame: 'gilt', background: `${BG}/bg07.jpg` },
+  'slot-desert-mirage': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.14, background: `${BG}/egypt.jpg` },
+  'slot-pharaohs-vault': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.14, background: `${BG}/egypt.jpg` },
+  'slot-jade-temple': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.2, background: `${BG}/bg09.jpg` },
+  'slot-dragons-hoard': { controls: 'console', frame: 'gilt', symbolFill: 1.0, rowAspect: 1.1, background: `${BG}/bg10.jpg` },
+  'slot-royal-flush': { controls: 'console', frame: 'gilt', symbolFill: 0.96, rowAspect: 1.22, background: `${BG}/bg11.jpg` },
+  'slot-midnight-gold': { controls: 'console', frame: 'gilt', symbolFill: 0.96, rowAspect: 1.22, background: `${BG}/bg04.jpg` },
+  'slot-spice-market': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.14, background: `${BG}/bg06.jpg` },
+  'slot-emerald-nights': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.16, background: `${BG}/bg07.jpg` },
 
   // ---- cold, electric and airless: metal rather than gold ----
-  'slot-frost-peak': { controls: 'console', frame: 'chrome', background: `${BG}/bg01.jpg` },
-  'slot-storm-chaser': { controls: 'console', frame: 'chrome', symbolFill: 0.86, background: `${BG}/bg01.jpg` },
-  'slot-supernova': { controls: 'console', frame: 'chrome', symbolFill: 0.9 },
-  'slot-aurora-borealis': { controls: 'console', frame: 'chrome' },
-  'slot-vault-breaker': { controls: 'console', frame: 'chrome', symbolFill: 0.88, background: `${BG}/bg08.jpg` },
-  'slot-city-lights': { controls: 'console', frame: 'chrome' },
+  'slot-frost-peak': { controls: 'console', frame: 'chrome', symbolFill: 0.98, rowAspect: 1.2, background: `${BG}/bg01.jpg` },
+  'slot-storm-chaser': { controls: 'console', frame: 'chrome', symbolFill: 0.96, rowAspect: 1.26, background: `${BG}/bg01.jpg` },
+  'slot-supernova': { controls: 'console', frame: 'chrome', symbolFill: 0.96, rowAspect: 1.28 },
+  'slot-aurora-borealis': { controls: 'console', frame: 'chrome', symbolFill: 0.96, rowAspect: 1.24 },
+  'slot-vault-breaker': { controls: 'console', frame: 'chrome', symbolFill: 0.98, rowAspect: 1.18, background: `${BG}/bg08.jpg` },
+  'slot-city-lights': { controls: 'console', frame: 'chrome', symbolFill: 0.96, rowAspect: 1.24 },
 
   // ---- the ones whose own artwork is the room ----
-  'slot-neon-alley': { controls: 'console', frame: 'none' },
-  'slot-ocean-drift': { controls: 'console', frame: 'none' },
-  'slot-sunset-strip': { controls: 'console', frame: 'none' },
-  'slot-carnival-row': { controls: 'console', frame: 'none' },
-  'slot-jungle-run': { controls: 'console', frame: 'none' },
+  // No surround, so the room is doing the work and the grid can afford a
+  // little more air for it to show through.
+  'slot-neon-alley': { controls: 'console', frame: 'none', symbolFill: 0.96, rowAspect: 1.3 },
+  'slot-ocean-drift': { controls: 'console', frame: 'none', symbolFill: 0.96, rowAspect: 1.3 },
+  'slot-sunset-strip': { controls: 'console', frame: 'none', symbolFill: 0.96, rowAspect: 1.3 },
+  'slot-carnival-row': { controls: 'console', frame: 'none', symbolFill: 0.98, rowAspect: 1.26 },
+  'slot-jungle-run': { controls: 'console', frame: 'none', symbolFill: 0.98, rowAspect: 1.26 },
 };
 
 /**

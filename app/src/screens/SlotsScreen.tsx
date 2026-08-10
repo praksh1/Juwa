@@ -20,7 +20,7 @@ import {
   rulesDismissed,
 } from '../components/GameRules';
 import { REEL_GAP, WinLines, litCells, useWinCycle } from '../components/WinLines';
-import { ReelFrame, SlotConsole, SpinLever } from '../components/SlotControls';
+import { CabinetGlass, ReelFrame, SlotConsole, SpinLever } from '../components/SlotControls';
 import { cabinetFor, roomFor } from '../api/cabinets';
 import { hasTileArt } from '../components/GameArt';
 import { WinOverlay, useCabinetShake } from '../components/WinOverlay';
@@ -84,8 +84,92 @@ const CASCADE_TRAVEL = 2;
  * only here to stop a hypothetical two-reel game filling the screen.
  */
 const MAX_SYMBOL_SIZE = 118;
-/** What a symbol fills of its cell unless the cabinet asks for more. */
-const DEFAULT_SYMBOL_FILL = 0.79;
+/**
+ * What a symbol fills of its cell unless the cabinet asks for more.
+ *
+ * High, because on a phone the cell is already as small as the geometry allows
+ * and every point of inset inside it comes straight off the artwork.
+ */
+const DEFAULT_SYMBOL_FILL = 0.96;
+/**
+ * How much taller than wide a cell is unless the cabinet says otherwise.
+ *
+ * Height is abundant and width is not: on a 390x844 phone a five-reel machine
+ * has about 160 points of height per row available and can only afford 68 of
+ * width. Some of that surplus belongs in the cells — a cabinet's cells are
+ * taller than they are wide — but only some.
+ *
+ * The first attempt at this set 1.5, and it was wrong in a way worth writing
+ * down: the machine did grow to fill the screen, but a 68-point symbol in a
+ * 102-point cell is a symbol with a third of a symbol's worth of empty space
+ * under it, and thirty of those read as a sparse grid of small pictures. The
+ * player asked for symbols that were "loud and clear" and got the opposite of
+ * loud by making their boxes bigger.
+ *
+ * Surplus height goes to the CABINET instead — the top glass above the reels —
+ * because that is where a real machine puts it, and a taller cabinet makes the
+ * machine bigger without making a single symbol smaller.
+ */
+const DEFAULT_ROW_ASPECT = 1.18;
+/**
+ * The band a cabinet may choose its cell shape inside.
+ *
+ * Square is the floor: a cell shorter than it is wide clips the artwork, since
+ * the symbol is square and sized off the cell's WIDTH. The ceiling is where a
+ * grid stops reading as a grid and starts reading as columns of separate
+ * pictures, which is the mistake described above.
+ */
+const MIN_ROW_ASPECT = 1.0;
+const MAX_ROW_ASPECT = 1.34;
+
+/**
+ * Everything on screen that is not the reel window or the top glass.
+ *
+ * MEASURED off the built screen at 390x844, not estimated: navigation header
+ * 95, balance strip and its gap 92, readout 48, console and its gap 92,
+ * fairness line 42, tab bar 62, and the cabinet's own borders and padding 15.
+ *
+ * The old figure here was 230, which was not a measurement of anything. It
+ * survived only because width binds first on a three-row machine, so the
+ * height budget was never actually spent — until a five-row diamond spent it
+ * and pushed the spin button off the bottom of the phone.
+ *
+ * In landscape the console moves BESIDE the machine and the readout collapses,
+ * so most of that budget comes back and the reels take the height instead.
+ */
+const PORTRAIT_CHROME = 436;
+/*
+ * Landscape is not "portrait with more room": it has 390 points of height in
+ * total, of which the navigation header takes 55 and the balance strip 48. The
+ * console moves out of the budget entirely — it goes in a rail beside the
+ * reels — but what is left is still less than half the portrait budget, and
+ * understating it clipped the balance strip behind the header.
+ */
+const COMPACT_CHROME = 200;
+/**
+ * The tallest the top glass may grow.
+ *
+ * It exists to absorb height the reels cannot use, and on a phone there is a
+ * lot of that: five reels fix a symbol at about 72 points whatever the screen
+ * does, so a three-row window is 260 points tall on an 844-point phone and no
+ * arithmetic changes it. The rest belongs to the cabinet — which is what a real
+ * fruit machine's top box is, and it is not small.
+ *
+ * Capped all the same, because past this the sign is a billboard with a slot
+ * machine underneath it rather than a machine with a name on it.
+ */
+const MAX_GLASS = 150;
+/** Below this it is a stripe rather than a sign, and is better not drawn. */
+const MIN_GLASS = 30;
+/**
+ * Height set aside for the glass BEFORE the reels are sized.
+ *
+ * Without it, a tall grid takes every point there is and the machine loses the
+ * one part that says which game you are in — Ocean Drift's five-row diamond
+ * did exactly that. A reserve costs the diamond about four points of symbol
+ * and buys it a nameplate.
+ */
+const GLASS_RESERVE = 34;
 
 /**
  * How long auto-spin waits after being switched on, before spending anything.
@@ -436,8 +520,24 @@ export function SlotsScreen() {
     // — about 120. That is the whole reason for the side-by-side layout: at 258
     // the symbols had to shrink to 20 points to fit, which was playable and
     // did not look like a slot machine.
-    const chrome = compact ? 120 : 300;
-    const byHeight = Math.floor((viewportHeight - chrome) / MAX_ROWS);
+    // MEASURED against the built screen, not guessed. The old 300 left the
+    // machine occupying about a fifth of a 900-point phone with dead space
+    // above and below it — a slot cabinet is the screen, not a widget on it.
+    const chrome = compact ? COMPACT_CHROME : PORTRAIT_CHROME;
+    /*
+     * Budgeted against the SHORTEST cell the machine could use, not the one it
+     * will actually use.
+     *
+     * Symbols are square and sized off the cell's width, so dividing the height
+     * budget by a tall aspect shrinks the symbol to make room for space it does
+     * not need. Using the floor means height only ever binds on a genuinely
+     * short screen; on a phone held upright width binds, which is the truth of
+     * the geometry — five reels across 390 points is what fixes a symbol at
+     * about 72, and no amount of spare height changes that.
+     */
+    const byHeight = Math.floor(
+      (viewportHeight - chrome - (compact ? 0 : GLASS_RESERVE)) / (MAX_ROWS * MIN_ROW_ASPECT),
+    );
 
     /*
      * WIDTH MATTERS AS MUCH AS HEIGHT, and used not to count at all.
@@ -462,6 +562,56 @@ export function SlotsScreen() {
     // symbol is a coloured smudge — and never so large it stops fitting.
     return Math.max(26, Math.min(MAX_SYMBOL_SIZE, Math.min(byHeight, byWidth)));
   }, [viewportHeight, MAX_ROWS, compact, reelsWidth, REELS]);
+
+  /**
+   * How tall a cell is against how wide it is.
+   *
+   * Symbols are square but CELLS need not be, and on a phone held upright they
+   * must not be. Real cabinets have slightly taller-than-wide cells: the
+   * artwork stays square and centred and the reel gains a little breathing
+   * room above and below it, which is what stops three rows reading as one
+   * dense block.
+   *
+   * A LITTLE. Clamped hard, because this is the knob that was over-turned the
+   * last time: every point of aspect above 1 is empty space around a symbol
+   * that is already as large as the width allows, and past about a third the
+   * grid stops being a grid.
+   */
+  const cellHeight = useMemo(() => {
+    const want = cabinet.rowAspect ?? DEFAULT_ROW_ASPECT;
+    const aspect = Math.min(MAX_ROW_ASPECT, Math.max(MIN_ROW_ASPECT, want));
+    /*
+     * Air is the FIRST thing given up when the screen runs out.
+     *
+     * A cabinet may ask for a third again of its symbol in height, but only out
+     * of height that exists. Ocean Drift's five-row diamond asked for 1.3 and
+     * got a 470-point reel window on a phone that had 370 to give, which pushed
+     * the console off the bottom — a machine you cannot spin. Clamping here
+     * rather than refusing the request means the tall grids simply sit tighter,
+     * which is what a real cabinet does with a big grid anyway.
+     */
+    const room = Math.floor(
+      (viewportHeight - (compact ? COMPACT_CHROME : PORTRAIT_CHROME) - (compact ? 0 : GLASS_RESERVE)) /
+        MAX_ROWS,
+    );
+    return Math.max(symbolSize, Math.min(Math.round(symbolSize * aspect), room));
+  }, [symbolSize, cabinet.rowAspect, viewportHeight, compact, MAX_ROWS]);
+
+  /**
+   * What is left of the screen once the reels and the controls are paid for.
+   *
+   * This is the height the machine used to leave as black space above and
+   * below itself, and then — worse — as empty space inside its own cells. It
+   * goes to the top glass, which is where a cabinet keeps its spare height.
+   */
+  const glassHeight = useMemo(() => {
+    if (compact) return 0;
+    // Cannot come out negative: `cellHeight` is clamped against this same
+    // budget, and GLASS_RESERVE was taken out of it before the reels were
+    // sized. The floor is belt and braces for an unusually short viewport.
+    const spare = viewportHeight - PORTRAIT_CHROME - cellHeight * MAX_ROWS;
+    return Math.round(Math.max(0, Math.min(MAX_GLASS, spare)));
+  }, [compact, viewportHeight, cellHeight, MAX_ROWS]);
 
   /**
    * The bonus-round re-theme.
@@ -813,6 +963,10 @@ export function SlotsScreen() {
         */}
         <View style={styles.machineRow}>
         <ReelFrame style={cabinet.frame}>
+        {/* The lit sign above the reels, cast in this game's own material. */}
+        {glassHeight >= MIN_GLASS && details ? (
+          <CabinetGlass name={details.name} material={material} height={glassHeight} />
+        ) : null}
         <Animated.View style={[styles.reelBay, compact && styles.reelBayCompact, bayStyle]}>
         {room ? (
           <>
@@ -829,7 +983,7 @@ export function SlotsScreen() {
           </>
         ) : null}
         <View
-          style={styles.reels}
+          style={[styles.reels, styles.reelsFill]}
           onLayout={(e) => setReelsWidth(e.nativeEvent.layout.width)}
         >
           {Array.from({ length: REELS }, (_, i) => (
@@ -844,6 +998,7 @@ export function SlotsScreen() {
               result={grid[i] ?? IDLE_GRID[i]!}
               litCells={lit}
               size={symbolSize}
+              cellHeight={cellHeight}
               // How much of the cell the artwork takes. Art direction rather
               // than arithmetic — see `symbolFill` in api/cabinets.
               fill={cabinet.symbolFill ?? DEFAULT_SYMBOL_FILL}
@@ -877,7 +1032,7 @@ export function SlotsScreen() {
             reels={REELS}
             phase={winPhase}
             width={reelsWidth}
-            cellHeight={symbolSize}
+            cellHeight={cellHeight}
             rows={ROWS}
             ways={details?.pays === 'ways'}
             {...(details?.art ? { family: details.art } : {})}
@@ -896,7 +1051,7 @@ export function SlotsScreen() {
             onSpin={spin}
             spinning={spinning}
             disabled={bet > balance}
-            height={symbolSize * MAX_ROWS}
+            height={cellHeight * MAX_ROWS}
           />
         ) : null}
         </View>
@@ -1031,8 +1186,17 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.surface.base,
-    padding: spacing.lg,
-    gap: spacing.lg,
+    /*
+     * Tight vertically, roomy horizontally.
+     *
+     * Three 16-point gaps and 32 points of vertical padding is 80 points of
+     * black — a tenth of a phone — spent separating a cabinet from nothing. The
+     * horizontal padding stays because the balance strip and the fairness line
+     * need it; the machine cancels it for itself with a negative margin.
+     */
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
     justifyContent: 'center',
   },
   header: {
@@ -1053,7 +1217,18 @@ const styles = StyleSheet.create({
   // Wide enough for "10,000 GC" on a chip without wrapping to three lines.
   controlsColumn: { width: 190, gap: spacing.sm, justifyContent: 'center' },
   machine: {
-    gap: spacing.md,
+    gap: spacing.sm,
+    /*
+     * EDGE TO EDGE.
+     *
+     * The screen pads itself by 16 a side and the card added 8 more, so a
+     * five-reel machine lost 48 points of width — most of a symbol — to
+     * margins around a cabinet that is supposed to BE the screen. The negative
+     * margin cancels the screen's padding for this one card, because the reels
+     * are the content and nothing else on the page competes with them.
+     */
+    marginHorizontal: -spacing.lg,
+    padding: 2,
     overflow: 'hidden',
     borderColor: colors.gold.dark,
     borderWidth: 2,
@@ -1070,7 +1245,11 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 2,
     borderColor: colors.gold.dark,
-    padding: spacing.sm,
+    // Width is the scarce dimension on a phone: five reels across 390 points
+    // means every point spent on padding comes straight off the symbols. This
+    // was 8 on each side plus a 4-point gap between every reel, which together
+    // took a fifth of the machine's width before a symbol was drawn.
+    padding: 3,
   },
   fsRow: { alignItems: 'center', gap: 2 },
   winRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
@@ -1080,15 +1259,27 @@ const styles = StyleSheet.create({
    * diamond rather than as five columns hanging from a shelf. On a rectangular
    * game it changes nothing at all.
    */
-  reels: { flexDirection: 'row', gap: spacing.xs, alignItems: 'center' },
+  reels: { flexDirection: 'row', gap: REEL_GAP, alignItems: 'center' },
   readout: { minHeight: 32, alignItems: 'center', justifyContent: 'center' },
   readoutCompact: { minHeight: 18 },
   // Still above the 44-point touch minimum; only the generous padding goes.
   spinCompact: { paddingVertical: spacing.xs, minHeight: 44 },
   reelBayCompact: { padding: spacing.xs },
   /** The machine and its lever, side by side. */
-  machineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  roomScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(4, 6, 16, 0.62)' },
+  machineRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  // The reels must claim the full width of the bay. Without this they are
+  // sized by their content and the machine collapses into the corner.
+  reelsFill: { width: '100%' },
+  /*
+   * The room has to stay a room, but it also has to be VISIBLE.
+   *
+   * At 0.62 over artwork that was already painted dark, every game's room came
+   * out as the same black rectangle — which meant the twenty-three distinct
+   * backdrops the cabinet work was built around were, on screen, not there at
+   * all. Held back far enough that a symbol still reads in front of it, and no
+   * further.
+   */
+  roomScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(4, 6, 16, 0.42)' },
   chip: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,

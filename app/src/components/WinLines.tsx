@@ -47,8 +47,13 @@ import { Txt } from './primitives';
  * is meant to be connecting.
  */
 export const CELL_HEIGHT = 58;
-/** Must match the `gap` on the reels row in SlotsScreen. */
-export const REEL_GAP = spacing.xs;
+/**
+ * Must match the `gap` on the reels row in SlotsScreen.
+ *
+ * Small on purpose. Four gaps between five reels at 8 points each took 32 of
+ * the ~300 the machine has to work with, which is half a symbol.
+ */
+export const REEL_GAP = 3;
 /**
  * Roughly how wide the badge is: a 16pt symbol, a gap, and "x5".
  *

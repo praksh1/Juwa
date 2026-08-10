@@ -20,11 +20,19 @@
 
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, PanResponder, Pressable, StyleSheet, View } from 'react-native';
-import Svg, { Circle, Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
+import Svg, {
+  Circle,
+  Defs,
+  LinearGradient,
+  Rect,
+  Stop,
+  Text as SvgText,
+} from 'react-native-svg';
 import { colors, radius, spacing, typography } from '@juwa/ui';
 import { format, type Minor } from '@juwa/money';
 import { Txt } from './primitives';
 import { usePrefersReducedMotion } from '../motion';
+import type { Material } from './symbols/materials';
 
 export interface SlotControlsProps {
   bet: Minor;
@@ -232,7 +240,7 @@ export function SlotConsole({
   };
 
   return (
-    <View style={[styles.console, compact && styles.consoleCompact]}>
+    <View style={[styles.console, compact && styles.consoleCompact, compact && styles.consoleStack]}>
       {/* Bet, with steppers. A stepper rather than five chips: the chips took a
           whole row and two of them wrapped onto a third line on a small phone. */}
       <View style={styles.consoleBlock}>
@@ -249,7 +257,7 @@ export function SlotConsole({
       </View>
 
       {/* The win, in the middle, where every cabinet puts it. */}
-      <View style={[styles.consoleBlock, styles.consoleCentre]}>
+      <View style={[styles.consoleBlock, compact ? styles.consoleCentreStack : styles.consoleCentre]}>
         <Txt variant="caption" color={colors.text.muted}>WIN</Txt>
         <Txt
           variant="money"
@@ -329,6 +337,115 @@ function StepButton({
   );
 }
 
+/* ------------------------------------------------------------------ glass */
+
+/**
+ * The top glass: the lit panel above the reels with the game's name on it.
+ *
+ * Two problems, one part. The first is that the machine did not fill the
+ * screen — and the answer to that is NOT taller cells, which only spreads the
+ * same symbols further apart. A real cabinet is mostly not reels: it is a
+ * lit sign, a belly panel and a console, and the reel window sits in the
+ * middle of them. Giving the surplus height to the sign makes the machine
+ * bigger while leaving every symbol exactly as large as the width allows.
+ *
+ * The second is that every game arrived looking like every other game. The
+ * name is cast in the game's own MATERIAL — the same ice, sandstone, jade or
+ * ember its royals are cut from — so Frost Peak's glass is lit blue and
+ * Dragon's Hoard's is molten, before a single symbol has been painted.
+ *
+ * `flex: 1` with a floor rather than a fixed height: it takes whatever the
+ * screen has left over after the reels and the console have been paid, so the
+ * cabinet reaches the bottom of the phone on a tall screen and quietly gives
+ * up almost all of itself on a short one.
+ */
+export function CabinetGlass({
+  name,
+  material,
+  height,
+}: {
+  name: string;
+  material: Material;
+  height: number;
+}) {
+  /*
+   * Fitted by WIDTH rather than by point size.
+   *
+   * "Aurora Borealis" is half again the length of "Triple Bar", and one point
+   * size either overflows the first or leaves the second floating in the middle
+   * of an empty sign. `textLength` hands the fitting to the renderer, which
+   * knows the metrics this font actually has — and is capped so a short name is
+   * never stretched across the whole panel like a stadium banner.
+   */
+  const label = name.toUpperCase();
+  const textLength = Math.min(280, label.length * 17);
+  const id = `glass-${material.outline.slice(1)}`;
+  const fit = { textLength, lengthAdjust: 'spacingAndGlyphs' as const };
+
+  return (
+    <View style={[styles.glass, { height, borderColor: material.outline }]}>
+      {/*
+        The lit panel, drawn in its own SVG so it can STRETCH.
+        `preserveAspectRatio="none"` fills the sign edge to edge whatever shape
+        the sign is; the lettering below must not be stretched, and one element
+        cannot be both. Sharing the viewBox keeps the two in register.
+      */}
+      <Svg
+        style={StyleSheet.absoluteFill}
+        width="100%"
+        height="100%"
+        viewBox="0 0 300 60"
+        preserveAspectRatio="none"
+      >
+        <Defs>
+          <LinearGradient id={`${id}-lamp`} x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={material.face[1]} stopOpacity={0.38} />
+            <Stop offset="0.7" stopColor={material.face[2]} stopOpacity={0.22} />
+            <Stop offset="1" stopColor={material.outline} stopOpacity={0.5} />
+          </LinearGradient>
+        </Defs>
+        {/* Brightest at the top, where the tube is. */}
+        <Rect x="0" y="0" width="300" height="60" fill={`url(#${id}-lamp)`} />
+      </Svg>
+      <Svg width="100%" height="100%" viewBox="0 0 300 60" preserveAspectRatio="xMidYMid meet">
+        <Defs>
+          <LinearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={material.face[0]} />
+            <Stop offset="0.5" stopColor={material.face[1]} />
+            <Stop offset="1" stopColor={material.face[2]} />
+          </LinearGradient>
+        </Defs>
+        {material.halo ? (
+          <SvgText {...GLASS_TEXT} {...fit} fill="none" stroke={material.halo} strokeWidth={7} strokeOpacity={0.45} strokeLinejoin="round">
+            {label}
+          </SvgText>
+        ) : null}
+        <SvgText {...GLASS_TEXT} {...fit} fill="none" stroke={material.outline} strokeWidth={5.5} strokeLinejoin="round">
+          {label}
+        </SvgText>
+        {/* The cut edge, a shade proud of the face — the same construction the
+            royals and the lobby titles use, for the same reason. */}
+        <SvgText {...GLASS_TEXT} {...fit} y={GLASS_TEXT.y + 1.4} fill={material.edge}>
+          {label}
+        </SvgText>
+        <SvgText {...GLASS_TEXT} {...fit} fill={`url(#${id})`}>
+          {label}
+        </SvgText>
+      </Svg>
+    </View>
+  );
+}
+
+const GLASS_TEXT = {
+  x: 150,
+  y: 41,
+  fontSize: 30,
+  fontWeight: '900' as const,
+  fontFamily: "'Archivo Black', Impact, 'Arial Narrow Bold', sans-serif",
+  textAnchor: 'middle' as const,
+  letterSpacing: 2,
+};
+
 /* ------------------------------------------------------------------ frame */
 
 /**
@@ -339,7 +456,17 @@ function StepButton({
  * fit both without distorting the carving.
  */
 export function ReelFrame({ style, children }: { style?: 'timber' | 'gilt' | 'chrome' | 'none'; children: React.ReactNode }) {
-  if (!style || style === 'none') return <>{children}</>;
+  /*
+   * ALWAYS a flexing wrapper, even with no frame drawn.
+   *
+   * This sits in a row beside the lever, and a child of a row that does not
+   * claim its share is sized by its content. The reels inside use `flex: 1`,
+   * which in a content-sized parent collapses to the narrowest thing that
+   * fits — so the entire machine shrank into the corner of its own cabinet,
+   * about a third of the width it should have had, and every symbol shrank
+   * with it. Returning a bare fragment for `none` was what let that happen.
+   */
+  if (!style || style === 'none') return <View style={styles.frameBare}>{children}</View>;
   const palette = FRAMES[style];
   return (
     <View style={[styles.frame, { borderColor: palette.edge, backgroundColor: palette.fill }]}>
@@ -366,7 +493,7 @@ const FRAMES = {
 
 const styles = StyleSheet.create({
   /* lever */
-  leverArea: { width: 52, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 4 },
+  leverArea: { width: 38, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 4 },
   leverDim: { opacity: 0.45 },
   leverSlot: {
     position: 'absolute',
@@ -399,9 +526,20 @@ const styles = StyleSheet.create({
     borderColor: colors.gold.dark,
   },
   consoleCompact: { paddingVertical: spacing.xs },
+  /*
+   * Beside the machine, the console is a COLUMN.
+   *
+   * In landscape it lives in a 190-point rail next to the reels, and a row of
+   * "TOTAL BET 2,000 GC · WIN · AUTO · SPIN" needs more than twice that. It did
+   * not wrap, it overflowed: the spin button was drawn off the right edge of
+   * the phone and the game could not be played at all in landscape.
+   */
+  consoleStack: { flexDirection: 'column', alignItems: 'stretch', gap: spacing.xs },
   consoleBlock: { alignItems: 'center', gap: 2 },
   consoleCentre: { flex: 1 },
-  consoleRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  // `flex: 1` in a column would stretch the WIN block down the whole rail.
+  consoleCentreStack: { flexGrow: 0 },
+  consoleRight: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   step: {
     width: 28,
@@ -440,7 +578,17 @@ const styles = StyleSheet.create({
   spinBusy: { opacity: 0.6 },
   spinLabel: { ...typography.bodySmall, fontWeight: '900', letterSpacing: 1, color: '#1A1206' },
 
+  /* glass */
+  glass: {
+    width: '100%',
+    borderBottomWidth: 2,
+    borderRadius: radius.sm,
+    overflow: 'hidden',
+    justifyContent: 'center',
+  },
+
   /* frame */
-  frame: { borderRadius: radius.lg, borderWidth: 2, padding: spacing.xs },
+  frame: { flex: 1, borderRadius: radius.lg, borderWidth: 2, padding: 3 },
+  frameBare: { flex: 1 },
   frameInner: { borderRadius: radius.md, overflow: 'hidden' },
 });

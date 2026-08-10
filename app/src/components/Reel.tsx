@@ -146,6 +146,15 @@ export interface ReelProps {
    */
   fill?: number;
   /**
+   * Cell height, when it differs from the symbol's width.
+   *
+   * Symbols are square; cells need not be. On a phone five reels fix the cell
+   * WIDTH at about 64 points, and a machine three of those tall is a strip
+   * rather than a cabinet — so the cell is given extra height and the square
+   * artwork is centred in it, which is what a real machine looks like.
+   */
+  cellHeight?: number;
+  /**
    * True once a win is being celebrated. Losing symbols dim so the winning
    * ones stand out — showing what DIDN'T pay at full strength is why players
    * miss small wins entirely on a busy grid.
@@ -219,7 +228,8 @@ export function Reel({
   family,
   tint,
   material,
-  fill = 0.79,
+  fill = 0.86,
+  cellHeight,
   onLanded,
 }: ReelProps) {
   const offset = useRef(new Animated.Value(0)).current;
@@ -287,13 +297,14 @@ export function Reel({
 
   // The loop strip is duplicated so translating by exactly one cycle height
   // returns an identical image, which is what makes the repeat invisible.
+  const cell = cellHeight ?? size;
   const loopStrip = [...loopFiller, ...loopFiller];
-  const loopSpan = LOOP_SYMBOLS * size;
+  const loopSpan = LOOP_SYMBOLS * cell;
 
   const landingStrip = [...landingFiller, ...result];
   // Clamped to what the strip can actually show: asking for more travel than
   // there is filler above the result would start the reel on empty space.
-  const landingTravel = Math.min(travel, LANDING_FILLER) * size;
+  const landingTravel = Math.min(travel, LANDING_FILLER) * cell;
 
   // ------------------------------------------------------------------- loop
   useEffect(() => {
@@ -316,7 +327,7 @@ export function Reel({
      * and a velocity step in something that has been accelerating like a wheel
      * reads instantly as a dropped frame.
      */
-    const rate = LOOP_SYMBOLS_PER_SECOND * size;
+    const rate = LOOP_SYMBOLS_PER_SECOND * cell;
     const ramp = rampDistance(rate, spinUp);
 
     const tick = () => {
@@ -340,7 +351,7 @@ export function Reel({
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spinning, index, loopSpan, size, spinUp]);
+  }, [spinning, index, loopSpan, cell, spinUp]);
 
   // ---------------------------------------------------------------- landing
   useEffect(() => {
@@ -381,7 +392,7 @@ export function Reel({
   const resultStart = spinning ? Infinity : landingFiller.length;
 
   return (
-    <View style={[styles.window, { height: size * rows }]}>
+    <View style={[styles.window, { height: cell * rows }]}>
       {/*
         The blur is a CSS filter, applied to the strip as a whole.
 
@@ -442,7 +453,7 @@ export function Reel({
               key={`${symbol}-${i}`}
               style={[
                 styles.cell,
-                { height: size },
+                { height: cell },
                 (state === 'winning' || state === 'won') && styles.cellWinning,
                 state === 'dimmed' && styles.cellDimmed,
               ]}
