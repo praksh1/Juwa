@@ -87,4 +87,15 @@ export const LIMITS = {
   bonus: { capacity: 5, refillPerSecond: 0.1 },
   read: { capacity: 60, refillPerSecond: 5 },
   register: { capacity: 3, refillPerSecond: 0.05 },
+  /**
+   * Invitation lookup, keyed by ADDRESS rather than by player — it is the one
+   * route that answers without a session, because the sign-up screen has to say
+   * "invited by Sunrise Gaming" before the account exists.
+   *
+   * The token is 32 bytes of `randomBytes`, so there is nothing here to
+   * enumerate in any number of universes. This limit is not defending the
+   * tokens; it is defending the database from someone discovering an
+   * unauthenticated endpoint and pointing a loop at it.
+   */
+  invite: { capacity: 10, refillPerSecond: 0.2 },
 } as const;

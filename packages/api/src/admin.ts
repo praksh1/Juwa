@@ -242,10 +242,19 @@ export interface GamePatch {
 /**
  * Apply a change, attributed.
  *
- * `set_local` scopes the operator id to this transaction, which is what the
- * audit trigger reads. Doing it any other way — a session variable, a global —
- * leaks attribution between concurrent requests on a pooled connection and
- * quietly credits one operator's change to another.
+ * ONE statement, deliberately.
+ *
+ * This used to be `begin`, `set_config(..., is_local)`, the insert, `commit` —
+ * four calls through `db.query`, which runs against a connection POOL. Four
+ * pool queries can be four different connections, so the transaction-local
+ * setting the audit trigger reads was frequently set on a connection that never
+ * ran the insert, and the `begin` could strand a pooled connection sitting idle
+ * inside an open transaction. The attribution came out blank and the pool
+ * slowly lost connections.
+ *
+ * The row already carries `updated_by`, and as of migration 0010 the trigger
+ * falls back to it. So the correct write is a single statement with no
+ * transaction to lose.
  */
 export async function updateGameConfig(
   db: AdminDb,
@@ -257,36 +266,28 @@ export async function updateGameConfig(
     throw new Error('Maximum bet must be at least the minimum');
   }
 
-  await db.query('begin');
-  try {
-    await db.query(`select set_config('juwa.operator_id', $1, true)`, [operator.operatorId]);
-    await db.query(
-      `insert into game_configs (game_id, enabled, max_win_multiplier, min_bet, max_bet, updated_by)
-       values ($1, coalesce($2, true), $3, $4, $5, $6)
-       on conflict (game_id) do update set
-         enabled            = coalesce($2, game_configs.enabled),
-         max_win_multiplier = case when $7 then $3 else game_configs.max_win_multiplier end,
-         min_bet            = case when $8 then $4 else game_configs.min_bet end,
-         max_bet            = case when $9 then $5 else game_configs.max_bet end,
-         updated_at         = now(),
-         updated_by         = $6`,
-      [
-        gameId,
-        patch.enabled ?? null,
-        patch.maxWinMultiplier ?? null,
-        patch.minBet ?? null,
-        patch.maxBet ?? null,
-        operator.operatorId,
-        'maxWinMultiplier' in patch,
-        'minBet' in patch,
-        'maxBet' in patch,
-      ],
-    );
-    await db.query('commit');
-  } catch (error) {
-    await db.query('rollback');
-    throw error;
-  }
+  await db.query(
+    `insert into game_configs (game_id, enabled, max_win_multiplier, min_bet, max_bet, updated_by)
+     values ($1, coalesce($2, true), $3, $4, $5, $6)
+     on conflict (game_id) do update set
+       enabled            = coalesce($2, game_configs.enabled),
+       max_win_multiplier = case when $7 then $3 else game_configs.max_win_multiplier end,
+       min_bet            = case when $8 then $4 else game_configs.min_bet end,
+       max_bet            = case when $9 then $5 else game_configs.max_bet end,
+       updated_at         = now(),
+       updated_by         = $6`,
+    [
+      gameId,
+      patch.enabled ?? null,
+      patch.maxWinMultiplier ?? null,
+      patch.minBet ?? null,
+      patch.maxBet ?? null,
+      operator.operatorId,
+      'maxWinMultiplier' in patch,
+      'minBet' in patch,
+      'maxBet' in patch,
+    ],
+  );
 }
 
 export async function listAudit(db: AdminDb, limit = 100): Promise<unknown[]> {

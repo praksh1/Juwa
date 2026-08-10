@@ -7,7 +7,7 @@
 
 import { strict as assert } from 'node:assert';
 import { after, before, describe, it } from 'node:test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import type { AddressInfo } from 'node:net';
@@ -26,7 +26,16 @@ import {
   type StripeGateway,
 } from './stripe.js';
 
-const URL_ENV = process.env['JUWA_TEST_DATABASE_URL'];
+/**
+ * Its OWN database, not the one server.test.ts uses.
+ *
+ * `node --test` runs test FILES in parallel. Both files build a schema from
+ * scratch in their `before` hook, so pointing them at one database means two
+ * concurrent runs of the same DDL — which fails with "relation already exists"
+ * and cancels whichever suite lost the race, at random. Separate databases are
+ * the only arrangement where both suites are deterministic.
+ */
+const URL_ENV = process.env['JUWA_STRIPE_TEST_DATABASE_URL'];
 const here = dirname(fileURLToPath(import.meta.url));
 const migrations = resolve(here, '../../../db/migrations');
 const dbTest = resolve(here, '../../../db/test');
@@ -119,7 +128,7 @@ describe('stripe webhook signatures', () => {
 
 // ------------------------------------------------------------- integration
 
-describe('store', { skip: URL_ENV ? false : 'JUWA_TEST_DATABASE_URL not set' }, () => {
+describe('store', { skip: URL_ENV ? false : 'JUWA_STRIPE_TEST_DATABASE_URL not set' }, () => {
   let pool: import('pg').Pool;
   let base: string;
   let stop: () => void;
@@ -175,10 +184,10 @@ describe('store', { skip: URL_ENV ? false : 'JUWA_TEST_DATABASE_URL not set' }, 
     pool = new Pool({ connectionString: URL_ENV });
     const sql = (p: string) => readFileSync(p, 'utf8');
     await pool.query(sql(resolve(dbTest, 'supabase_shim.sql')));
-    for (const file of [
-      '0001_ledger.sql', '0002_social_economy.sql', '0003_play.sql',
-      '0004_accounts.sql', '0005_purchases.sql',
-    ]) {
+    // Every migration, read from the directory. The hand-written list this
+    // replaced stopped at 0005, so `complete_registration` did not yet take a
+    // country and the store tests all failed at the door with a 403.
+    for (const file of readdirSync(migrations).filter((f) => /^\d{4}_.*\.sql$/.test(f)).sort()) {
       await pool.query(sql(resolve(migrations, file)));
     }
     await pool.query(`insert into auth.users (id) values ($1)`, [PLAYER]);

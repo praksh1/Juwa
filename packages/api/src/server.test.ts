@@ -10,7 +10,7 @@
 
 import { strict as assert } from 'node:assert';
 import { after, before, describe, it } from 'node:test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import type { AddressInfo } from 'node:net';
@@ -157,13 +157,35 @@ describe('api', { skip: URL_ENV ? false : 'JUWA_TEST_DATABASE_URL not set' }, ()
 
     const sql = (path: string) => readFileSync(path, 'utf8');
     await pool.query(sql(resolve(dbTest, 'supabase_shim.sql')));
-    for (const file of [
-      '0001_ledger.sql', '0002_social_economy.sql', '0003_play.sql',
-      '0004_accounts.sql', '0005_purchases.sql',
-    ]) {
+    /**
+     * EVERY migration, discovered from the directory rather than listed here.
+     *
+     * This used to be a hand-written list ending at 0005, and it had quietly
+     * gone stale: 0006 changed `complete_registration` to take a country and a
+     * region, the API started passing them, and every registration test in this
+     * file began failing with a 500 — a suite that is red for a reason nobody
+     * reads is a suite that protects nothing. Reading the directory means a new
+     * migration that breaks a route breaks this file on the day it lands.
+     */
+    for (const file of readdirSync(migrations).filter((f) => /^\d{4}_.*\.sql$/.test(f)).sort()) {
       await pool.query(sql(resolve(migrations, file)));
     }
-    for (const id of [PLAYER, MINOR, FLOODER, ...VALIDATORS]) {
+    /*
+     * LOWERCASE_REGION was missing from this list, so the one test that
+     * actually reaches `complete_registration` with a lower-case state failed
+     * on a foreign key to auth.users rather than on anything it was testing.
+     * The RESTRICTED identities are refused in JavaScript before they touch the
+     * database and so genuinely do not need rows — but they cost nothing, and a
+     * fixture list that is complete cannot go subtly wrong again.
+     */
+    for (const id of [
+      PLAYER,
+      MINOR,
+      FLOODER,
+      LOWERCASE_REGION,
+      ...VALIDATORS,
+      ...Object.values(RESTRICTED),
+    ]) {
       await pool.query(`insert into auth.users (id) values ($1)`, [id]);
     }
 
@@ -288,7 +310,11 @@ describe('api', { skip: URL_ENV ? false : 'JUWA_TEST_DATABASE_URL not set' }, ()
         body: { username: `resident${region}`, dateOfBirth: '1990-01-01', country: 'US', region },
       });
       assert.equal(response.status, 403, `${region} was allowed to register`);
-      assert.equal(response.body['error'], 'restricted_region');
+      // `code`, not `error` — every error this API returns is {message, code}.
+      // Asserting a field that never existed made this half a test: the status
+      // was checked, the reason was not, and `undefined === undefined` would
+      // have passed just as happily if the refusal had been for the wrong one.
+      assert.equal(response.body['code'], 'restricted_region');
     }
   });
 

@@ -13,6 +13,7 @@
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import {
+  AgentsDb,
   ApiError,
   PostgresDb,
   act,
@@ -49,6 +50,7 @@ import {
   updateGameConfig,
 } from './admin.js';
 import { GameConfigCache, assertBetAllowed } from './game-config.js';
+import { agentRoutes, handleAdminAgents } from './agent-routes.js';
 import { ADMIN_CONSOLE_HTML } from './admin-console.js';
 import {
   WebhookVerificationError,
@@ -179,6 +181,7 @@ function toApiError(error: unknown): ApiError {
 async function handleAdmin(
   config: ServerConfig,
   gameConfigs: GameConfigCache,
+  agents: AgentsDb,
   req: IncomingMessage,
   res: ServerResponse,
   url: URL,
@@ -249,6 +252,19 @@ async function handleAdmin(
       return;
     }
 
+    // Agents. Returns undefined when the path is none of its business, so this
+    // falls through to the 404 below rather than swallowing unknown routes.
+    const agentResult = await handleAdminAgents(agents, {
+      method: req.method ?? 'GET',
+      pathname: url.pathname,
+      body: body as Record<string, unknown>,
+      operator,
+    });
+    if (agentResult !== undefined) {
+      send(res, 200, agentResult);
+      return;
+    }
+
     send(res, 404, { message: 'Not found', code: 'no_route' });
   } catch (error) {
     const api = toApiError(error);
@@ -262,9 +278,18 @@ export function createServer(config: ServerConfig) {
     bonus: new RateLimiter(LIMITS.bonus.capacity, LIMITS.bonus.refillPerSecond),
     read: new RateLimiter(LIMITS.read.capacity, LIMITS.read.refillPerSecond),
     register: new RateLimiter(LIMITS.register.capacity, LIMITS.register.refillPerSecond),
+    invite: new RateLimiter(LIMITS.invite.capacity, LIMITS.invite.refillPerSecond),
   };
 
   const gameConfigs = new GameConfigCache(config);
+  /**
+   * The agent data layer, over the same pool as everything else.
+   *
+   * Not a separate connection or a separate set of credentials: an allocation
+   * and a bet must be able to lock the same player's balance row and queue
+   * behind each other, which they can only do inside one database.
+   */
+  const agents = new AgentsDb({ query: (text, values) => config.query(text, values) });
 
   const sweeper = setInterval(() => {
     for (const limiter of Object.values(limiters)) limiter.sweep();
@@ -333,11 +358,12 @@ export function createServer(config: ServerConfig) {
     },
 
     'POST /register': async (ctx) => {
-      const { username, dateOfBirth, country, region } = ctx.body as {
+      const { username, dateOfBirth, country, region, inviteToken } = ctx.body as {
         username?: string;
         dateOfBirth?: string;
         country?: string;
         region?: string;
+        inviteToken?: string;
       };
       if (!username || !dateOfBirth) {
         throw new ApiError('username and dateOfBirth are required', 400, 'invalid_input');
@@ -363,6 +389,35 @@ export function createServer(config: ServerConfig) {
         }
       }
 
+      /**
+       * An agent's invitation, checked BEFORE the account is created.
+       *
+       * Order matters and the alternative is worse. Redeem first and a
+       * registration that then fails on a taken username burns a single-use
+       * link the player cannot get back. Register first and a bad link leaves
+       * them permanently unattached to the agent who recruited them, with no
+       * self-service way to fix it.
+       *
+       * So: look it up read-only, refuse early with a message they can act on,
+       * then register, then redeem. The remaining window is the few
+       * milliseconds between the check and the redemption, and if somebody else
+       * takes the link in that window the account still exists and the response
+       * says the link did not attach.
+       */
+      if (inviteToken !== undefined) {
+        if (typeof inviteToken !== 'string' || inviteToken.length > 128) {
+          throw new ApiError('inviteToken is not valid', 400, 'invalid_input');
+        }
+        if (!(await agents.inviteAgentName(inviteToken))) {
+          throw new ApiError(
+            'That invitation link is invalid, expired or already used. ' +
+              'Ask for a new one, or continue without it.',
+            403,
+            'invite_invalid',
+          );
+        }
+      }
+
       const { rows } = await config.query<{ username: string; balance: string; age_verified: boolean }>(
         `select * from complete_registration($1, $2, $3::date, $4, $5, $6)`,
         [
@@ -375,10 +430,25 @@ export function createServer(config: ServerConfig) {
         ],
       );
       const row = rows[0]!;
+
+      let agentName: string | null = null;
+      if (typeof inviteToken === 'string') {
+        try {
+          await agents.redeemInvite(inviteToken, ctx.player.playerId);
+          agentName = (await agents.agentForPlayer(ctx.player.playerId))?.displayName ?? null;
+        } catch (error) {
+          // The account exists and the welcome bonus has been paid. Losing the
+          // agent link is recoverable by an operator; throwing away a completed
+          // registration is not.
+          console.warn('[register] invite redemption failed after registration:', error);
+        }
+      }
+
       return {
         username: row.username,
         balance: Number(row.balance),
         ageVerified: row.age_verified,
+        agentName,
       };
     },
 
@@ -393,6 +463,21 @@ export function createServer(config: ServerConfig) {
       if (!row || !row['registered_at']) {
         return { registered: false };
       }
+
+      /**
+       * Role, resolved server-side on every load.
+       *
+       * The app uses `agent` to decide whether to show the agent dashboard, but
+       * that is presentation only — hiding a tab is not access control, and
+       * every `/agent/*` route resolves the caller's agent record again from
+       * the token before it will do anything. A player who forges this field in
+       * their own browser gets a dashboard that returns 404 to everything.
+       */
+      const [agent, belongsTo] = await Promise.all([
+        agents.agentStatus(ctx.player.playerId),
+        agents.agentForPlayer(ctx.player.playerId),
+      ]);
+
       return {
         registered: true,
         username: row['username'],
@@ -400,6 +485,11 @@ export function createServer(config: ServerConfig) {
         selfExcludedUntil: row['self_excluded_until'],
         dailyStreak: row['daily_streak'],
         hasPurchased: row['has_purchased'],
+        agent,
+        // Who they belong to, by NAME only. A player can see which agent funds
+        // them — support questions start there — and cannot change it: there is
+        // no route that lets them, only an operator reassignment.
+        agentName: belongsTo?.displayName ?? null,
       };
     },
 
@@ -560,12 +650,19 @@ export function createServer(config: ServerConfig) {
       }
       return rotateSeed(config.db, ctx.player, clientSeed);
     },
+
+    // Agent-facing routes. Every one of them scopes itself to the caller's own
+    // agent record, resolved from the verified token — see agent-routes.ts.
+    ...agentRoutes(agents),
   };
 
   const limiterFor = (route: string) => {
     if (route === 'POST /bet' || route === 'POST /act') return limiters.bet;
     if (route.startsWith('POST /bonus')) return limiters.bonus;
     if (route === 'POST /register') return limiters.register;
+    // Allocations move real balances and minting invitations creates rows. An
+    // agent doing either by hand cannot exceed two a second; a script can.
+    if (route.startsWith('POST /agent/')) return limiters.bet;
     return limiters.read;
   };
 
@@ -596,6 +693,43 @@ export function createServer(config: ServerConfig) {
     }
 
     /**
+     * "Who invited me?" — the one unauthenticated read in the API.
+     *
+     * It exists because the sign-up screen has to be able to say "invited by
+     * Sunrise Gaming" BEFORE the player has an account, and at that point there
+     * is no token to present. It returns a display name and nothing else: never
+     * the agent's id, never their player list, never whether a token merely
+     * exists — an unusable link and an unknown link give the identical answer.
+     *
+     * Limited by address, and answered before the JWT gate for the same reason
+     * the Stripe webhook is: requiring a session here would be requiring a
+     * session the caller cannot yet have.
+     */
+    if (url.pathname === '/invite' && req.method === 'GET') {
+      const address = req.socket.remoteAddress ?? 'unknown';
+      const limit = limiters.invite.check(`invite:${address}`);
+      if (!limit.allowed) {
+        send(res, 429, { message: 'Slow down', code: 'rate_limited' }, {
+          'Retry-After': String(limit.retryAfter),
+        });
+        return;
+      }
+      const token = url.searchParams.get('token');
+      if (!token || token.length > 128) {
+        send(res, 400, { message: 'token is required', code: 'invalid_input' });
+        return;
+      }
+      try {
+        const agentName = await agents.inviteAgentName(token);
+        send(res, 200, { valid: agentName !== null, agentName });
+      } catch (error) {
+        console.error('[GET /invite]', error);
+        send(res, 500, { message: 'Internal error', code: 'internal' });
+      }
+      return;
+    }
+
+    /**
      * The Stripe webhook.
      *
      * Handled before the JWT check because Stripe has no bearer token — the
@@ -621,7 +755,7 @@ export function createServer(config: ServerConfig) {
      * flag on a player row.
      */
     if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
-      await handleAdmin(config, gameConfigs, req, res, url);
+      await handleAdmin(config, gameConfigs, agents, req, res, url);
       return;
     }
 
