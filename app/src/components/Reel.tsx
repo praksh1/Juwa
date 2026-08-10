@@ -8,8 +8,9 @@ import {
   rampBlur,
   rampDistance,
   rampPosition,
+  symbolState,
 } from '@juwa/ui';
-import { SlotSymbol } from './SlotSymbol';
+import { AnimatedSymbol } from './AnimatedSymbol';
 import { usePrefersReducedMotion } from '../motion';
 import { spinNow } from '../sound';
 
@@ -392,12 +393,21 @@ export function Reel({
       >
         {strip.map((symbol, i) => {
           const resultRow = i - resultStart;
-          const onWinningLine =
-            phase === 'idle' && resultRow >= 0 && (litCells?.has(`${index},${resultRow}`) ?? false);
-          // Only dim once there is something to dim FOR. Outside a celebration
-          // every symbol is equal, and a permanently faded grid just looks
-          // broken.
-          const dimmed = celebrating && phase === 'idle' && resultRow >= 0 && !onWinningLine;
+          /*
+           * One answer, used by the border, the fade and the animation alike.
+           *
+           * These were three separate expressions over the same four inputs,
+           * which is three chances for them to disagree — and a cell whose
+           * border says it won while its symbol is being faded out is worse
+           * than either alone. `symbolState` is a pure function in @juwa/ui
+           * with the whole truth table asserted over it.
+           */
+          const state = symbolState({
+            reelIdle: phase === 'idle',
+            row: resultRow,
+            paying: litCells?.has(`${index},${resultRow}`) ?? false,
+            celebrating,
+          });
 
           return (
             <View
@@ -405,13 +415,24 @@ export function Reel({
               style={[
                 styles.cell,
                 { height: size },
-                onWinningLine && styles.cellWinning,
-                dimmed && styles.cellDimmed,
+                state === 'winning' && styles.cellWinning,
+                state === 'dimmed' && styles.cellDimmed,
               ]}
             >
-              <SlotSymbol
+              {/*
+                One fixed size, and the win expressed as a transform.
+
+                Swapping the size prop re-measured every image in the cell to
+                produce a single-frame jump. The drawn size is now constant and
+                `AnimatedSymbol` scales it, which is both smooth and free.
+              */}
+              <AnimatedSymbol
                 name={symbol}
-                size={onWinningLine ? size - 4 : size - 12}
+                size={size - 12}
+                state={state}
+                // Stable per cell, so a symbol keeps its breathing phase
+                // instead of restarting it on every parent render.
+                seed={index * 31 + i}
                 {...(family ? { family } : {})}
               />
             </View>
