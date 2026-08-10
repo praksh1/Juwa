@@ -20,7 +20,8 @@ import { fileURLToPath } from 'node:url';
 import { minor } from '@juwa/money';
 import { RngStream } from '../rng.js';
 import { SLOT_CATALOGUE, SLOT_MODELS, type SlotModel } from '../games/slot-catalogue.js';
-import { buildStrips, resolveSpin } from '../games/slot-math.js';
+import { buildStrips } from '../games/slot-math.js';
+import { resolveRound } from '../games/slot-features.js';
 
 const SPINS = Number(process.env['RTP_SPINS'] ?? 300_000);
 const WRITE = process.argv.includes('--write');
@@ -74,16 +75,18 @@ export function measureModel(model: SlotModel, spins: number): Measurement {
     // command on another machine returns the same number.
     const rng = new RngStream(`rtp-${model.id}`, 'measurement', i);
 
-    // `resolveSpin`, not `evaluateGrid`: a cascading model settles most of its
-    // return on the drops after the first grid, so evaluating a single grid
-    // would measure a fraction of what the machine actually pays and then the
-    // measured figure would be written into the paytable as fact.
-    const base = resolveSpin(strips, math, rng, 1);
-    let total = base.totalMultiplier;
-    const awarded = math.freeSpinsAwarded[base.scatterCount] ?? 0;
-    for (let n = 0; n < awarded; n++) {
-      total += resolveSpin(strips, math, rng, math.freeSpinMultiplier).totalMultiplier;
-    }
+    /*
+     * `resolveRound` — the SAME function `SlotsEngine.init` plays.
+     *
+     * This used to be its own copy of the free-spin loop, so the figure written
+     * into the catalogue was produced by code that merely resembled the game.
+     * Both were four lines long and agreed, right up until a model gained a
+     * feature that only one of them knew about — at which point the published
+     * return would have been the return of a machine nobody could play.
+     */
+    const round = resolveRound(strips, math, rng);
+    const total = round.totalMultiplier;
+    const awarded = round.freeSpinsAwarded + (round.feature ? 1 : 0);
 
     returned += Math.floor(stake * total);
     if (total > 0) hits++;

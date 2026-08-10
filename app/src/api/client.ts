@@ -23,7 +23,7 @@
 
 import { getAccessToken } from './auth';
 import { SLOT_GAMES } from './slot-games.generated';
-import { ROULETTE_GAME_ID, slotPaytable, type SlotModelInfo } from './games';
+import { ROULETTE_GAME_ID, slotPaytable, type SlotGame, type SlotModelInfo } from './games';
 import { demoAct, demoPlaceBet, isInstantGame } from './demo-instant';
 
 export type RoundStatus = 'awaiting-action' | 'settled';
@@ -71,6 +71,14 @@ export interface SpinResult {
    * has nothing to tumble.
    */
   cascades?: CascadeStep[];
+  /**
+   * Reels a wild grew to fill.
+   *
+   * Sent rather than inferred from a column of identical wilds, because a reel
+   * can spin three wilds honestly and animating that as an expansion would show
+   * a feature the player did not get.
+   */
+  expandedReels?: number[];
 }
 
 export interface CascadeStep {
@@ -81,10 +89,42 @@ export interface CascadeStep {
   totalMultiplier: number;
 }
 
+/** A cell holding a coin during a hold-and-spin round, and what it is worth. */
+export interface HeldCoin {
+  reel: number;
+  row: number;
+  value: number;
+}
+
+export interface HoldSpinStep {
+  gained: HeldCoin[];
+  respinsLeft: number;
+}
+
+/**
+ * The feature round, already decided.
+ *
+ * The server plays the round out and sends the whole thing; the client draws
+ * it a step at a time. That split is deliberate and is the same one free spins
+ * use — a client that decided any part of a bonus would be a client that could
+ * be persuaded to decide it differently.
+ */
+export type FeatureOutcome =
+  | {
+      kind: 'hold-spin';
+      seed: HeldCoin[];
+      steps: HoldSpinStep[];
+      full: boolean;
+      multiplier: number;
+    }
+  | { kind: 'wheel'; index: number; multiplier: number };
+
 export interface SlotsState {
   baseSpin: SpinResult;
   freeSpins: SpinResult[];
   freeSpinsAwarded: number;
+  /** Present only when this game has a feature round and it triggered. */
+  feature?: FeatureOutcome;
   totalMultiplier: number;
 }
 
@@ -221,6 +261,7 @@ function slotShape(gameId: string): {
   rows: number[];
   ways: boolean;
   cascades: boolean;
+  feature?: SlotGame['feature'];
 } {
   const game = SLOT_GAMES.find((g) => g.id === gameId);
   if (!game) return { reels: 5, rows: [3, 3, 3, 3, 3], ways: false, cascades: false };
@@ -229,7 +270,67 @@ function slotShape(gameId: string): {
     rows: [...game.rows],
     ways: game.pays === 'ways',
     cascades: game.cascades === true,
+    ...(game.feature ? { feature: game.feature } : {}),
   };
+}
+
+/**
+ * A feature round, faked for the demo.
+ *
+ * Worth building properly rather than skipping, for the same reason the
+ * cascades are: the demo build is the only one most of this work is ever looked
+ * at in, and a bonus that cannot be reached there is a bonus nobody sees. The
+ * frequencies are deliberately far higher than the real ones — the point is to
+ * exercise the path, not to model the game, and the honest figures are on the
+ * paytable.
+ */
+function demoFeature(
+  kind: NonNullable<SlotGame['feature']>,
+  rows: number[],
+): FeatureOutcome | undefined {
+  if (kind === 'wheel') {
+    const segments = [2, 5, 10, 3, 20, 5, 50, 3];
+    const index = Math.floor(Math.random() * segments.length);
+    return { kind: 'wheel', index, multiplier: segments[index] ?? 2 };
+  }
+  if (kind !== 'hold-spin') return undefined;
+
+  const values = [1, 2, 3, 5, 10, 25];
+  const draw = () => values[Math.min(values.length - 1, Math.floor(-Math.log(Math.random()) * 1.6))] ?? 1;
+  const cells: [number, number][] = [];
+  rows.forEach((height, reel) => {
+    for (let row = 0; row < height; row++) cells.push([reel, row]);
+  });
+
+  const held = new Map<string, HeldCoin>();
+  const seed: HeldCoin[] = [];
+  // Three to start, scattered, as a real trigger would leave them.
+  for (const [reel, row] of [...cells].sort(() => Math.random() - 0.5).slice(0, 3)) {
+    const coin = { reel, row, value: draw() };
+    held.set(`${reel},${row}`, coin);
+    seed.push(coin);
+  }
+
+  const steps: HoldSpinStep[] = [];
+  let respins = 3;
+  while (respins > 0 && held.size < cells.length && steps.length < 24) {
+    const gained: HeldCoin[] = [];
+    for (const [reel, row] of cells) {
+      if (held.has(`${reel},${row}`)) continue;
+      if (Math.random() >= 0.09) continue;
+      const coin = { reel, row, value: draw() };
+      held.set(`${reel},${row}`, coin);
+      gained.push(coin);
+    }
+    respins = gained.length > 0 ? 3 : respins - 1;
+    steps.push({ gained, respinsLeft: respins });
+  }
+
+  const full = held.size >= cells.length;
+  let multiplier = 0;
+  for (const coin of held.values()) multiplier += coin.value;
+  if (full) multiplier += 200;
+  return { kind: 'hold-spin', seed, steps, full, multiplier };
 }
 
 export class PlayApiError extends Error {
@@ -743,7 +844,7 @@ export class DemoPlayApi implements PlayApi {
     // three-reel classics and 3-4-5-4-3 diamonds as well as 5x3s, and a stub
     // that always dealt a flat rectangle would render columns and rows the
     // game does not have.
-    const { reels, rows, ways, cascades: tumbles } = slotShape(request.gameId);
+    const { reels, rows, ways, cascades: tumbles, feature: featureKind } = slotShape(request.gameId);
     const grid: string[][] = rows.map((height) =>
       Array.from({ length: height }, () => weightedSymbol()),
     );
@@ -803,7 +904,16 @@ export class DemoPlayApi implements PlayApi {
      * point of the demo is to exercise the path rather than to model the game.
      */
     const scatterCount = Math.random() < 1 / 12 ? 3 : 0;
-    const freeSpinsAwarded = scatterCount >= 3 ? 8 : 0;
+    /*
+     * A feature round REPLACES free spins, exactly as the engine's
+     * `resolveRound` does. Two bonuses from one trigger would be a demo that
+     * teaches the presentation a shape the real server never sends.
+     */
+    const roundFeature =
+      scatterCount >= 3 && featureKind && featureKind !== 'expanding-wild'
+        ? demoFeature(featureKind, rows)
+        : undefined;
+    const freeSpinsAwarded = scatterCount >= 3 && !roundFeature ? 8 : 0;
     const freeSpins = Array.from({ length: freeSpinsAwarded }, () => {
       const fsGrid: string[][] = rows.map((height) =>
         Array.from({ length: height }, () => weightedSymbol()),
@@ -826,6 +936,7 @@ export class DemoPlayApi implements PlayApi {
     const totalMultiplier =
       baseMultiplier +
       cascadeTotal +
+      (roundFeature?.multiplier ?? 0) +
       freeSpins.reduce((sum, spin) => sum + spin.totalMultiplier, 0);
     const payout = Math.floor(request.stake * totalMultiplier);
 
@@ -842,6 +953,7 @@ export class DemoPlayApi implements PlayApi {
       },
       freeSpins,
       freeSpinsAwarded,
+      ...(roundFeature ? { feature: roundFeature } : {}),
       totalMultiplier,
     };
 

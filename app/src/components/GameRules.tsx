@@ -133,6 +133,44 @@ function PaytableRows({ model, family }: { model: SlotModelInfo; family?: string
 
 // ------------------------------------------------------------------- intro
 
+/**
+ * The one sentence that says what this machine does.
+ *
+ * Reads the model rather than the theme, because the feature is a property of
+ * the maths — two games sharing a model genuinely do the same thing, and two
+ * games with the same art may not.
+ */
+function featureLine(
+  model: SlotModelInfo,
+  trigger: { count: number; spins: number } | null | undefined,
+): string {
+  const feature = model.feature;
+  if (feature?.kind === 'hold-spin') {
+    return (
+      `Land 3 SCATTER to lock them and hold & spin: ${feature.respins} respins, ` +
+      'reset every time another sticks. Fill the grid for the top prize.'
+    );
+  }
+  if (feature?.kind === 'wheel') {
+    const best = Math.max(...feature.segments);
+    return `Land 3 SCATTER to spin the bonus wheel, up to ${best}× your stake.`;
+  }
+  if (feature?.kind === 'expanding-wild') {
+    const reels = feature.reels.map((r) => r + 1).join(' and ');
+    return `A WILD on reel ${reels} expands to fill it, on any spin.`;
+  }
+  if (model.cascade) {
+    return (
+      'Winning symbols vanish and new ones fall in, paying ' +
+      `${model.cascade.ladder.join('×, ')}× as the chain runs on.`
+    );
+  }
+  if (trigger) {
+    return `Land ${trigger.count} SCATTER for ${trigger.spins} free spins at ${model.freeSpinMultiplier}× wins.`;
+  }
+  return `Three of a kind pays, on ${model.lines} line${model.lines === 1 ? '' : 's'}.`;
+}
+
 export function RulesIntro({
   game,
   model,
@@ -162,12 +200,16 @@ export function RulesIntro({
               {(game.rtp * 100).toFixed(2)}%
             </Txt>
 
-            {trigger ? (
-              <Txt variant="bodySmall" color={colors.text.secondary} style={styles.headline}>
-                Land {trigger.count} SCATTER for {trigger.spins} free spins at{' '}
-                {model.freeSpinMultiplier}× wins.
-              </Txt>
-            ) : null}
+            {/*
+              WHAT THIS MACHINE DOES, in one line, before the paytable.
+              Until this catalogue had features, every game's answer was the
+              same sentence about free spins — which is exactly why they all
+              felt alike, and why the differences now have to be said out loud
+              rather than left for a player to discover on a lucky spin.
+            */}
+            <Txt variant="bodySmall" color={colors.text.secondary} style={styles.headline}>
+              {featureLine(model, trigger)}
+            </Txt>
 
             <PaytableRows model={model} {...(game.art ? { family: game.art } : {})} />
           </ScrollView>

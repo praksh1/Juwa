@@ -24,10 +24,13 @@ import { CabinetGlass, ReelFrame, SlotConsole, SpinLever } from '../components/S
 import { cabinetFor, roomFor } from '../api/cabinets';
 import { hasTileArt } from '../components/GameArt';
 import { WinOverlay, useCabinetShake } from '../components/WinOverlay';
+import { HoldSpinRound } from '../components/HoldSpinRound';
+import { PrizeWheel } from '../components/PrizeWheel';
 import {
   PlayApiError,
   createPlayApi,
   type PlayApi,
+  type FeatureOutcome,
   type RoundResponse,
   type SlotsState,
   USE_DEMO_API,
@@ -297,8 +300,16 @@ export function SlotsScreen() {
    * charging players for excitement and not delivering it.
    */
   const [phase, setPhase] = useState<
-    'idle' | 'base' | 'fs-intro' | 'fs' | 'fs-total'
+    'idle' | 'base' | 'fs-intro' | 'fs' | 'fs-total' | 'feature'
   >('idle');
+  /**
+   * The feature round being played, if one is.
+   *
+   * Held rather than read off the round because the round is replaced by the
+   * next spin the moment one starts, and the presentation outlives the request
+   * that produced it.
+   */
+  const [feature, setFeature] = useState<FeatureOutcome | null>(null);
   const [freeSpinIndex, setFreeSpinIndex] = useState(0);
   const [freeSpinsTotal, setFreeSpinsTotal] = useState(0);
   const [runningWin, setRunningWin] = useState(0);
@@ -310,6 +321,14 @@ export function SlotsScreen() {
    * — zero — so the final celebration would be sized off nothing.
    */
   const runningWinRef = useRef(0);
+  /**
+   * Resolved by the feature component when its sequence has finished.
+   *
+   * A hold-and-spin round runs for as long as coins keep landing, so the spin
+   * sequence cannot wait a fixed number of milliseconds for it — it has to be
+   * told.
+   */
+  const featureDone = useRef<(() => void) | null>(null);
   // Increments per spin so each reel run is a distinct animation.
   const [reelRound, setReelRound] = useState(0);
   /**
@@ -604,6 +623,19 @@ export function SlotsScreen() {
    * below itself, and then — worse — as empty space inside its own cells. It
    * goes to the top glass, which is where a cabinet keeps its spare height.
    */
+  /**
+   * The wheel's face, from the model the server is actually using.
+   *
+   * Not a hardcoded list: the winning SEGMENT INDEX comes from the server, so a
+   * client drawing a different set of segments would stop the pointer on a
+   * number the player was not paid. Falls back to the shipped face only if the
+   * paytable has not loaded yet, and the wheel cannot be reached before it has.
+   */
+  const wheelSegments = useMemo(() => {
+    const spec = paytable?.feature;
+    return spec?.kind === 'wheel' ? spec.segments : [2, 5, 10, 3, 20, 5, 50, 3];
+  }, [paytable]);
+
   const glassHeight = useMemo(() => {
     if (compact) return 0;
     // Cannot come out negative: `cellHeight` is clamped against this same
@@ -825,6 +857,37 @@ export function SlotsScreen() {
       const baseWin = spinWin(state.baseSpin.totalMultiplier);
       celebrate(baseWin, bet);
 
+      /*
+       * The feature round, if this machine has one and it fired.
+       *
+       * Played BEFORE the free-spin branch and never alongside it: the engine's
+       * `resolveRound` awards one or the other, never both, and a presentation
+       * that could show both would be describing a round the server does not
+       * deal.
+       *
+       * Awaited on a promise the component resolves rather than on a fixed
+       * timeout, because a hold-and-spin round has no fixed length — that is
+       * the entire point of it.
+       */
+      if (state.feature) {
+        setFeature(state.feature);
+        sounds.bonus();
+        setPhase('feature');
+        await new Promise<void>((resolve) => {
+          featureDone.current = resolve;
+        });
+        if (superseded()) return;
+        setPhase('base');
+        setFeature(null);
+
+        const featureWin = spinWin(state.feature.multiplier);
+        runningWinRef.current += featureWin;
+        setRunningWin(runningWinRef.current);
+        celebrate(featureWin, bet);
+        await wait(1_200);
+        if (superseded()) return;
+      }
+
       if (state.freeSpinsAwarded > 0) {
         setFreeSpinsTotal(state.freeSpinsAwarded);
         sounds.bonus();
@@ -1040,6 +1103,35 @@ export function SlotsScreen() {
             {...(details?.art ? { family: details.art } : {})}
           />
         </View>
+
+        {/*
+          The feature round, over the reels it was won on.
+          Covers the bay rather than replacing the screen, so the machine is
+          still visibly the machine you triggered it from.
+        */}
+        {phase === 'feature' && feature?.kind === 'hold-spin' ? (
+          <HoldSpinRound
+            seed={feature.seed}
+            steps={feature.steps}
+            full={feature.full}
+            rows={ROWS}
+            stake={bet}
+            onDone={() => {
+              featureDone.current?.();
+              featureDone.current = null;
+            }}
+          />
+        ) : null}
+        {phase === 'feature' && feature?.kind === 'wheel' ? (
+          <PrizeWheel
+            segments={wheelSegments}
+            index={feature.index}
+            onDone={() => {
+              featureDone.current?.();
+              featureDone.current = null;
+            }}
+          />
+        ) : null}
 
         {/* Coins are thrown from the centre of the reels, above the symbols
             but below anything a player can press. */}

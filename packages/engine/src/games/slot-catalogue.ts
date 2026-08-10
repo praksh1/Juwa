@@ -223,6 +223,22 @@ const THREE_REEL_SYMBOLS: SymbolSpec[] = [
   { id: 'LEMON',  kind: 'normal', weights: [18, 18, 18], pays: { 3: 8, 4: 0, 5: 0 } },
 ];
 
+/**
+ * The three-reel set, plus a scatter.
+ *
+ * `classic-3x3` had no bonus of any kind — empty `scatterPays`, empty
+ * `freeSpinsAwarded` — because a classic three-reeler traditionally has none.
+ * It now has a prize wheel, and a wheel needs something to trigger it, so this
+ * set adds the one symbol the original lacks. Kept separate from
+ * THREE_REEL_SYMBOLS so `classic-3`, which still has no bonus, is not diluted
+ * by a symbol that can never do anything on a single-row grid.
+ */
+const THREE_REEL_BONUS_SYMBOLS: SymbolSpec[] = [
+  ...THREE_REEL_SYMBOLS,
+  { id: 'SCATTER', kind: 'scatter', weights: [2, 2, 2], pays: { 3: 0, 4: 0, 5: 0 } },
+];
+
+
 export type Volatility = 'low' | 'medium' | 'high' | 'very-high';
 
 export interface SlotModel {
@@ -248,7 +264,7 @@ export const SLOT_MODELS: Record<string, SlotModel> = {
   'classic-20': {
     id: 'classic-20',
     volatility: 'low',
-    rtp: 0.9604,
+    rtp: 0.9608,
     math: {
       reels: 5, rows: 3, paylines: LINES_20, symbols: CLASSIC_SYMBOLS,
       strips: CLASSIC_STRIPS,
@@ -265,7 +281,23 @@ export const SLOT_MODELS: Record<string, SlotModel> = {
     rtp: 0.9500,
     math: {
       reels: 5, rows: 3, paylines: LINES_10, symbols: fiveReelSymbols(1.15),
-      payoutScale: 0.7384,
+      payoutScale: 0.4770,
+      /*
+       * The centre reel goes wild.
+       *
+       * A BASE-GAME mechanic rather than a round, which is the point of putting
+       * it here: it fires every few spins instead of once an hour, so it changes
+       * what the machine feels like rather than what it occasionally does.
+       *
+       * ONE reel, and the number matters more than it looks. A fully wild reel
+       * turns every payline crossing it into a guaranteed match, so on reels
+       * 2-3-4 together it fired on roughly a third of all spins and took the
+       * model to a measured 202% return — it was not a feature, it was the
+       * game. On the centre reel alone it lands about one spin in seven, which
+       * is often enough to be the thing players talk about and rare enough to
+       * still be a gift.
+       */
+      feature: { kind: 'expanding-wild', reels: [2] },
       scatterPays: { 3: 4, 4: 18, 5: 90 },
       freeSpinsAwarded: { 3: 10, 4: 15, 5: 25 },
       freeSpinMultiplier: 3,
@@ -276,7 +308,7 @@ export const SLOT_MODELS: Record<string, SlotModel> = {
   'lines-25': {
     id: 'lines-25',
     volatility: 'medium',
-    rtp: 0.9592,
+    rtp: 0.9646,
     math: {
       reels: 5, rows: 3, paylines: LINES_25, symbols: fiveReelSymbols(1.05),
       payoutScale: 0.9048,
@@ -293,11 +325,32 @@ export const SLOT_MODELS: Record<string, SlotModel> = {
     rtp: 0.9500,
     math: {
       reels: 5, rows: 3, paylines: LINES_20, symbols: fiveReelSymbols(1.6),
-      payoutScale: 0.5985,
+      payoutScale: 0.7147,
       scatterPays: { 3: 5, 4: 25, 5: 150 },
+      // Kept for the scatter pay, but never awarded: the feature round below
+      // replaces free spins, and `resolveRound` will not run both.
       freeSpinsAwarded: { 3: 12, 4: 18, 5: 30 },
       freeSpinMultiplier: 5,
       stripLength: 36,
+      /*
+       * Hold and spin, on the model that already lives on long droughts and
+       * big spikes — the one shape of game this mechanic was made for.
+       *
+       * `coinChance` is the whole calibration. Too high and the grid fills
+       * every time, which makes the full-grid bonus meaningless; too low and
+       * the round is three respins of nothing. 0.055 across fourteen empty
+       * cells gives a little under one stick per respin at the start, so the
+       * round usually runs a while and rarely fills.
+       */
+      feature: {
+        kind: 'hold-spin',
+        trigger: 3,
+        respins: 3,
+        coinChance: 0.055,
+        values: [1, 2, 3, 5, 10, 25],
+        weights: [40, 26, 16, 10, 6, 2],
+        fullBonus: 200,
+      },
     },
   },
   /**
@@ -311,14 +364,28 @@ export const SLOT_MODELS: Record<string, SlotModel> = {
   'classic-3x3': {
     id: 'classic-3x3',
     volatility: 'medium',
-    rtp: 0.9480,
+    rtp: 0.9481,
     math: {
-      reels: 3, rows: 3, paylines: LINES_5, symbols: THREE_REEL_SYMBOLS,
-      payoutScale: 0.8107,
+      reels: 3, rows: 3, paylines: LINES_5, symbols: THREE_REEL_BONUS_SYMBOLS,
+      payoutScale: 0.8553,
       scatterPays: {},
       freeSpinsAwarded: {},
       freeSpinMultiplier: 1,
       stripLength: 26,
+      /*
+       * A prize wheel — the oldest bonus there is, and the right one for a
+       * machine with three reels and nothing to read.
+       *
+       * Also a promise being kept: Triple Bar's lobby tile has always shown a
+       * jewelled wheel, and players who tapped it got five reels of fruit and
+       * no wheel anywhere.
+       */
+      feature: {
+        kind: 'wheel',
+        trigger: 3,
+        segments: [2, 5, 10, 3, 20, 5, 50, 3],
+        weights: [26, 20, 10, 24, 5, 20, 1, 24],
+      },
     },
   },
   /**
@@ -331,7 +398,7 @@ export const SLOT_MODELS: Record<string, SlotModel> = {
   'ways-diamond': {
     id: 'ways-diamond',
     volatility: 'low',
-    rtp: 0.9578,
+    rtp: 0.9568,
     math: {
       reels: 5, rows: DIAMOND, paylines: 'ways', symbols: waysSymbols(),
       payoutScale: 0.1186,
@@ -351,7 +418,7 @@ export const SLOT_MODELS: Record<string, SlotModel> = {
   'tumble-20': {
     id: 'tumble-20',
     volatility: 'high',
-    rtp: 0.9437,
+    rtp: 0.9408,
     math: {
       reels: 5, rows: 3, paylines: LINES_20, symbols: tumbleSymbols(),
       payoutScale: 1.0991,
@@ -366,7 +433,7 @@ export const SLOT_MODELS: Record<string, SlotModel> = {
   'classic-3': {
     id: 'classic-3',
     volatility: 'high',
-    rtp: 0.9479,
+    rtp: 0.9430,
     math: {
       reels: 3, rows: 1, paylines: LINES_1, symbols: THREE_REEL_SYMBOLS,
       payoutScale: 0.7409,

@@ -44,6 +44,14 @@ export interface SlotGame {
   lines: number;
   /** Whether `lines` means paylines or ways. Decides how wins are explained. */
   pays: 'lines' | 'ways';
+  /**
+   * The bonus this game plays, if it has one.
+   *
+   * Every slot in the catalogue used to answer "what happens when something
+   * good happens" identically — three scatters, some free spins — and the
+   * three-reelers had no answer at all. This is the field that stops that.
+   */
+  feature?: 'expanding-wild' | 'hold-spin' | 'wheel';
   /** Winning symbols are removed and new ones drop into the gap. */
   cascades?: boolean;
   minBet: number;
@@ -93,6 +101,17 @@ export interface SlotModelInfo {
   freeSpinsAwarded: Record<string, number>;
   /** Every win during the bonus round is multiplied by this. */
   freeSpinMultiplier: number;
+  /**
+   * The bonus this model plays, in the detail the client needs to draw it.
+   *
+   * `segments` in particular is not decoration: the server sends the winning
+   * segment's INDEX, so the wheel on screen has to be the wheel the server
+   * picked from or the pointer stops on the wrong number.
+   */
+  feature?:
+    | { kind: 'wheel'; segments: number[] }
+    | { kind: 'hold-spin'; respins: number }
+    | { kind: 'expanding-wild'; reels: number[] };
 }
 
 export interface GameSummary {

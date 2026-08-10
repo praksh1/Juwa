@@ -127,7 +127,80 @@ export interface SlotMath {
     /** Hard stop, so a pathological strip cannot loop forever. */
     maxDrops: number;
   };
+  /**
+   * The mechanic that is not "spin and see".
+   *
+   * Every game in the catalogue had the same one — three scatters, some free
+   * spins, every win multiplied — or, for the three-reelers, none at all. The
+   * art differed, the maths differed, and yet the answer to "what happens when
+   * something good happens" was identical in twenty-three games. A player does
+   * not experience a slot as a paytable; they experience it as a handful of
+   * moments, and there was one moment.
+   *
+   * Declared on the MODEL rather than on the game, for the same reason `rtp`
+   * is: a feature changes what the machine pays, so it has to sit with the
+   * maths that gets measured. A feature on a game would be a payout the
+   * published return knows nothing about.
+   */
+  feature?: SlotFeature;
 }
+
+/**
+ * The bonus mechanics, as data.
+ *
+ * Deliberately a closed union rather than a callback: a feature has to be
+ * simulated millions of times by the RTP tool, replayed exactly when a round is
+ * audited, and serialised to a client that draws it. All three want a value,
+ * not a function.
+ */
+export type SlotFeature =
+  /**
+   * A wild landing on one of these reels grows to fill it.
+   *
+   * A base-game mechanic rather than a round: it fires on ordinary spins, which
+   * is the point — it changes how the machine feels every few spins instead of
+   * once an hour. Kept off reel one so it cannot manufacture a five-of-a-kind
+   * on its own.
+   */
+  | { kind: 'expanding-wild'; reels: readonly number[] }
+  /**
+   * Hold and spin. The one modern mechanic players ask for by name.
+   *
+   * The triggering symbols lock in place and everything else respins. Three
+   * respins, reset to three every time another one sticks, so the round ends
+   * only after three consecutive nothings — which is why it feels like it is
+   * being fought for rather than watched. Each locked cell carries a cash
+   * value; filling the whole grid pays a bonus on top.
+   */
+  | {
+      kind: 'hold-spin';
+      /** Scatters on the triggering grid needed to start the round. */
+      trigger: number;
+      /** Respins granted, and restored whenever a new coin sticks. */
+      respins: number;
+      /** Chance an empty cell catches a coin on one respin. */
+      coinChance: number;
+      /** Coin values as stake multiples, with how often each is drawn. */
+      values: readonly number[];
+      weights: readonly number[];
+      /** Extra stake multiple for filling every cell on the grid. */
+      fullBonus: number;
+    }
+  /**
+   * A prize wheel. The oldest bonus there is, and still the clearest: one
+   * spin, one number, no rules to read.
+   *
+   * Given to the three-reel machines, which until now had no bonus of any kind
+   * — and to Triple Bar in particular, whose own lobby tile has been promising
+   * a jewelled wheel to players who then found five reels of fruit.
+   */
+  | {
+      kind: 'wheel';
+      trigger: number;
+      /** Stake multiple per segment, in wheel order, with draw weights. */
+      segments: readonly number[];
+      weights: readonly number[];
+    };
 
 /** Rows per reel, whether the model declared one number or a shape. */
 export function reelHeights(math: SlotMath): number[] {
@@ -205,6 +278,15 @@ export interface SpinResult {
   totalMultiplier: number;
   /** Empty unless the model tumbles. */
   cascades: CascadeStep[];
+  /**
+   * Reels a wild grew to fill, if the model expands them.
+   *
+   * Reported rather than left for the client to infer from a column of
+   * identical wilds, because those two things are not the same: a reel can spin
+   * three wilds honestly, and animating that as an expansion would show the
+   * player a feature that did not happen.
+   */
+  expandedReels: number[];
 }
 
 /**
@@ -431,7 +513,53 @@ export function evaluateGrid(
    */
   const totalMultiplier = lineMultiplierSum / payDivisor(math) + scatterMultiplier;
 
-  return { grid, lineWins, scatterCount, scatterMultiplier, totalMultiplier, cascades: [] };
+  return {
+    grid,
+    lineWins,
+    scatterCount,
+    scatterMultiplier,
+    totalMultiplier,
+    cascades: [],
+    expandedReels: [],
+  };
+}
+
+/**
+ * Grow any wild on an expanding reel to fill that reel.
+ *
+ * Done to the GRID before evaluation rather than inside the line reader, so
+ * that the grid the player is shown and the grid that was paid are the same
+ * object. A machine that pays for symbols the screen is not showing is the
+ * single worst thing a slot can appear to do, and the cheapest way to build one
+ * is to evaluate something other than what was drawn.
+ *
+ * Returns the original array untouched when nothing expands, so the common case
+ * allocates nothing.
+ */
+export function expandWilds(
+  grid: SlotSymbol[][],
+  math: SlotMath,
+): { grid: SlotSymbol[][]; expanded: number[] } {
+  if (math.feature?.kind !== 'expanding-wild') return { grid, expanded: [] };
+  const wild = math.symbols.find((s) => s.kind === 'wild')?.id;
+  if (!wild) return { grid, expanded: [] };
+
+  const expanded: number[] = [];
+  for (const [reel, symbols] of grid.entries()) {
+    if (!math.feature.reels.includes(reel)) continue;
+    // A reel already full of wilds spun that way and has not expanded. Saying
+    // it did would animate a feature that did not fire.
+    if (!symbols.includes(wild) || symbols.every((s) => s === wild)) continue;
+    expanded.push(reel);
+  }
+  if (expanded.length === 0) return { grid, expanded };
+
+  return {
+    grid: grid.map((symbols, reel) =>
+      expanded.includes(reel) ? symbols.map(() => wild) : symbols,
+    ),
+    expanded,
+  };
 }
 
 /**
@@ -483,7 +611,10 @@ export function resolveSpin(
   rng: RngStream,
   winMultiplier: number,
 ): SpinResult {
-  const first = evaluateGrid(spinGrid(strips, math, rng), math, winMultiplier);
+  // Wilds grow BEFORE anything is read, so the grid that is paid is the grid
+  // the player is shown — see `expandWilds`.
+  const spun = expandWilds(spinGrid(strips, math, rng), math);
+  const first = { ...evaluateGrid(spun.grid, math, winMultiplier), expandedReels: spun.expanded };
   if (!math.cascade) return first;
 
   const cascades: CascadeStep[] = [];

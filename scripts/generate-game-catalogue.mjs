@@ -54,6 +54,9 @@ const entries = SLOT_CATALOGUE.map((game) => {
     lines: wayCount(model.math),
     pays: model.math.paylines === 'ways' ? 'ways' : 'lines',
     ...(model.math.cascade ? { cascades: true } : {}),
+    // Which bonus this game plays. The lobby uses it to say so on the tile and
+    // the game screen uses it to know which round to draw.
+    ...(model.math.feature ? { feature: model.math.feature.kind } : {}),
     minBet: game.limits.min,
     maxBet: game.limits.max,
     theme: game.theme,
@@ -105,6 +108,27 @@ for (const [id, model] of Object.entries(SLOT_MODELS)) {
     ),
     freeSpinsAwarded: { ...model.math.freeSpinsAwarded },
     freeSpinMultiplier: model.math.freeSpinMultiplier,
+    /*
+     * The feature, in the detail the CLIENT needs to draw it.
+     *
+     * The wheel's face has to be exactly the model's: the server sends a
+     * winning segment INDEX, so a client drawing a different set of segments
+     * would stop the pointer on a number the player was not paid. Scaled like
+     * every other figure here, for the same reason.
+     */
+    ...(model.math.feature
+      ? {
+          feature:
+            model.math.feature.kind === 'wheel'
+              ? {
+                  kind: 'wheel',
+                  segments: model.math.feature.segments.map((v) => round(v * scale)),
+                }
+              : model.math.feature.kind === 'hold-spin'
+                ? { kind: 'hold-spin', respins: model.math.feature.respins }
+                : { kind: 'expanding-wild', reels: [...model.math.feature.reels] },
+        }
+      : {}),
   };
 }
 

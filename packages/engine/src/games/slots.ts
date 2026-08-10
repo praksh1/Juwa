@@ -32,11 +32,11 @@ import {
 } from './types.js';
 import {
   buildStrips,
-  resolveSpin,
   type SlotMath,
   type SlotSymbol,
   type SpinResult,
 } from './slot-math.js';
+import { resolveRound, type FeatureOutcome } from './slot-features.js';
 import { SLOT_CATALOGUE, slotModel, type SlotDefinition } from './slot-catalogue.js';
 
 export type { SlotSymbol, SpinResult, LineWin } from './slot-math.js';
@@ -45,6 +45,13 @@ export interface SlotsPublic {
   baseSpin: SpinResult;
   freeSpins: SpinResult[];
   freeSpinsAwarded: number;
+  /**
+   * The feature round, if this model has one and it triggered.
+   *
+   * Resolved here with the rest of the round rather than handed to the client
+   * to play out. The client draws it; it does not decide it.
+   */
+  feature?: FeatureOutcome;
   totalMultiplier: number;
 }
 
@@ -85,25 +92,26 @@ export class SlotsEngine implements GameEngine<SlotsPublic, null, SlotsConfig> {
   init(stake: Minor, rng: RngStream): RoundState<SlotsPublic, null> {
     assertWithinLimits(stake, this.limits);
 
-    const base = resolveSpin(this.config.strips, this.math, rng, 1);
-    let totalMultiplier = base.totalMultiplier;
-
-    const freeSpinsAwarded = this.math.freeSpinsAwarded[base.scatterCount] ?? 0;
-    const freeSpins: SpinResult[] = [];
-    for (let i = 0; i < freeSpinsAwarded; i++) {
-      const spin = resolveSpin(
-        this.config.strips,
-        this.math,
-        rng,
-        this.math.freeSpinMultiplier,
-      );
-      freeSpins.push(spin);
-      totalMultiplier += spin.totalMultiplier;
-    }
+    /*
+     * The WHOLE round, from one function.
+     *
+     * This loop used to live here and a second copy of it lived in the RTP
+     * tool, which is to say the game that was played and the number that was
+     * published were two different pieces of code that happened to agree. See
+     * `resolveRound`.
+     */
+    const round = resolveRound(this.config.strips, this.math, rng);
+    const { base, freeSpins, freeSpinsAwarded, feature, totalMultiplier } = round;
 
     return {
       status: 'settled',
-      public: { baseSpin: base, freeSpins, freeSpinsAwarded, totalMultiplier },
+      public: {
+        baseSpin: base,
+        freeSpins,
+        freeSpinsAwarded,
+        ...(feature ? { feature } : {}),
+        totalMultiplier,
+      },
       private: null,
       availableActions: [],
       settlement: { stake, payout: mul(stake, totalMultiplier), multiplier: totalMultiplier },
