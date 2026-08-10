@@ -160,6 +160,17 @@ function toApiError(error: unknown): ApiError {
       return new ApiError(message, 403, 'age_gate');
     }
     if (/self-excluded/i.test(message)) return new ApiError(message, 403, 'self_excluded');
+    /*
+     * The player's own daily cap, raised by `assert_can_play`.
+     *
+     * Without this it fell through to a 500 — a limit working exactly as
+     * designed, presented to the player as "Internal error". The one moment
+     * this feature exists for is the moment it says no, so that moment has to
+     * read as a decision they made rather than as a broken app.
+     */
+    if (/Daily limit reached/i.test(message)) {
+      return new ApiError(message, 403, 'daily_limit_reached');
+    }
     if (/Insufficient funds/i.test(message)) {
       return new ApiError(message, 402, 'insufficient_funds');
     }
@@ -466,7 +477,9 @@ export function createServer(config: ServerConfig) {
     'GET /me': async (ctx) => {
       const { rows } = await config.query<Record<string, unknown>>(
         `select username, registered_at, age_verified_at, self_excluded_until,
-                daily_streak, last_bonus_date, has_purchased, must_set_password
+                daily_streak, last_bonus_date, has_purchased, must_set_password,
+                daily_wager_limit, pending_wager_limit, pending_limit_at,
+                session_limit_minutes
            from profiles where id = $1`,
         [ctx.player.playerId],
       );
@@ -502,6 +515,24 @@ export function createServer(config: ServerConfig) {
          * the agent's copy of the password from outliving the handover.
          */
         mustSetPassword: row['must_set_password'] === true,
+        /**
+         * The responsible-gaming settings actually in force.
+         *
+         * Sent so Profile can show the real value rather than the word "Not
+         * set" it displayed regardless of what a player had chosen. `pending`
+         * is the loosening waiting out its 24 hours — showing it is the whole
+         * reason the delay is tolerable rather than baffling.
+         */
+        limits: {
+          dailyWagerLimit:
+            row['daily_wager_limit'] == null ? null : Number(row['daily_wager_limit']),
+          pendingWagerLimit:
+            row['pending_wager_limit'] == null ? null : Number(row['pending_wager_limit']),
+          pendingAt: row['pending_limit_at'],
+          sessionReminderMinutes:
+            row['session_limit_minutes'] == null ? null : Number(row['session_limit_minutes']),
+          selfExcludedUntil: row['self_excluded_until'],
+        },
         agent,
         // Who they belong to, by NAME only. A player can see which agent funds
         // them — support questions start there — and cannot change it: there is
@@ -511,7 +542,6 @@ export function createServer(config: ServerConfig) {
     },
 
     'POST /bet': async (ctx) => {
-      await assertCanPlay(config, ctx.player.playerId);
       const { gameId, stake, action, idempotencyKey } = ctx.body as {
         gameId?: string;
         stake?: number;
@@ -521,6 +551,10 @@ export function createServer(config: ServerConfig) {
       if (typeof gameId !== 'string' || typeof stake !== 'number') {
         throw new ApiError('gameId and stake are required', 400, 'invalid_input');
       }
+
+      // The player's own limits, checked with the stake in hand so a daily cap
+      // can refuse the spin that would cross it.
+      await assertCanPlay(config, ctx.player.playerId, ctx.utcOffset, stake);
 
       // Operator configuration, read per bet. A round already in flight settles
       // on the terms it started on; only NEW spins see a change.
@@ -539,7 +573,9 @@ export function createServer(config: ServerConfig) {
     },
 
     'POST /act': async (ctx) => {
-      await assertCanPlay(config, ctx.player.playerId);
+      // No stake: continuing a round already paid for cannot push a player past
+      // a daily cap, and refusing mid-hand would strand their money in it.
+      await assertCanPlay(config, ctx.player.playerId, ctx.utcOffset);
       const { roundId, action, idempotencyKey } = ctx.body as {
         roundId?: string;
         action?: { type: string };
@@ -556,12 +592,12 @@ export function createServer(config: ServerConfig) {
     },
 
     'POST /bonus/daily': async (ctx) => {
-      await assertCanPlay(config, ctx.player.playerId);
+      await assertCanPlay(config, ctx.player.playerId, ctx.utcOffset);
       return claimDailyBonus(config.db, ctx.player, new Date(), ctx.utcOffset);
     },
 
     'POST /bonus/topup': async (ctx) => {
-      await assertCanPlay(config, ctx.player.playerId);
+      await assertCanPlay(config, ctx.player.playerId, ctx.utcOffset);
       const grantDate = localDateString(new Date(), ctx.utcOffset);
       const { rows } = await config.query<{ claims_today: number; minutes_since_last: string | null }>(
         `select * from top_up_status($1, $2::date)`,
@@ -594,7 +630,7 @@ export function createServer(config: ServerConfig) {
       if (!config.stripe) {
         throw new ApiError('The store is not configured', 503, 'store_unavailable');
       }
-      await assertCanPlay(config, ctx.player.playerId);
+      await assertCanPlay(config, ctx.player.playerId, ctx.utcOffset);
 
       const { packId } = ctx.body as { packId?: string };
       if (typeof packId !== 'string') {
@@ -657,6 +693,79 @@ export function createServer(config: ServerConfig) {
         coins: Number(row['coins_granted']),
         priceUsd: Number(row['price_usd']),
         packId: row['pack_id'],
+      };
+    },
+
+    /**
+     * The player changing their own responsible-gaming settings.
+     *
+     * All the asymmetries live in `set_player_limits`: tightening is immediate,
+     * loosening waits a day, and a break only ever extends. None of that is
+     * enforced here, because a control a client could talk its way around is
+     * not a control — this route validates shapes and passes them on.
+     */
+    'POST /me/limits': async (ctx) => {
+      const { dailyWagerLimit, sessionReminderMinutes, breakDays } = ctx.body as {
+        dailyWagerLimit?: number | null;
+        sessionReminderMinutes?: number | null;
+        breakDays?: number;
+      };
+
+      let limit: number | null = null;
+      let clear = false;
+      if (dailyWagerLimit === null) {
+        clear = true;
+      } else if (dailyWagerLimit !== undefined) {
+        if (!Number.isInteger(dailyWagerLimit) || dailyWagerLimit <= 0) {
+          throw new ApiError(
+            'A daily limit must be a positive whole number of coins',
+            400,
+            'invalid_input',
+          );
+        }
+        limit = dailyWagerLimit;
+      }
+
+      if (
+        sessionReminderMinutes !== undefined &&
+        sessionReminderMinutes !== null &&
+        (!Number.isInteger(sessionReminderMinutes) ||
+          sessionReminderMinutes < 0 ||
+          sessionReminderMinutes > 24 * 60)
+      ) {
+        throw new ApiError('Remind me every: 0 to 1440 minutes', 400, 'invalid_input');
+      }
+
+      // A break is expressed in DAYS, so a client cannot send a timestamp in
+      // the past and clear an exclusion by arithmetic.
+      let excludeUntil: string | null = null;
+      if (breakDays !== undefined) {
+        if (!Number.isInteger(breakDays) || breakDays < 1 || breakDays > 3650) {
+          throw new ApiError('A break must be between 1 and 3650 days', 400, 'invalid_input');
+        }
+        excludeUntil = new Date(Date.now() + breakDays * 86_400_000).toISOString();
+      }
+
+      const { rows } = await config.query<Record<string, unknown>>(
+        `select * from set_player_limits($1, $2, $3, $4, $5::timestamptz)`,
+        [
+          ctx.player.playerId,
+          limit,
+          clear,
+          sessionReminderMinutes === undefined ? null : sessionReminderMinutes,
+          excludeUntil,
+        ],
+      );
+      const row = rows[0]!;
+      return {
+        dailyWagerLimit:
+          row['daily_wager_limit'] == null ? null : Number(row['daily_wager_limit']),
+        pendingWagerLimit:
+          row['pending_wager_limit'] == null ? null : Number(row['pending_wager_limit']),
+        pendingAt: row['pending_limit_at'],
+        sessionReminderMinutes:
+          row['session_limit_minutes'] == null ? null : Number(row['session_limit_minutes']),
+        selfExcludedUntil: row['self_excluded_until'],
       };
     },
 
@@ -821,8 +930,20 @@ export function createServer(config: ServerConfig) {
   return { server, limiters, close: () => clearInterval(sweeper) };
 }
 
-async function assertCanPlay(config: ServerConfig, playerId: string): Promise<void> {
-  await config.query(`select assert_can_play($1)`, [playerId]);
+/**
+ * Everything that can stop a bet, asked before the bet.
+ *
+ * The stake is passed so a daily wager cap can refuse the bet that would cross
+ * it — checking only what is already staked would let the last bet of the day
+ * be any size at all. The offset is passed so "today" is the player's day.
+ */
+async function assertCanPlay(
+  config: ServerConfig,
+  playerId: string,
+  utcOffset = 0,
+  stake = 0,
+): Promise<void> {
+  await config.query(`select assert_can_play($1, $2, $3)`, [playerId, utcOffset, stake]);
 }
 
 /**

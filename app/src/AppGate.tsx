@@ -8,6 +8,7 @@ import { SetPasswordScreen } from './screens/SetPasswordScreen';
 import { onAuthChange, type Session } from './api/auth';
 import { PlayApiError, createPlayApi } from './api/client';
 import { PurchaseWatcher } from './components/PurchaseWatcher';
+import { SessionReminder } from './components/SessionReminder';
 import { notifyBalanceChanged } from './api/usePlayer';
 import { captureInviteFromUrl, clearInvite, pendingInvite } from './api/invite';
 
@@ -148,6 +149,9 @@ export function AppGate({ children }: { children: React.ReactNode }) {
       {/* Above the tabs so a returning payment is confirmed wherever the
           player lands — Stripe sends them to the site root, not the store. */}
       <PurchaseWatcher onGranted={notifyBalanceChanged} />
+      {/* Mounted once, here, so the clock spans every screen rather than
+          restarting each time the player moves between the lobby and a game. */}
+      <SessionReminder />
     </View>
   );
 }

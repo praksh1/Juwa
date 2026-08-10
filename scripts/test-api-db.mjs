@@ -27,6 +27,7 @@ const databases = {
   JUWA_AGENT_TEST_DATABASE_URL: 'juwa_test_agents',
   JUWA_STRIPE_TEST_DATABASE_URL: 'juwa_test_stripe',
   JUWA_BOOTSTRAP_TEST_DATABASE_URL: 'juwa_test_bootstrap',
+  JUWA_LIMITS_TEST_DATABASE_URL: 'juwa_test_limits',
 };
 
 const url = (name) => {

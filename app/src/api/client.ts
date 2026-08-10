@@ -181,6 +181,18 @@ export interface Profile {
    * of the account, so it is not a nag that can be dismissed.
    */
   mustSetPassword?: boolean;
+  /** The responsible-gaming settings actually in force. */
+  limits?: PlayerLimits;
+}
+
+export interface PlayerLimits {
+  /** Coins this player may stake per day, or null for no cap. */
+  dailyWagerLimit: number | null;
+  /** A loosening waiting out its 24 hours, if any. */
+  pendingWagerLimit: number | null;
+  pendingAt: string | null;
+  sessionReminderMinutes: number | null;
+  selfExcludedUntil: string | null;
 }
 
 export interface AgentSummary {
@@ -310,6 +322,32 @@ export interface PlayApi {
   applyToBeAgent(displayName: string, notes?: string): Promise<{ status: string }>;
   /** Record that the player has replaced their temporary password. */
   confirmPasswordSet(): Promise<{ ok: boolean }>;
+
+  /* ------------------------------------------------- responsible gaming */
+
+  /**
+   * Change the player's own limits.
+   *
+   * Send only what is changing. `dailyWagerLimit: null` clears the cap;
+   * omitting it leaves it alone. Tightening applies at once, loosening waits
+   * 24 hours, and a break only ever extends — all decided by the server.
+   */
+  setLimits(changes: {
+    dailyWagerLimit?: number | null;
+    sessionReminderMinutes?: number | null;
+    breakDays?: number;
+  }): Promise<PlayerLimits>;
+  /**
+   * A fresh seed pair, for provable fairness.
+   *
+   * `revealed` is the OLD server seed, now safe to publish because no future
+   * round can use it — that is what makes past rounds checkable. `next` carries
+   * the hash of the new one, committing us to it before anything is played.
+   */
+  rotateSeed(clientSeed?: string): Promise<{
+    revealed: { serverSeed: string; serverSeedHash: string; clientSeed: string } | null;
+    next: { serverSeedHash: string };
+  }>;
 }
 
 /** Demo mode plays any slot; the ids come from the same generated list the lobby uses. */
@@ -703,6 +741,21 @@ export class HttpPlayApi implements PlayApi {
   confirmPasswordSet() {
     return this.request<{ ok: boolean }>('/agent/password-set', {});
   }
+
+  setLimits(changes: {
+    dailyWagerLimit?: number | null;
+    sessionReminderMinutes?: number | null;
+    breakDays?: number;
+  }) {
+    return this.request<PlayerLimits>('/me/limits', changes);
+  }
+
+  rotateSeed(clientSeed?: string) {
+    return this.request<{
+      revealed: { serverSeed: string; serverSeedHash: string; clientSeed: string } | null;
+      next: { serverSeedHash: string };
+    }>('/seed/rotate', { ...(clientSeed ? { clientSeed } : {}) });
+  }
 }
 
 // ------------------------------------------------------------------- demo
@@ -873,6 +926,7 @@ export class DemoPlayApi implements PlayApi {
       agent: null,
       agentName: null,
       mustSetPassword: false,
+      limits: { ...this.limits },
     };
   }
 
@@ -1224,6 +1278,45 @@ export class DemoPlayApi implements PlayApi {
   }
   async confirmPasswordSet(): Promise<never> {
     this.noAgentInDemo();
+  }
+
+  /** The demo keeps limits in memory, so the screen can be worked on offline. */
+  private limits: PlayerLimits = {
+    dailyWagerLimit: null,
+    pendingWagerLimit: null,
+    pendingAt: null,
+    sessionReminderMinutes: null,
+    selfExcludedUntil: null,
+  };
+
+  async setLimits(changes: {
+    dailyWagerLimit?: number | null;
+    sessionReminderMinutes?: number | null;
+    breakDays?: number;
+  }) {
+    if (changes.dailyWagerLimit !== undefined) {
+      this.limits.dailyWagerLimit = changes.dailyWagerLimit;
+    }
+    if (changes.sessionReminderMinutes !== undefined) {
+      this.limits.sessionReminderMinutes = changes.sessionReminderMinutes || null;
+    }
+    if (changes.breakDays !== undefined) {
+      this.limits.selfExcludedUntil = new Date(
+        Date.now() + changes.breakDays * 86_400_000,
+      ).toISOString();
+    }
+    return { ...this.limits };
+  }
+
+  async rotateSeed(clientSeed?: string) {
+    return {
+      revealed: {
+        serverSeed: 'demo-mode-no-fairness-proof',
+        serverSeedHash: 'demo-mode-no-fairness-proof',
+        clientSeed: clientSeed ?? Math.random().toString(36).slice(2, 14),
+      },
+      next: { serverSeedHash: 'demo-mode-no-fairness-proof' },
+    };
   }
 }
 
