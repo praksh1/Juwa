@@ -146,6 +146,15 @@ interface WinLinesProps {
   width: number;
   /** Symbol height in points. Must be whatever the reels are using. */
   cellHeight?: number;
+  /**
+   * Rows per reel.
+   *
+   * Needed because a ragged machine centres its reels on each other: row 0 of a
+   * three-tall reel is not at the same height as row 0 of a five-tall one, and
+   * an overlay that assumes it is draws every line on a diamond game through
+   * empty space above the symbols it is meant to be connecting.
+   */
+  rows?: readonly number[];
 }
 
 /**
@@ -155,7 +164,14 @@ interface WinLinesProps {
  * wide soft stroke under a bright thin one — the standard way to make a line
  * read as lit rather than drawn, without a real glow filter.
  */
-export function WinLines({ wins, reels, phase, width, cellHeight = CELL_HEIGHT }: WinLinesProps) {
+export function WinLines({
+  wins,
+  reels,
+  phase,
+  width,
+  cellHeight = CELL_HEIGHT,
+  rows,
+}: WinLinesProps) {
   const fade = useRef(new Animated.Value(0)).current;
   const shown = phase.kind === 'idle' ? [] : phase.kind === 'total' ? wins : [wins[phase.index]!];
 
@@ -175,7 +191,14 @@ export function WinLines({ wins, reels, phase, width, cellHeight = CELL_HEIGHT }
 
   const reelWidth = (width - REEL_GAP * (reels - 1)) / reels;
   const centreX = (reel: number) => reel * (reelWidth + REEL_GAP) + reelWidth / 2;
-  const centreY = (row: number) => row * cellHeight + cellHeight / 2;
+  // Reels are centred on each other, so a short reel starts half the height
+  // difference down the bay. On a rectangular machine every offset is zero.
+  const tallest = rows ? Math.max(...rows) : 0;
+  const centreY = (reel: number, row: number) => {
+    const height = rows?.[reel] ?? tallest;
+    const top = ((tallest - height) * cellHeight) / 2;
+    return top + row * cellHeight + cellHeight / 2;
+  };
 
   // During the walk the single line is the subject and gets the bright
   // treatment. In the total every line is on screen at once, so each is drawn
@@ -192,44 +215,78 @@ export function WinLines({ wins, reels, phase, width, cellHeight = CELL_HEIGHT }
         {shown.map((win) => {
           const cells = win.cells ?? [];
           if (cells.length < 2) return null;
-          const points = cells.map(([reel, row]) => `${centreX(reel)},${centreY(row)}`).join(' ');
+          /*
+           * A ways win is not a line and must not be drawn as one.
+           *
+           * "All ways pay" counts a symbol wherever it appears on each reel, so
+           * a single win can hold three cells on reel one and two on reel two.
+           * Joining those in order produces a scribble that doubles back on
+           * itself and implies an order the mechanic does not have. What it
+           * actually means is "these cells, all of them", so those get nodes
+           * and a glow and no connecting line at all.
+           */
+          const perReel = new Set(cells.map(([reel]) => reel));
+          const isLine = perReel.size === cells.length;
+          const points = cells
+            .map(([reel, row]) => `${centreX(reel)},${centreY(reel, row)}`)
+            .join(' ');
           return (
             <React.Fragment key={win.line}>
-              {/* The soft under-stroke that reads as glow. */}
-              <Polyline
-                points={points}
-                fill="none"
-                stroke={colors.gold.default}
-                strokeWidth={single ? 14 : 9}
-                strokeOpacity={0.28}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <Polyline
-                points={points}
-                fill="none"
-                stroke={colors.feedback.winBright}
-                strokeWidth={single ? 3.5 : 2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              {/* A node on each paying cell. Without these a straight line
-                  through five cells gives no clue how many of them paid. */}
+              {isLine ? (
+                <>
+                  {/* The soft under-stroke that reads as glow. */}
+                  <Polyline
+                    points={points}
+                    fill="none"
+                    stroke={colors.gold.default}
+                    strokeWidth={single ? 14 : 9}
+                    strokeOpacity={0.28}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <Polyline
+                    points={points}
+                    fill="none"
+                    stroke={colors.feedback.winBright}
+                    strokeWidth={single ? 3.5 : 2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </>
+              ) : null}
+              {/* A node on each paying cell. On a line win, without these a
+                  straight line through five cells gives no clue how many of
+                  them paid. On a ways win they are the whole marking. */}
               {cells.map(([reel, row]) => (
-                <Circle
-                  key={`${reel}-${row}`}
-                  cx={centreX(reel)}
-                  cy={centreY(row)}
-                  r={single ? 4.5 : 3}
-                  fill={colors.feedback.winBright}
-                />
+                <React.Fragment key={`${reel}-${row}`}>
+                  {isLine ? null : (
+                    <Circle
+                      cx={centreX(reel)}
+                      cy={centreY(reel, row)}
+                      r={single ? 15 : 11}
+                      fill={colors.gold.default}
+                      fillOpacity={0.22}
+                    />
+                  )}
+                  <Circle
+                    cx={centreX(reel)}
+                    cy={centreY(reel, row)}
+                    r={single ? 4.5 : 3}
+                    fill={colors.feedback.winBright}
+                  />
+                </React.Fragment>
               ))}
             </React.Fragment>
           );
         })}
       </Svg>
       {single ? (
-        <LineBadge win={shown[0]!} reelWidth={reelWidth} cellHeight={cellHeight} />
+        <LineBadge
+          win={shown[0]!}
+          reelWidth={reelWidth}
+          cellHeight={cellHeight}
+          centreY={centreY}
+        />
       ) : null}
     </Animated.View>
   );
@@ -246,17 +303,19 @@ function LineBadge({
   win,
   reelWidth,
   cellHeight,
+  centreY,
 }: {
   win: LineWin;
   reelWidth: number;
   cellHeight: number;
+  centreY: (reel: number, row: number) => number;
 }) {
   const cells = win.cells ?? [];
   const last = cells[cells.length - 1];
   if (!last) return null;
   const [reel, row] = last;
   const x = reel * (reelWidth + REEL_GAP) + reelWidth / 2;
-  const y = row * cellHeight + cellHeight / 2;
+  const y = centreY(reel, row);
 
   return (
     <View

@@ -45,10 +45,14 @@ const LEAD_IN_SECONDS = 0.04;
 
 
 /** What the machine shows before the first spin. */
-function idleGrid(reels: number, rows: number): string[][] {
-  const column = ['CHERRY', 'BAR', 'LEMON'].slice(0, rows);
-  return Array.from({ length: reels }, () => [...column]);
+function idleGrid(rows: readonly number[]): string[][] {
+  return rows.map((height) => {
+    const column = ['CHERRY', 'BAR', 'LEMON', 'BELL', 'SEVEN'].slice(0, height);
+    while (column.length < height) column.push('CHERRY');
+    return column;
+  });
 }
+
 
 /**
  * The slot machine.
@@ -98,15 +102,29 @@ export function SlotsScreen() {
    * columns and wait forever for a fifth reel to report that it had stopped.
    */
   const REELS = details?.reels ?? 5;
-  const ROWS = details?.rows ?? 3;
-  const IDLE_GRID = useMemo(() => idleGrid(REELS, ROWS), [REELS, ROWS]);
+  /**
+   * Rows PER REEL, not one number for the machine.
+   *
+   * The diamond games are 3-4-5-4-3 — widest in the middle — which is the only
+   * shape an "all ways pay" mechanic can be drawn on, since there is no fourth
+   * row on reel one for a payline to cross. A single row count cannot express
+   * that, and a machine hard-wired to a rectangle would show the diamond games
+   * with cells they do not have.
+   */
+  const ROWS = useMemo(
+    () => details?.rows ?? Array.from({ length: REELS }, () => 3),
+    [details?.rows, REELS],
+  );
+  /** The deepest reel. What the bay has to be tall enough for. */
+  const MAX_ROWS = useMemo(() => Math.max(...ROWS), [ROWS]);
+  const IDLE_GRID = useMemo(() => idleGrid(ROWS), [ROWS]);
 
   const [balance, setBalance] = useState(minor(0));
   const [bet, setBet] = useState(minor(2_000));
   const [reelPhase, setReelPhase] = useState<ReelPhase>('idle');
   const spinning = reelPhase !== 'idle';
   const [round, setRound] = useState<RoundResponse | null>(null);
-  const [grid, setGrid] = useState<string[][]>(() => idleGrid(REELS, ROWS));
+  const [grid, setGrid] = useState<string[][]>(() => IDLE_GRID);
   const [error, setError] = useState<string | null>(null);
   const spinToken = useRef(0);
 
@@ -281,11 +299,11 @@ export function SlotsScreen() {
     // the symbols had to shrink to 20 points to fit, which was playable and
     // did not look like a slot machine.
     const chrome = compact ? 120 : 300;
-    const ideal = Math.floor((viewportHeight - chrome) / ROWS);
+    const ideal = Math.floor((viewportHeight - chrome) / MAX_ROWS);
     // Never larger than the design size, and never so small the artwork stops
     // reading — below about 26 points a symbol is a coloured smudge.
     return Math.max(26, Math.min(SYMBOL_SIZE, ideal));
-  }, [viewportHeight, ROWS, compact]);
+  }, [viewportHeight, MAX_ROWS, compact]);
 
   /**
    * The bonus-round re-theme.
@@ -538,7 +556,7 @@ export function SlotsScreen() {
             <Reel
               key={i}
               index={i}
-              rows={ROWS}
+              rows={ROWS[i] ?? 3}
               phase={reelPhase}
               round={reelRound}
               landFrom={schedule[i]?.from ?? 0}
@@ -568,6 +586,7 @@ export function SlotsScreen() {
             phase={winPhase}
             width={reelsWidth}
             cellHeight={symbolSize}
+            rows={ROWS}
           />
         </View>
 
@@ -741,7 +760,12 @@ const styles = StyleSheet.create({
   fsRow: { alignItems: 'center', gap: 2 },
   winRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   hidden: { opacity: 0 },
-  reels: { flexDirection: 'row', gap: spacing.xs },
+  /**
+   * `center` rather than the default stretch, so a ragged machine reads as a
+   * diamond rather than as five columns hanging from a shelf. On a rectangular
+   * game it changes nothing at all.
+   */
+  reels: { flexDirection: 'row', gap: spacing.xs, alignItems: 'center' },
   readout: { minHeight: 32, alignItems: 'center', justifyContent: 'center' },
   readoutCompact: { minHeight: 18 },
   // Still above the 44-point touch minimum; only the generous padding goes.

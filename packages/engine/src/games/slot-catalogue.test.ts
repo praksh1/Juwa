@@ -148,11 +148,48 @@ test('every reported winning cell actually holds a winning symbol', () => {
 
     for (let n = 0; n < 400; n++) {
       const state = engine.init(minor(2000), new RngStream('cells', definition.id, n));
-      const spins = [state.public.baseSpin, ...state.public.freeSpins];
+      /*
+       * Every grid the player is shown, including each tumble.
+       *
+       * A cascade step is its own grid with its own wins drawn over it, so
+       * leaving the drops out would exempt most of a tumbling game's wins from
+       * the only check that they light up what they paid for.
+       */
+      const spins = [state.public.baseSpin, ...state.public.freeSpins].flatMap((spin) => [
+        spin,
+        ...spin.cascades,
+      ]);
 
       for (const spin of spins) {
         for (const win of spin.lineWins) {
           winsChecked++;
+
+          // The symbol sitting in every reported cell must be the one that
+          // paid, or a wild standing in for it. True in both scoring modes,
+          // and the check that stops the machine lighting up cells it did not
+          // settle.
+          for (const [reel, row] of win.cells) {
+            const symbol = spin.grid[reel]![row]!;
+            assert.ok(
+              symbol === win.symbol || symbol === 'WILD',
+              `${definition.id}: ${win.symbol} paid but cell [${reel},${row}] holds ${symbol}`,
+            );
+          }
+
+          if (math.paylines === 'ways') {
+            // A ways win names no line. What it must do instead is cover every
+            // reel from the leftmost up to `count`, with at least one cell on
+            // each — a gap would draw a win across a reel that did not have
+            // the symbol on it at all.
+            const reels = new Set(win.cells.map(([reel]) => reel));
+            assert.deepEqual(
+              [...reels].sort((a, b) => a - b),
+              Array.from({ length: win.count }, (_, i) => i),
+              `${definition.id}: a ways win on ${win.symbol} skipped a reel`,
+            );
+            continue;
+          }
+
           const line = math.paylines[win.line];
           assert.ok(line, `${definition.id}: win reports line ${win.line}, which does not exist`);
 
@@ -173,15 +210,6 @@ test('every reported winning cell actually holds a winning symbol', () => {
               row,
               line[i],
               `${definition.id}: cell ${i} is on row ${row}, but payline ${win.line} uses ${line[i]}`,
-            );
-
-            // The payload check: the symbol actually sitting there must be the
-            // one that paid, or a wild standing in for it.
-            const symbol = spin.grid[reel]![row]!;
-            assert.ok(
-              symbol === win.symbol || symbol === 'WILD',
-              `${definition.id}: line ${win.line} paid ${win.symbol} but cell ` +
-                `[${reel},${row}] holds ${symbol}`,
             );
           }
         }

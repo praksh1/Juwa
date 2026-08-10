@@ -46,6 +46,25 @@ const LINES_25: readonly (readonly number[])[] = [
 const LINES_1: readonly (readonly number[])[] = [[0, 0, 0]];
 
 /**
+ * Three reels, three rows, five lines: three straight and the two diagonals.
+ *
+ * The oldest layout there is, and it earns its place by being nothing like the
+ * five-reel games — a player can see the whole grid at once and knows without
+ * being told what the five lines are, which no 25-line machine can claim.
+ */
+const LINES_5: readonly (readonly number[])[] = [
+  [1, 1, 1], [0, 0, 0], [2, 2, 2], [0, 1, 2], [2, 1, 0],
+];
+
+/**
+ * The diamond: 3-4-5-4-3, widest in the middle.
+ *
+ * 3 x 4 x 5 x 4 x 3 = 720 ways, which is why this shape only works with ways
+ * pays — there is no row 4 on reel one for a payline to cross.
+ */
+const DIAMOND: readonly number[] = [3, 4, 5, 4, 3];
+
+/**
  * The original hand-authored strips for the flagship game.
  *
  * These are kept verbatim rather than regenerated from weights. Juwa Classic's
@@ -110,6 +129,89 @@ function fiveReelSymbols(spread: number): SymbolSpec[] {
   ];
 }
 
+/**
+ * The ways symbol set.
+ *
+ * Rates are far lower than the line games', and that is not a nerf — it is the
+ * arithmetic of the mechanic. A 720-ways grid reads the same three-of-a-kind
+ * dozens of times over, and a ways win is quoted against the whole stake rather
+ * than per line, so a paytable copied across from a 20-line game would return
+ * something close to fifty times the stake per spin.
+ *
+ * WILD carries no pay of its own here: in ways scoring it substitutes for every
+ * symbol at once, and letting it also pay as itself would settle the same cells
+ * twice over. `evaluateWays` ignores the field; it is zeroed so that nothing
+ * suggests otherwise to whoever reads this next.
+ */
+function waysSymbols(): SymbolSpec[] {
+  /** The top two symbols, which are rare enough to pay from three reels. */
+  const top = (three: number) => ({ 3: three, 4: three * 3, 5: three * 10 });
+  /**
+   * Everything else pays from FOUR reels.
+   *
+   * Without this the model paid something on 93% of spins, and raising the
+   * minimum on just the two commonest symbols only brought it to 88%. That is
+   * not a generous machine, it is a dishonest one: nearly every spin lights up
+   * and plays a win sound while returning less than the stake, so the player is
+   * told they are winning while their balance goes down. Regulators call it a
+   * "loss disguised as a win", and it is worth refusing on its own terms.
+   *
+   * It is also a shape problem specific to this layout, which is why the line
+   * games do not need the same treatment. A diamond has nineteen cells against
+   * a 5x3's fifteen, and the wide middle reels are exactly the ones a run has
+   * to cross — so any given symbol turns up somewhere on the first three reels
+   * far more often than the same weights would suggest on a rectangle.
+   *
+   * Requiring four reels puts the hit rate near 35%, and returns the same money
+   * in wins large enough to be worth the noise they make.
+   */
+  const rest = (four: number) => ({ 3: 0, 4: four, 5: four * 4 });
+  return [
+    // One wild per strip, and none at all on the first or last reel.
+    //
+    // A wild reads as every symbol at once, so on a ways grid it does not
+    // improve one combination — it puts EVERY symbol on that reel. At the
+    // weight the line games use it made the four wide middle reels count for
+    // everything, and no amount of adjusting the paytable could bring the hit
+    // rate down while it was there.
+    { id: 'WILD',    kind: 'wild',    weights: [0, 1, 1, 1, 0], pays: { 3: 0, 4: 0, 5: 0 } },
+    { id: 'SCATTER', kind: 'scatter', weights: [3, 3, 3, 3, 3], pays: { 3: 0, 4: 0, 5: 0 } },
+    // A mild spread rather than a steep one. On a grid this wide the strips do
+    // most of the volatility work already, because the window on the middle
+    // reel is five consecutive positions and an evenly spread strip puts a
+    // common symbol in it nearly every time.
+    { id: 'SEVEN',   kind: 'normal',  weights: [8, 8, 8, 8, 8], pays: top(3) },
+    { id: 'DIAMOND', kind: 'normal',  weights: [9, 9, 9, 9, 9], pays: top(2.2) },
+    { id: 'BELL',    kind: 'normal',  weights: [11, 11, 11, 11, 11], pays: rest(4.5) },
+    { id: 'BAR',     kind: 'normal',  weights: [12, 12, 12, 12, 12], pays: rest(3) },
+    { id: 'CHERRY',  kind: 'normal',  weights: [13, 13, 13, 13, 13], pays: rest(2) },
+    { id: 'PLUM',    kind: 'normal',  weights: [14, 14, 14, 14, 14], pays: rest(1.5) },
+    { id: 'LEMON',   kind: 'normal',  weights: [15, 15, 15, 15, 15], pays: rest(1.1) },
+  ];
+}
+
+/**
+ * The tumbling set.
+ *
+ * No WILD at all. A wild that survives a drop keeps paying on every subsequent
+ * one, so it compounds down a chain in a way that is very hard to bound —
+ * cascade games that do carry wilds usually pin them in place and cap the
+ * chain, which is two more mechanics than this needs to be worth playing.
+ */
+function tumbleSymbols(): SymbolSpec[] {
+  const p = (three: number) => ({ 3: three, 4: three * 5, 5: three * 20 });
+  return [
+    { id: 'SCATTER', kind: 'scatter', weights: [3, 3, 3, 3, 3], pays: { 3: 0, 4: 0, 5: 0 } },
+    { id: 'SEVEN',   kind: 'normal',  weights: [7, 7, 7, 7, 7], pays: p(40) },
+    { id: 'DIAMOND', kind: 'normal',  weights: [9, 9, 9, 9, 9], pays: p(30) },
+    { id: 'BELL',    kind: 'normal',  weights: [12, 12, 12, 12, 12], pays: p(20) },
+    { id: 'BAR',     kind: 'normal',  weights: [15, 15, 15, 15, 15], pays: p(13) },
+    { id: 'CHERRY',  kind: 'normal',  weights: [18, 18, 18, 18, 18], pays: p(8) },
+    { id: 'PLUM',    kind: 'normal',  weights: [20, 20, 20, 20, 20], pays: p(6) },
+    { id: 'LEMON',   kind: 'normal',  weights: [22, 22, 22, 22, 22], pays: p(4) },
+  ];
+}
+
 /** Three reels, one row, one line: the pub-machine model. */
 const THREE_REEL_SYMBOLS: SymbolSpec[] = [
   { id: 'WILD',   kind: 'wild',   weights: [2, 2, 2], pays: { 3: 400, 4: 0, 5: 0 } },
@@ -146,7 +248,7 @@ export const SLOT_MODELS: Record<string, SlotModel> = {
   'classic-20': {
     id: 'classic-20',
     volatility: 'low',
-    rtp: 0.9614,
+    rtp: 0.9604,
     math: {
       reels: 5, rows: 3, paylines: LINES_20, symbols: CLASSIC_SYMBOLS,
       strips: CLASSIC_STRIPS,
@@ -160,7 +262,7 @@ export const SLOT_MODELS: Record<string, SlotModel> = {
   'lines-10': {
     id: 'lines-10',
     volatility: 'medium',
-    rtp: 0.9541,
+    rtp: 0.9500,
     math: {
       reels: 5, rows: 3, paylines: LINES_10, symbols: fiveReelSymbols(1.15),
       payoutScale: 0.7384,
@@ -174,7 +276,7 @@ export const SLOT_MODELS: Record<string, SlotModel> = {
   'lines-25': {
     id: 'lines-25',
     volatility: 'medium',
-    rtp: 0.9595,
+    rtp: 0.9592,
     math: {
       reels: 5, rows: 3, paylines: LINES_25, symbols: fiveReelSymbols(1.05),
       payoutScale: 0.9048,
@@ -188,7 +290,7 @@ export const SLOT_MODELS: Record<string, SlotModel> = {
   'high-vol': {
     id: 'high-vol',
     volatility: 'very-high',
-    rtp: 0.9554,
+    rtp: 0.9500,
     math: {
       reels: 5, rows: 3, paylines: LINES_20, symbols: fiveReelSymbols(1.6),
       payoutScale: 0.5985,
@@ -198,11 +300,73 @@ export const SLOT_MODELS: Record<string, SlotModel> = {
       stripLength: 36,
     },
   },
+  /**
+   * Three reels, three rows, five lines.
+   *
+   * The whole grid is visible at once and the five lines are the obvious ones,
+   * so there is nothing to learn before the first spin. Higher variance than
+   * the five-reel games despite looking simpler: nine cells give far fewer
+   * chances to catch a partial win.
+   */
+  'classic-3x3': {
+    id: 'classic-3x3',
+    volatility: 'medium',
+    rtp: 0.9480,
+    math: {
+      reels: 3, rows: 3, paylines: LINES_5, symbols: THREE_REEL_SYMBOLS,
+      payoutScale: 0.8107,
+      scatterPays: {},
+      freeSpinsAwarded: {},
+      freeSpinMultiplier: 1,
+      stripLength: 26,
+    },
+  },
+  /**
+   * The diamond. 3-4-5-4-3, 720 ways, no paylines at all.
+   *
+   * Wins are wide rather than deep — several reels contributing two or three
+   * cells each is the normal case, not a jackpot — which gives it a completely
+   * different rhythm from a line game even before the shape is noticed.
+   */
+  'ways-diamond': {
+    id: 'ways-diamond',
+    volatility: 'low',
+    rtp: 0.9578,
+    math: {
+      reels: 5, rows: DIAMOND, paylines: 'ways', symbols: waysSymbols(),
+      payoutScale: 0.1186,
+      scatterPays: { 3: 3, 4: 15, 5: 75 },
+      freeSpinsAwarded: { 3: 8, 4: 12, 5: 20 },
+      freeSpinMultiplier: 2,
+      stripLength: 36,
+    },
+  },
+  /**
+   * Tumbling reels with an escalating ladder.
+   *
+   * No free-spin round: the cascade IS the feature, and stacking a second one
+   * on top of it makes the return almost impossible to reason about — a chain
+   * inside a multiplied free spin multiplies twice.
+   */
+  'tumble-20': {
+    id: 'tumble-20',
+    volatility: 'high',
+    rtp: 0.9437,
+    math: {
+      reels: 5, rows: 3, paylines: LINES_20, symbols: tumbleSymbols(),
+      payoutScale: 1.0991,
+      scatterPays: {},
+      freeSpinsAwarded: {},
+      freeSpinMultiplier: 1,
+      stripLength: 32,
+      cascade: { ladder: [2, 3, 5, 10], maxDrops: 8 },
+    },
+  },
   /** Three reels, one line. No bonus round, nothing to learn. */
   'classic-3': {
     id: 'classic-3',
     volatility: 'high',
-    rtp: 0.9455,
+    rtp: 0.9479,
     math: {
       reels: 3, rows: 1, paylines: LINES_1, symbols: THREE_REEL_SYMBOLS,
       payoutScale: 0.7409,
@@ -261,7 +425,7 @@ export const SLOT_CATALOGUE: SlotDefinition[] = [
     theme: { primary: '#065F46', secondary: '#10B981', accent: '#A7F3D0' }, limits: DEFAULT_LIMITS, art: 'jungle' },
   { id: 'slot-royal-flush', name: 'Royal Fortune', model: 'classic-20',
     theme: { primary: '#7F1D1D', secondary: '#DC2626', accent: '#FCA5A5' }, limits: DEFAULT_LIMITS, art: 'myth' },
-  { id: 'slot-ocean-drift', name: 'Ocean Drift', model: 'classic-20',
+  { id: 'slot-ocean-drift', name: 'Ocean Drift', model: 'ways-diamond',
     theme: { primary: '#0C4A6E', secondary: '#0EA5E9', accent: '#BAE6FD' }, limits: LOW_LIMITS, art: 'pirate' },
   { id: 'slot-sunset-strip', name: 'Sunset Strip', model: 'classic-20',
     theme: { primary: '#9A3412', secondary: '#FB923C', accent: '#FED7AA' }, limits: DEFAULT_LIMITS, art: 'wildwest' },
@@ -275,7 +439,7 @@ export const SLOT_CATALOGUE: SlotDefinition[] = [
     theme: { primary: '#78350F', secondary: '#D97706', accent: '#FDE68A' }, limits: DEFAULT_LIMITS, art: 'egypt' },
   { id: 'slot-frost-peak', name: 'Frost Peak', model: 'lines-10',
     theme: { primary: '#1E3A8A', secondary: '#60A5FA', accent: '#DBEAFE' }, limits: LOW_LIMITS, art: 'orb' },
-  { id: 'slot-jade-temple', name: 'Jade Temple', model: 'lines-10',
+  { id: 'slot-jade-temple', name: 'Jade Temple', model: 'ways-diamond',
     theme: { primary: '#134E4A', secondary: '#14B8A6', accent: '#99F6E4' }, limits: DEFAULT_LIMITS, art: 'asian' },
 
   // -------------------------------------------------------------- twenty-five
@@ -283,11 +447,11 @@ export const SLOT_CATALOGUE: SlotDefinition[] = [
     theme: { primary: '#831843', secondary: '#EC4899', accent: '#FBCFE8' }, limits: DEFAULT_LIMITS, art: 'orb' },
   { id: 'slot-jungle-run', name: 'Jungle Run', model: 'lines-25',
     theme: { primary: '#14532D', secondary: '#65A30D', accent: '#D9F99D' }, limits: DEFAULT_LIMITS, art: 'jungle' },
-  { id: 'slot-city-lights', name: 'City Lights', model: 'lines-25',
+  { id: 'slot-city-lights', name: 'City Lights', model: 'tumble-20',
     theme: { primary: '#0F172A', secondary: '#38BDF8', accent: '#F1F5F9' }, limits: DEFAULT_LIMITS, art: 'orb' },
   { id: 'slot-spice-market', name: 'Spice Market', model: 'lines-25',
     theme: { primary: '#7C2D12', secondary: '#EA580C', accent: '#FFEDD5' }, limits: LOW_LIMITS, art: 'asian' },
-  { id: 'slot-aurora-borealis', name: 'Aurora', model: 'lines-25',
+  { id: 'slot-aurora-borealis', name: 'Aurora', model: 'ways-diamond',
     theme: { primary: '#312E81', secondary: '#818CF8', accent: '#C7D2FE' }, limits: DEFAULT_LIMITS, art: 'orb' },
 
   // ------------------------------------------------------------ high volatility
@@ -295,19 +459,19 @@ export const SLOT_CATALOGUE: SlotDefinition[] = [
     theme: { primary: '#450A0A', secondary: '#B91C1C', accent: '#FFC53D' }, limits: HIGH_LIMITS, art: 'asian' },
   { id: 'slot-vault-breaker', name: 'Vault Breaker', model: 'high-vol',
     theme: { primary: '#18181B', secondary: '#52525B', accent: '#2FE3D6' }, limits: HIGH_LIMITS, art: 'pirate' },
-  { id: 'slot-supernova', name: 'Supernova', model: 'high-vol', tag: 'new',
+  { id: 'slot-supernova', name: 'Supernova', model: 'tumble-20', tag: 'new',
     theme: { primary: '#1E1B4B', secondary: '#7C3AED', accent: '#F0ABFC' }, limits: DEFAULT_LIMITS, art: 'orb' },
   { id: 'slot-pharaohs-vault', name: "Pharaoh's Vault", model: 'high-vol',
     theme: { primary: '#422006', secondary: '#CA8A04', accent: '#FEF08A' }, limits: HIGH_LIMITS, art: 'egypt' },
-  { id: 'slot-storm-chaser', name: 'Storm Chaser', model: 'high-vol',
+  { id: 'slot-storm-chaser', name: 'Storm Chaser', model: 'tumble-20',
     theme: { primary: '#164E63', secondary: '#06B6D4', accent: '#CFFAFE' }, limits: DEFAULT_LIMITS, art: 'myth' },
 
   // ---------------------------------------------------------------- three reel
   { id: 'slot-lucky-sevens', name: 'Lucky Sevens', model: 'classic-3',
     theme: { primary: '#7F1D1D', secondary: '#EF4444', accent: '#FFC53D' }, limits: LOW_LIMITS, art: 'fruit' },
-  { id: 'slot-triple-bar', name: 'Triple Bar', model: 'classic-3',
+  { id: 'slot-triple-bar', name: 'Triple Bar', model: 'classic-3x3',
     theme: { primary: '#1C1917', secondary: '#57534E', accent: '#E6CE8C' }, limits: LOW_LIMITS, art: 'fruit' },
-  { id: 'slot-fruit-stand', name: 'Fruit Stand', model: 'classic-3',
+  { id: 'slot-fruit-stand', name: 'Fruit Stand', model: 'classic-3x3',
     theme: { primary: '#166534', secondary: '#22C55E', accent: '#FEF08A' }, limits: LOW_LIMITS, art: 'fruit' },
 ];
 

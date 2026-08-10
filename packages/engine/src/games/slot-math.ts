@@ -51,9 +51,31 @@ export interface SymbolSpec {
 
 export interface SlotMath {
   reels: number;
-  rows: number;
-  /** Row index per reel. `[1,1,1,1,1]` is the centre line. */
-  paylines: readonly (readonly number[])[];
+  /**
+   * Visible rows. A single number means every reel is the same height; an array
+   * gives a height per reel, which is how a diamond (3-4-5-4-3) is expressed.
+   *
+   * Not every slot is a rectangle, and while the first version of this type
+   * said `rows: number` no amount of art direction could make one look like
+   * anything else. Twenty-three games shared five maths models and four of
+   * those five were 5x3 — the catalogue was one game with twenty-three
+   * paint jobs, and this is the field that made it so.
+   */
+  rows: number | readonly number[];
+  /**
+   * How a win is found.
+   *
+   * An array of paylines is the classic reading: each entry gives a row index
+   * per reel, `[1,1,1,1,1]` being the centre line, and a win is a run of
+   * matching symbols along one of them starting at reel one.
+   *
+   * `'ways'` is the other family — an "all ways pay" or "243 ways" machine.
+   * There are no lines at all: a symbol pays if it appears anywhere on each of
+   * the first N reels, and the win is multiplied by how many ways that can be
+   * read. It is the only mechanic that makes sense on a ragged grid, because a
+   * fixed row pattern cannot cross a reel that does not have that row.
+   */
+  paylines: readonly (readonly number[])[] | 'ways';
   symbols: readonly SymbolSpec[];
   /** Total stake multiplier for N scatters anywhere on the grid. */
   scatterPays: Readonly<Record<number, number>>;
@@ -84,6 +106,55 @@ export interface SlotMath {
    * Every value in the catalogue was derived that way. None was guessed.
    */
   payoutScale?: number;
+  /**
+   * Tumbling reels: winning symbols are removed, everything above them falls
+   * into the gap, and new symbols drop in from the top. The refilled grid is
+   * evaluated again, and again, for as long as it keeps paying.
+   *
+   * The multiplier ladder is what makes it a mechanic rather than a repeat.
+   * Each successive drop pays at a higher rate, so a chain is worth
+   * disproportionately more than the same symbols would have been in one hit —
+   * which is the whole reason a player watches a cascade instead of looking
+   * away once the first win has been counted.
+   */
+  cascade?: {
+    /**
+     * Multiplier for the win at each drop after the first. `[2, 3, 5]` means
+     * the second grid pays double, the third triple, the fourth and anything
+     * beyond it five times.
+     */
+    ladder: readonly number[];
+    /** Hard stop, so a pathological strip cannot loop forever. */
+    maxDrops: number;
+  };
+}
+
+/** Rows per reel, whether the model declared one number or a shape. */
+export function reelHeights(math: SlotMath): number[] {
+  if (typeof math.rows === 'number') return Array.from({ length: math.reels }, () => math.rows as number);
+  if (math.rows.length !== math.reels) {
+    throw new Error(`Shape has ${math.rows.length} reels, expected ${math.reels}`);
+  }
+  return [...math.rows];
+}
+
+/** True when the model pays by adjacency rather than along fixed lines. */
+export function isWays(math: SlotMath): boolean {
+  return math.paylines === 'ways';
+}
+
+/**
+ * What a per-line multiplier is divided by to become a stake multiplier.
+ *
+ * A line game quotes each win per line, so a 20x win on a 20-line game returns
+ * the stake. A ways game quotes against the whole stake already — the player is
+ * buying all 243 ways at once, not one of them — so there is nothing to divide
+ * by and the divisor is 1. Getting this backwards is a factor-of-243 error in
+ * the payout, in the player's favour, which is the kind of bug that is only
+ * discovered from the wrong side of a balance sheet.
+ */
+export function payDivisor(math: SlotMath): number {
+  return math.paylines === 'ways' ? 1 : math.paylines.length;
 }
 
 export interface LineWin {
@@ -109,12 +180,31 @@ export interface LineWin {
   cells: readonly (readonly [number, number])[];
 }
 
+/**
+ * One tumble after the first.
+ *
+ * Sent to the client as its own step rather than folded into a final grid,
+ * because the drops ARE the presentation: a cascade the player is shown only
+ * the end of is indistinguishable from a single large win, and the escalating
+ * ladder that makes chains worth chasing becomes invisible.
+ */
+export interface CascadeStep {
+  grid: SlotSymbol[][];
+  lineWins: LineWin[];
+  /** Where on the ladder this drop paid. */
+  stepMultiplier: number;
+  totalMultiplier: number;
+}
+
 export interface SpinResult {
   grid: SlotSymbol[][];
   lineWins: LineWin[];
   scatterCount: number;
   scatterMultiplier: number;
+  /** Includes every cascade below. */
   totalMultiplier: number;
+  /** Empty unless the model tumbles. */
+  cascades: CascadeStep[];
 }
 
 /**
@@ -181,9 +271,10 @@ export function spinGrid(
   math: SlotMath,
   rng: RngStream,
 ): SlotSymbol[][] {
+  const heights = reelHeights(math);
   const grid: SlotSymbol[][] = [];
   for (let reel = 0; reel < math.reels; reel++) {
-    grid.push(spinReel(strips[reel]!, math.rows, rng));
+    grid.push(spinReel(strips[reel]!, heights[reel]!, rng));
   }
   return grid;
 }
@@ -243,6 +334,61 @@ function evaluateLine(
   return best;
 }
 
+/**
+ * Evaluate an "all ways pay" grid.
+ *
+ * There are no lines. A symbol pays when it appears at least once on each of
+ * the first N reels, and the win is multiplied by the number of ways it can be
+ * read — the product of how many times it occurs on each of those reels. Three
+ * cherries on reel one, two on reel two and one on reel three is six ways, and
+ * pays six times the three-of-a-kind rate.
+ *
+ * WILD substitutes but does not pay for itself here. That is the standard
+ * reading, and it is also the only one that stays honest: a grid full of wilds
+ * would otherwise pay once as WILD and again as every other symbol on the
+ * paytable, over the same cells, which multiplies the top of the return
+ * distribution by roughly the size of the symbol set.
+ */
+function evaluateWays(
+  grid: SlotSymbol[][],
+  math: SlotMath,
+  pays: ReadonlyMap<SlotSymbol, SymbolSpec>,
+): LineWin[] {
+  const wins: LineWin[] = [];
+
+  for (const [index, spec] of math.symbols.entries()) {
+    if (spec.kind !== 'normal') continue;
+
+    // How many cells on each reel can read as this symbol, and which ones.
+    const hits: [number, number][][] = [];
+    for (let reel = 0; reel < math.reels; reel++) {
+      const onReel: [number, number][] = [];
+      for (const [row, symbol] of grid[reel]!.entries()) {
+        const kind = pays.get(symbol)?.kind;
+        if (symbol === spec.id || kind === 'wild') onReel.push([reel, row]);
+      }
+      if (onReel.length === 0) break; // The run ends at the first reel without one.
+      hits.push(onReel);
+    }
+    if (hits.length < 3) continue;
+
+    const rate = spec.pays[Math.min(hits.length, 5) as 3 | 4 | 5] ?? 0;
+    if (rate <= 0) continue;
+
+    const ways = hits.reduce((product, onReel) => product * onReel.length, 1);
+    wins.push({
+      // There is no payline to name, so the symbol's own index identifies the
+      // win. The client only uses this as a stable key for the walk-through.
+      line: index,
+      symbol: spec.id,
+      count: hits.length,
+      multiplier: rate * ways,
+      cells: hits.flat(),
+    });
+  }
+  return wins;
+}
+
 export function evaluateGrid(
   grid: SlotSymbol[][],
   math: SlotMath,
@@ -251,26 +397,25 @@ export function evaluateGrid(
   const pays = new Map(math.symbols.map((s) => [s.id, s]));
   const scale = math.payoutScale ?? 1;
 
-  const lineWins: LineWin[] = [];
-  let lineMultiplierSum = 0;
-  for (const [i, line] of math.paylines.entries()) {
-    const win = evaluateLine(grid, line, math, pays);
-    if (win) {
-      // Only the reels that actually matched, not the whole payline. A
-      // three-of-a-kind on a five-reel line lights three cells; lighting all
-      // five tells the player two symbols paid that did not.
-      const cells: [number, number][] = [];
-      for (let reel = 0; reel < win.count; reel++) cells.push([reel, line[reel]!]);
-      const scaled = {
-        ...win,
-        line: i,
-        cells,
-        multiplier: win.multiplier * winMultiplier * scale,
-      };
-      lineWins.push(scaled);
-      lineMultiplierSum += scaled.multiplier;
-    }
-  }
+  const raw: LineWin[] =
+    math.paylines === 'ways'
+      ? evaluateWays(grid, math, pays)
+      : math.paylines.flatMap((line, i) => {
+          const win = evaluateLine(grid, line, math, pays);
+          if (!win) return [];
+          // Only the reels that actually matched, not the whole payline. A
+          // three-of-a-kind on a five-reel line lights three cells; lighting
+          // all five tells the player two symbols paid that did not.
+          const cells: [number, number][] = [];
+          for (let reel = 0; reel < win.count; reel++) cells.push([reel, line[reel]!]);
+          return [{ ...win, line: i, cells }];
+        });
+
+  const lineWins = raw.map((win) => ({
+    ...win,
+    multiplier: win.multiplier * winMultiplier * scale,
+  }));
+  const lineMultiplierSum = lineWins.reduce((sum, win) => sum + win.multiplier, 0);
 
   let scatterCount = 0;
   for (const reel of grid) {
@@ -280,10 +425,94 @@ export function evaluateGrid(
 
   /**
    * Line wins are quoted per line, so a 20x line win on a 20-line game returns
-   * 1x the total stake. Dividing by the line count once, here, keeps
-   * `totalMultiplier` directly comparable to the stake.
+   * 1x the total stake. Dividing once, here, keeps `totalMultiplier` directly
+   * comparable to the stake — see `payDivisor` for why a ways game divides by
+   * one instead.
    */
-  const totalMultiplier = lineMultiplierSum / math.paylines.length + scatterMultiplier;
+  const totalMultiplier = lineMultiplierSum / payDivisor(math) + scatterMultiplier;
 
-  return { grid, lineWins, scatterCount, scatterMultiplier, totalMultiplier };
+  return { grid, lineWins, scatterCount, scatterMultiplier, totalMultiplier, cascades: [] };
+}
+
+/**
+ * Drop the winning symbols out of a grid and refill from the top.
+ *
+ * Survivors keep their order and fall to the bottom of their own reel; the gap
+ * at the top is filled with fresh symbols. The new symbols are drawn one at a
+ * time rather than as a window onto the strip, which is a real difference from
+ * a normal spin: a spun reel shows three CONSECUTIVE strip positions and so
+ * carries the strip's own correlation down the column, while symbols dropping
+ * into a hole arrive independently. That is how tumbling games work, and it is
+ * worth knowing because it means a cascade model's return cannot be reasoned
+ * about from its strips alone — it has to be measured.
+ */
+function tumble(
+  grid: SlotSymbol[][],
+  cleared: ReadonlySet<string>,
+  strips: readonly (readonly SlotSymbol[])[],
+  rng: RngStream,
+): SlotSymbol[][] {
+  return grid.map((reel, r) => {
+    const survivors = reel.filter((_, row) => !cleared.has(`${r},${row}`));
+    const strip = strips[r]!;
+    const fresh = Array.from(
+      { length: reel.length - survivors.length },
+      () => strip[rng.nextInt(strip.length)]!,
+    );
+    return [...fresh, ...survivors];
+  });
+}
+
+/**
+ * Spin, and keep tumbling while it keeps paying.
+ *
+ * This is where a spin is actually resolved, because a cascade needs the RNG
+ * and `evaluateGrid` is deliberately pure — being able to replay a grid and get
+ * the same answer with no random source is what makes a past round auditable.
+ * So the loop lives here and the evaluation stays pure.
+ *
+ * Scatters are counted on the FIRST grid only. Symbols that fall in afterwards
+ * can retrigger a bonus in some real machines, but that turns free spins into a
+ * feedback loop whose return is unbounded above without a hard cap, and an
+ * unbounded loop is not something to introduce in the same change as the
+ * mechanic itself.
+ */
+export function resolveSpin(
+  strips: readonly (readonly SlotSymbol[])[],
+  math: SlotMath,
+  rng: RngStream,
+  winMultiplier: number,
+): SpinResult {
+  const first = evaluateGrid(spinGrid(strips, math, rng), math, winMultiplier);
+  if (!math.cascade) return first;
+
+  const cascades: CascadeStep[] = [];
+  let grid = first.grid;
+  let previous: LineWin[] = first.lineWins;
+  let total = first.totalMultiplier;
+
+  for (let drop = 0; drop < math.cascade.maxDrops && previous.length > 0; drop++) {
+    const cleared = new Set<string>();
+    for (const win of previous) for (const [reel, row] of win.cells) cleared.add(`${reel},${row}`);
+
+    grid = tumble(grid, cleared, strips, rng);
+    // Past the end of the ladder every further drop pays at the top rate.
+    const step = math.cascade.ladder[Math.min(drop, math.cascade.ladder.length - 1)] ?? 1;
+    const result = evaluateGrid(grid, math, winMultiplier * step);
+
+    previous = result.lineWins;
+    if (previous.length === 0) break;
+
+    // Scatters were already counted and paid on the first grid.
+    const paid = result.totalMultiplier - result.scatterMultiplier;
+    cascades.push({
+      grid,
+      lineWins: result.lineWins,
+      stepMultiplier: step,
+      totalMultiplier: paid,
+    });
+    total += paid;
+  }
+
+  return { ...first, cascades, totalMultiplier: total };
 }

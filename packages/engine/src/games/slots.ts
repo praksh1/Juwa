@@ -32,8 +32,7 @@ import {
 } from './types.js';
 import {
   buildStrips,
-  evaluateGrid,
-  spinGrid,
+  resolveSpin,
   type SlotMath,
   type SlotSymbol,
   type SpinResult,
@@ -86,15 +85,16 @@ export class SlotsEngine implements GameEngine<SlotsPublic, null, SlotsConfig> {
   init(stake: Minor, rng: RngStream): RoundState<SlotsPublic, null> {
     assertWithinLimits(stake, this.limits);
 
-    const base = evaluateGrid(spinGrid(this.config.strips, this.math, rng), this.math, 1);
+    const base = resolveSpin(this.config.strips, this.math, rng, 1);
     let totalMultiplier = base.totalMultiplier;
 
     const freeSpinsAwarded = this.math.freeSpinsAwarded[base.scatterCount] ?? 0;
     const freeSpins: SpinResult[] = [];
     for (let i = 0; i < freeSpinsAwarded; i++) {
-      const spin = evaluateGrid(
-        spinGrid(this.config.strips, this.math, rng),
+      const spin = resolveSpin(
+        this.config.strips,
         this.math,
+        rng,
         this.math.freeSpinMultiplier,
       );
       freeSpins.push(spin);

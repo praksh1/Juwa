@@ -12,29 +12,29 @@
 import type { SlotGame, SlotModelInfo } from './games';
 
 export const SLOT_GAMES: SlotGame[] = [
-  { id: 'juwa-classic-slots', name: 'Juwa Classic', category: 'slots', rtp: 0.9614, volatility: 'low', reels: 5, rows: 3, lines: 20, minBet: 20, maxBet: 50000, theme: { primary: '#7C3AED', secondary: '#C026D3', accent: '#FFC53D' }, model: 'classic-20', tag: 'hot', art: 'fruit' },
-  { id: 'slot-emerald-nights', name: 'Emerald Nights', category: 'slots', rtp: 0.9614, volatility: 'low', reels: 5, rows: 3, lines: 20, minBet: 20, maxBet: 50000, theme: { primary: '#065F46', secondary: '#10B981', accent: '#A7F3D0' }, model: 'classic-20', art: 'jungle' },
-  { id: 'slot-royal-flush', name: 'Royal Fortune', category: 'slots', rtp: 0.9614, volatility: 'low', reels: 5, rows: 3, lines: 20, minBet: 20, maxBet: 50000, theme: { primary: '#7F1D1D', secondary: '#DC2626', accent: '#FCA5A5' }, model: 'classic-20', art: 'myth' },
-  { id: 'slot-ocean-drift', name: 'Ocean Drift', category: 'slots', rtp: 0.9614, volatility: 'low', reels: 5, rows: 3, lines: 20, minBet: 10, maxBet: 10000, theme: { primary: '#0C4A6E', secondary: '#0EA5E9', accent: '#BAE6FD' }, model: 'classic-20', art: 'pirate' },
-  { id: 'slot-sunset-strip', name: 'Sunset Strip', category: 'slots', rtp: 0.9614, volatility: 'low', reels: 5, rows: 3, lines: 20, minBet: 20, maxBet: 50000, theme: { primary: '#9A3412', secondary: '#FB923C', accent: '#FED7AA' }, model: 'classic-20', art: 'wildwest' },
-  { id: 'slot-midnight-gold', name: 'Midnight Gold', category: 'slots', rtp: 0.9541, volatility: 'medium', reels: 5, rows: 3, lines: 10, minBet: 20, maxBet: 50000, theme: { primary: '#1C1917', secondary: '#78716C', accent: '#FFC53D' }, model: 'lines-10', art: 'wildwest' },
-  { id: 'slot-neon-alley', name: 'Neon Alley', category: 'slots', rtp: 0.9541, volatility: 'medium', reels: 5, rows: 3, lines: 10, minBet: 20, maxBet: 50000, theme: { primary: '#4C1D95', secondary: '#2FE3D6', accent: '#FF3D8A' }, model: 'lines-10', tag: 'new', art: 'orb' },
-  { id: 'slot-desert-mirage', name: 'Desert Mirage', category: 'slots', rtp: 0.9541, volatility: 'medium', reels: 5, rows: 3, lines: 10, minBet: 20, maxBet: 50000, theme: { primary: '#78350F', secondary: '#D97706', accent: '#FDE68A' }, model: 'lines-10', art: 'egypt' },
-  { id: 'slot-frost-peak', name: 'Frost Peak', category: 'slots', rtp: 0.9541, volatility: 'medium', reels: 5, rows: 3, lines: 10, minBet: 10, maxBet: 10000, theme: { primary: '#1E3A8A', secondary: '#60A5FA', accent: '#DBEAFE' }, model: 'lines-10', art: 'orb' },
-  { id: 'slot-jade-temple', name: 'Jade Temple', category: 'slots', rtp: 0.9541, volatility: 'medium', reels: 5, rows: 3, lines: 10, minBet: 20, maxBet: 50000, theme: { primary: '#134E4A', secondary: '#14B8A6', accent: '#99F6E4' }, model: 'lines-10', art: 'asian' },
-  { id: 'slot-carnival-row', name: 'Carnival Row', category: 'slots', rtp: 0.9595, volatility: 'medium', reels: 5, rows: 3, lines: 25, minBet: 20, maxBet: 50000, theme: { primary: '#831843', secondary: '#EC4899', accent: '#FBCFE8' }, model: 'lines-25', art: 'orb' },
-  { id: 'slot-jungle-run', name: 'Jungle Run', category: 'slots', rtp: 0.9595, volatility: 'medium', reels: 5, rows: 3, lines: 25, minBet: 20, maxBet: 50000, theme: { primary: '#14532D', secondary: '#65A30D', accent: '#D9F99D' }, model: 'lines-25', art: 'jungle' },
-  { id: 'slot-city-lights', name: 'City Lights', category: 'slots', rtp: 0.9595, volatility: 'medium', reels: 5, rows: 3, lines: 25, minBet: 20, maxBet: 50000, theme: { primary: '#0F172A', secondary: '#38BDF8', accent: '#F1F5F9' }, model: 'lines-25', art: 'orb' },
-  { id: 'slot-spice-market', name: 'Spice Market', category: 'slots', rtp: 0.9595, volatility: 'medium', reels: 5, rows: 3, lines: 25, minBet: 10, maxBet: 10000, theme: { primary: '#7C2D12', secondary: '#EA580C', accent: '#FFEDD5' }, model: 'lines-25', art: 'asian' },
-  { id: 'slot-aurora-borealis', name: 'Aurora', category: 'slots', rtp: 0.9595, volatility: 'medium', reels: 5, rows: 3, lines: 25, minBet: 20, maxBet: 50000, theme: { primary: '#312E81', secondary: '#818CF8', accent: '#C7D2FE' }, model: 'lines-25', art: 'orb' },
-  { id: 'slot-dragons-hoard', name: 'Dragon\'s Hoard', category: 'slots', rtp: 0.9554, volatility: 'very-high', reels: 5, rows: 3, lines: 20, minBet: 100, maxBet: 200000, theme: { primary: '#450A0A', secondary: '#B91C1C', accent: '#FFC53D' }, model: 'high-vol', tag: 'mega', art: 'asian' },
-  { id: 'slot-vault-breaker', name: 'Vault Breaker', category: 'slots', rtp: 0.9554, volatility: 'very-high', reels: 5, rows: 3, lines: 20, minBet: 100, maxBet: 200000, theme: { primary: '#18181B', secondary: '#52525B', accent: '#2FE3D6' }, model: 'high-vol', art: 'pirate' },
-  { id: 'slot-supernova', name: 'Supernova', category: 'slots', rtp: 0.9554, volatility: 'very-high', reels: 5, rows: 3, lines: 20, minBet: 20, maxBet: 50000, theme: { primary: '#1E1B4B', secondary: '#7C3AED', accent: '#F0ABFC' }, model: 'high-vol', tag: 'new', art: 'orb' },
-  { id: 'slot-pharaohs-vault', name: 'Pharaoh\'s Vault', category: 'slots', rtp: 0.9554, volatility: 'very-high', reels: 5, rows: 3, lines: 20, minBet: 100, maxBet: 200000, theme: { primary: '#422006', secondary: '#CA8A04', accent: '#FEF08A' }, model: 'high-vol', art: 'egypt' },
-  { id: 'slot-storm-chaser', name: 'Storm Chaser', category: 'slots', rtp: 0.9554, volatility: 'very-high', reels: 5, rows: 3, lines: 20, minBet: 20, maxBet: 50000, theme: { primary: '#164E63', secondary: '#06B6D4', accent: '#CFFAFE' }, model: 'high-vol', art: 'myth' },
-  { id: 'slot-lucky-sevens', name: 'Lucky Sevens', category: 'slots', rtp: 0.9455, volatility: 'high', reels: 3, rows: 1, lines: 1, minBet: 10, maxBet: 10000, theme: { primary: '#7F1D1D', secondary: '#EF4444', accent: '#FFC53D' }, model: 'classic-3', art: 'fruit' },
-  { id: 'slot-triple-bar', name: 'Triple Bar', category: 'slots', rtp: 0.9455, volatility: 'high', reels: 3, rows: 1, lines: 1, minBet: 10, maxBet: 10000, theme: { primary: '#1C1917', secondary: '#57534E', accent: '#E6CE8C' }, model: 'classic-3', art: 'fruit' },
-  { id: 'slot-fruit-stand', name: 'Fruit Stand', category: 'slots', rtp: 0.9455, volatility: 'high', reels: 3, rows: 1, lines: 1, minBet: 10, maxBet: 10000, theme: { primary: '#166534', secondary: '#22C55E', accent: '#FEF08A' }, model: 'classic-3', art: 'fruit' },
+  { id: 'juwa-classic-slots', name: 'Juwa Classic', category: 'slots', rtp: 0.9604, volatility: 'low', reels: 5, rows: [3, 3, 3, 3, 3], lines: 20, pays: 'lines', minBet: 20, maxBet: 50000, theme: { primary: '#7C3AED', secondary: '#C026D3', accent: '#FFC53D' }, model: 'classic-20', tag: 'hot', art: 'fruit' },
+  { id: 'slot-emerald-nights', name: 'Emerald Nights', category: 'slots', rtp: 0.9604, volatility: 'low', reels: 5, rows: [3, 3, 3, 3, 3], lines: 20, pays: 'lines', minBet: 20, maxBet: 50000, theme: { primary: '#065F46', secondary: '#10B981', accent: '#A7F3D0' }, model: 'classic-20', art: 'jungle' },
+  { id: 'slot-royal-flush', name: 'Royal Fortune', category: 'slots', rtp: 0.9604, volatility: 'low', reels: 5, rows: [3, 3, 3, 3, 3], lines: 20, pays: 'lines', minBet: 20, maxBet: 50000, theme: { primary: '#7F1D1D', secondary: '#DC2626', accent: '#FCA5A5' }, model: 'classic-20', art: 'myth' },
+  { id: 'slot-ocean-drift', name: 'Ocean Drift', category: 'slots', rtp: 0.9578, volatility: 'low', reels: 5, rows: [3, 4, 5, 4, 3], lines: 720, pays: 'ways', minBet: 10, maxBet: 10000, theme: { primary: '#0C4A6E', secondary: '#0EA5E9', accent: '#BAE6FD' }, model: 'ways-diamond', art: 'pirate' },
+  { id: 'slot-sunset-strip', name: 'Sunset Strip', category: 'slots', rtp: 0.9604, volatility: 'low', reels: 5, rows: [3, 3, 3, 3, 3], lines: 20, pays: 'lines', minBet: 20, maxBet: 50000, theme: { primary: '#9A3412', secondary: '#FB923C', accent: '#FED7AA' }, model: 'classic-20', art: 'wildwest' },
+  { id: 'slot-midnight-gold', name: 'Midnight Gold', category: 'slots', rtp: 0.95, volatility: 'medium', reels: 5, rows: [3, 3, 3, 3, 3], lines: 10, pays: 'lines', minBet: 20, maxBet: 50000, theme: { primary: '#1C1917', secondary: '#78716C', accent: '#FFC53D' }, model: 'lines-10', art: 'wildwest' },
+  { id: 'slot-neon-alley', name: 'Neon Alley', category: 'slots', rtp: 0.95, volatility: 'medium', reels: 5, rows: [3, 3, 3, 3, 3], lines: 10, pays: 'lines', minBet: 20, maxBet: 50000, theme: { primary: '#4C1D95', secondary: '#2FE3D6', accent: '#FF3D8A' }, model: 'lines-10', tag: 'new', art: 'orb' },
+  { id: 'slot-desert-mirage', name: 'Desert Mirage', category: 'slots', rtp: 0.95, volatility: 'medium', reels: 5, rows: [3, 3, 3, 3, 3], lines: 10, pays: 'lines', minBet: 20, maxBet: 50000, theme: { primary: '#78350F', secondary: '#D97706', accent: '#FDE68A' }, model: 'lines-10', art: 'egypt' },
+  { id: 'slot-frost-peak', name: 'Frost Peak', category: 'slots', rtp: 0.95, volatility: 'medium', reels: 5, rows: [3, 3, 3, 3, 3], lines: 10, pays: 'lines', minBet: 10, maxBet: 10000, theme: { primary: '#1E3A8A', secondary: '#60A5FA', accent: '#DBEAFE' }, model: 'lines-10', art: 'orb' },
+  { id: 'slot-jade-temple', name: 'Jade Temple', category: 'slots', rtp: 0.9578, volatility: 'low', reels: 5, rows: [3, 4, 5, 4, 3], lines: 720, pays: 'ways', minBet: 20, maxBet: 50000, theme: { primary: '#134E4A', secondary: '#14B8A6', accent: '#99F6E4' }, model: 'ways-diamond', art: 'asian' },
+  { id: 'slot-carnival-row', name: 'Carnival Row', category: 'slots', rtp: 0.9592, volatility: 'medium', reels: 5, rows: [3, 3, 3, 3, 3], lines: 25, pays: 'lines', minBet: 20, maxBet: 50000, theme: { primary: '#831843', secondary: '#EC4899', accent: '#FBCFE8' }, model: 'lines-25', art: 'orb' },
+  { id: 'slot-jungle-run', name: 'Jungle Run', category: 'slots', rtp: 0.9592, volatility: 'medium', reels: 5, rows: [3, 3, 3, 3, 3], lines: 25, pays: 'lines', minBet: 20, maxBet: 50000, theme: { primary: '#14532D', secondary: '#65A30D', accent: '#D9F99D' }, model: 'lines-25', art: 'jungle' },
+  { id: 'slot-city-lights', name: 'City Lights', category: 'slots', rtp: 0.9437, volatility: 'high', reels: 5, rows: [3, 3, 3, 3, 3], lines: 20, pays: 'lines', cascades: true, minBet: 20, maxBet: 50000, theme: { primary: '#0F172A', secondary: '#38BDF8', accent: '#F1F5F9' }, model: 'tumble-20', art: 'orb' },
+  { id: 'slot-spice-market', name: 'Spice Market', category: 'slots', rtp: 0.9592, volatility: 'medium', reels: 5, rows: [3, 3, 3, 3, 3], lines: 25, pays: 'lines', minBet: 10, maxBet: 10000, theme: { primary: '#7C2D12', secondary: '#EA580C', accent: '#FFEDD5' }, model: 'lines-25', art: 'asian' },
+  { id: 'slot-aurora-borealis', name: 'Aurora', category: 'slots', rtp: 0.9578, volatility: 'low', reels: 5, rows: [3, 4, 5, 4, 3], lines: 720, pays: 'ways', minBet: 20, maxBet: 50000, theme: { primary: '#312E81', secondary: '#818CF8', accent: '#C7D2FE' }, model: 'ways-diamond', art: 'orb' },
+  { id: 'slot-dragons-hoard', name: 'Dragon\'s Hoard', category: 'slots', rtp: 0.95, volatility: 'very-high', reels: 5, rows: [3, 3, 3, 3, 3], lines: 20, pays: 'lines', minBet: 100, maxBet: 200000, theme: { primary: '#450A0A', secondary: '#B91C1C', accent: '#FFC53D' }, model: 'high-vol', tag: 'mega', art: 'asian' },
+  { id: 'slot-vault-breaker', name: 'Vault Breaker', category: 'slots', rtp: 0.95, volatility: 'very-high', reels: 5, rows: [3, 3, 3, 3, 3], lines: 20, pays: 'lines', minBet: 100, maxBet: 200000, theme: { primary: '#18181B', secondary: '#52525B', accent: '#2FE3D6' }, model: 'high-vol', art: 'pirate' },
+  { id: 'slot-supernova', name: 'Supernova', category: 'slots', rtp: 0.9437, volatility: 'high', reels: 5, rows: [3, 3, 3, 3, 3], lines: 20, pays: 'lines', cascades: true, minBet: 20, maxBet: 50000, theme: { primary: '#1E1B4B', secondary: '#7C3AED', accent: '#F0ABFC' }, model: 'tumble-20', tag: 'new', art: 'orb' },
+  { id: 'slot-pharaohs-vault', name: 'Pharaoh\'s Vault', category: 'slots', rtp: 0.95, volatility: 'very-high', reels: 5, rows: [3, 3, 3, 3, 3], lines: 20, pays: 'lines', minBet: 100, maxBet: 200000, theme: { primary: '#422006', secondary: '#CA8A04', accent: '#FEF08A' }, model: 'high-vol', art: 'egypt' },
+  { id: 'slot-storm-chaser', name: 'Storm Chaser', category: 'slots', rtp: 0.9437, volatility: 'high', reels: 5, rows: [3, 3, 3, 3, 3], lines: 20, pays: 'lines', cascades: true, minBet: 20, maxBet: 50000, theme: { primary: '#164E63', secondary: '#06B6D4', accent: '#CFFAFE' }, model: 'tumble-20', art: 'myth' },
+  { id: 'slot-lucky-sevens', name: 'Lucky Sevens', category: 'slots', rtp: 0.9479, volatility: 'high', reels: 3, rows: [1, 1, 1], lines: 1, pays: 'lines', minBet: 10, maxBet: 10000, theme: { primary: '#7F1D1D', secondary: '#EF4444', accent: '#FFC53D' }, model: 'classic-3', art: 'fruit' },
+  { id: 'slot-triple-bar', name: 'Triple Bar', category: 'slots', rtp: 0.948, volatility: 'medium', reels: 3, rows: [3, 3, 3], lines: 5, pays: 'lines', minBet: 10, maxBet: 10000, theme: { primary: '#1C1917', secondary: '#57534E', accent: '#E6CE8C' }, model: 'classic-3x3', art: 'fruit' },
+  { id: 'slot-fruit-stand', name: 'Fruit Stand', category: 'slots', rtp: 0.948, volatility: 'medium', reels: 3, rows: [3, 3, 3], lines: 5, pays: 'lines', minBet: 10, maxBet: 10000, theme: { primary: '#166534', secondary: '#22C55E', accent: '#FEF08A' }, model: 'classic-3x3', art: 'fruit' },
 ];
 
 /** Paytables by model id. See the note in the generator about the two units. */
@@ -42,6 +42,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
   "classic-20": {
     "id": "classic-20",
     "lines": 20,
+    "pays": "lines",
     "symbols": [
       {
         "id": "WILD",
@@ -131,6 +132,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
   "lines-10": {
     "id": "lines-10",
     "lines": 10,
+    "pays": "lines",
     "symbols": [
       {
         "id": "WILD",
@@ -220,6 +222,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
   "lines-25": {
     "id": "lines-25",
     "lines": 25,
+    "pays": "lines",
     "symbols": [
       {
         "id": "WILD",
@@ -309,6 +312,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
   "high-vol": {
     "id": "high-vol",
     "lines": 20,
+    "pays": "lines",
     "symbols": [
       {
         "id": "WILD",
@@ -395,9 +399,255 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
     },
     "freeSpinMultiplier": 5
   },
+  "classic-3x3": {
+    "id": "classic-3x3",
+    "lines": 5,
+    "pays": "lines",
+    "symbols": [
+      {
+        "id": "WILD",
+        "kind": "wild",
+        "pays": {
+          "3": 324.28,
+          "4": 0,
+          "5": 0
+        }
+      },
+      {
+        "id": "SEVEN",
+        "kind": "normal",
+        "pays": {
+          "3": 162.14,
+          "4": 0,
+          "5": 0
+        }
+      },
+      {
+        "id": "BAR",
+        "kind": "normal",
+        "pays": {
+          "3": 48.64,
+          "4": 0,
+          "5": 0
+        }
+      },
+      {
+        "id": "BELL",
+        "kind": "normal",
+        "pays": {
+          "3": 32.43,
+          "4": 0,
+          "5": 0
+        }
+      },
+      {
+        "id": "CHERRY",
+        "kind": "normal",
+        "pays": {
+          "3": 16.21,
+          "4": 0,
+          "5": 0
+        }
+      },
+      {
+        "id": "PLUM",
+        "kind": "normal",
+        "pays": {
+          "3": 9.73,
+          "4": 0,
+          "5": 0
+        }
+      },
+      {
+        "id": "LEMON",
+        "kind": "normal",
+        "pays": {
+          "3": 6.49,
+          "4": 0,
+          "5": 0
+        }
+      }
+    ],
+    "scatterPays": {},
+    "freeSpinsAwarded": {},
+    "freeSpinMultiplier": 1
+  },
+  "ways-diamond": {
+    "id": "ways-diamond",
+    "lines": 720,
+    "pays": "ways",
+    "symbols": [
+      {
+        "id": "WILD",
+        "kind": "wild",
+        "pays": {
+          "3": 0,
+          "4": 0,
+          "5": 0
+        }
+      },
+      {
+        "id": "SEVEN",
+        "kind": "normal",
+        "pays": {
+          "3": 0.36,
+          "4": 1.07,
+          "5": 3.56
+        }
+      },
+      {
+        "id": "DIAMOND",
+        "kind": "normal",
+        "pays": {
+          "3": 0.26,
+          "4": 0.78,
+          "5": 2.61
+        }
+      },
+      {
+        "id": "BELL",
+        "kind": "normal",
+        "pays": {
+          "3": 0,
+          "4": 0.53,
+          "5": 2.13
+        }
+      },
+      {
+        "id": "BAR",
+        "kind": "normal",
+        "pays": {
+          "3": 0,
+          "4": 0.36,
+          "5": 1.42
+        }
+      },
+      {
+        "id": "CHERRY",
+        "kind": "normal",
+        "pays": {
+          "3": 0,
+          "4": 0.24,
+          "5": 0.95
+        }
+      },
+      {
+        "id": "PLUM",
+        "kind": "normal",
+        "pays": {
+          "3": 0,
+          "4": 0.18,
+          "5": 0.71
+        }
+      },
+      {
+        "id": "LEMON",
+        "kind": "normal",
+        "pays": {
+          "3": 0,
+          "4": 0.13,
+          "5": 0.52
+        }
+      }
+    ],
+    "scatterPays": {
+      "3": 0.36,
+      "4": 1.78,
+      "5": 8.9
+    },
+    "freeSpinsAwarded": {
+      "3": 8,
+      "4": 12,
+      "5": 20
+    },
+    "freeSpinMultiplier": 2
+  },
+  "tumble-20": {
+    "id": "tumble-20",
+    "lines": 20,
+    "pays": "lines",
+    "cascade": {
+      "ladder": [
+        2,
+        3,
+        5,
+        10
+      ],
+      "maxDrops": 8
+    },
+    "symbols": [
+      {
+        "id": "SEVEN",
+        "kind": "normal",
+        "pays": {
+          "3": 43.96,
+          "4": 219.82,
+          "5": 879.28
+        }
+      },
+      {
+        "id": "DIAMOND",
+        "kind": "normal",
+        "pays": {
+          "3": 32.97,
+          "4": 164.87,
+          "5": 659.46
+        }
+      },
+      {
+        "id": "BELL",
+        "kind": "normal",
+        "pays": {
+          "3": 21.98,
+          "4": 109.91,
+          "5": 439.64
+        }
+      },
+      {
+        "id": "BAR",
+        "kind": "normal",
+        "pays": {
+          "3": 14.29,
+          "4": 71.44,
+          "5": 285.77
+        }
+      },
+      {
+        "id": "CHERRY",
+        "kind": "normal",
+        "pays": {
+          "3": 8.79,
+          "4": 43.96,
+          "5": 175.86
+        }
+      },
+      {
+        "id": "PLUM",
+        "kind": "normal",
+        "pays": {
+          "3": 6.59,
+          "4": 32.97,
+          "5": 131.89
+        }
+      },
+      {
+        "id": "LEMON",
+        "kind": "normal",
+        "pays": {
+          "3": 4.4,
+          "4": 21.98,
+          "5": 87.93
+        }
+      }
+    ],
+    "scatterPays": {},
+    "freeSpinsAwarded": {},
+    "freeSpinMultiplier": 1
+  },
   "classic-3": {
     "id": "classic-3",
     "lines": 1,
+    "pays": "lines",
     "symbols": [
       {
         "id": "WILD",

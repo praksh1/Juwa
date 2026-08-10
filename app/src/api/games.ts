@@ -28,8 +28,24 @@ export interface SlotGame {
   rtp: number;
   volatility: 'low' | 'medium' | 'high' | 'very-high';
   reels: number;
-  rows: number;
+  /**
+   * Rows per reel. Always one entry per reel, even when they are all the same.
+   *
+   * An array rather than a number because not every game is a rectangle — the
+   * diamond games are 3-4-5-4-3 — and a single number cannot say that. The
+   * generator always emits the full shape so nothing downstream has to handle
+   * two forms.
+   */
+  rows: number[];
+  /**
+   * How many ways there are to win: paylines on a line game, and the product
+   * of the reel heights on a ways game (the 720 in "720 ways").
+   */
   lines: number;
+  /** Whether `lines` means paylines or ways. Decides how wins are explained. */
+  pays: 'lines' | 'ways';
+  /** Winning symbols are removed and new ones drop into the gap. */
+  cascades?: boolean;
   minBet: number;
   maxBet: number;
   theme: { primary: string; secondary: string; accent: string };
@@ -63,6 +79,9 @@ export interface SlotGame {
 export interface SlotModelInfo {
   id: string;
   lines: number;
+  pays: 'lines' | 'ways';
+  /** Present only on tumbling models. The ladder each successive drop pays at. */
+  cascade?: { ladder: number[]; maxDrops: number };
   symbols: {
     id: string;
     kind: 'normal' | 'wild' | 'scatter';

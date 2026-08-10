@@ -23,7 +23,7 @@
 
 import { getAccessToken } from './auth';
 import { SLOT_GAMES } from './slot-games.generated';
-import { slotPaytable } from './games';
+import { slotPaytable, type SlotModelInfo } from './games';
 import { demoAct, demoPlaceBet, isInstantGame } from './demo-instant';
 
 export type RoundStatus = 'awaiting-action' | 'settled';
@@ -57,6 +57,27 @@ export interface SpinResult {
   lineWins: LineWin[];
   scatterCount: number;
   scatterMultiplier: number;
+  totalMultiplier: number;
+  /**
+   * Tumbles after the first grid, in order.
+   *
+   * Each is a grid of its own with its own wins, because that is what the
+   * player is shown: the winning symbols vanish, everything above falls into
+   * the hole, and the new grid is scored again at a higher rate. A client
+   * given only the final state would show a cascade as a single large win and
+   * throw away the entire mechanic.
+   *
+   * Optional so a round settled by an older server still renders — it simply
+   * has nothing to tumble.
+   */
+  cascades?: CascadeStep[];
+}
+
+export interface CascadeStep {
+  grid: string[][];
+  lineWins: LineWin[];
+  /** Where on the ladder this drop paid: 2x, 3x, and so on. */
+  stepMultiplier: number;
   totalMultiplier: number;
 }
 
@@ -138,10 +159,17 @@ function isSlotGame(gameId: string): boolean {
   return SLOT_GAMES.some((game) => game.id === gameId);
 }
 
-/** The grid shape the real server would deal for this game. */
-function slotShape(gameId: string): { reels: number; rows: number } {
+/**
+ * The grid shape the real server would deal for this game.
+ *
+ * `rows` is per reel, so a ragged game deals a ragged grid. Falling back to a
+ * flat 5x3 for an unknown id is deliberate — the demo should still render
+ * something rather than deal a grid with no cells in it.
+ */
+function slotShape(gameId: string): { reels: number; rows: number[]; ways: boolean } {
   const game = SLOT_GAMES.find((g) => g.id === gameId);
-  return { reels: game?.reels ?? 5, rows: game?.rows ?? 3 };
+  if (!game) return { reels: 5, rows: [3, 3, 3, 3, 3], ways: false };
+  return { reels: game.reels, rows: [...game.rows], ways: game.pays === 'ways' };
 }
 
 export class PlayApiError extends Error {
@@ -367,6 +395,102 @@ function demoPaylines(reels: number, rows: number): number[][] {
   return lines;
 }
 
+/**
+ * A crude payout for the demo, purely so win presentation has something to
+ * render.
+ *
+ * The line shapes are INVENTED FOR THE DEMO. They are not the engine's
+ * paylines and are not meant to match them — the whole spin is fabricated
+ * here, so there is nothing to be consistent with. What matters is that they
+ * include zig-zags: a stub that only ever produced straight rows would let the
+ * win-line overlay look finished while every bent line it will meet in
+ * production went untested.
+ *
+ * The per-symbol RATE, on the other hand, is the real one. The app carries the
+ * paytable for the rules screen, and paying an invented figure would put the
+ * demo in visible contradiction with the paytable printed two taps away. A
+ * player cannot tell "the demo's odds are fake" from "the paytable is wrong",
+ * and only one of those is true.
+ */
+function demoLineWins(
+  grid: string[][],
+  reels: number,
+  rows: number,
+  paytable: SlotModelInfo | undefined,
+): { lineWins: LineWin[]; baseMultiplier: number } {
+  const demoLines = demoPaylines(reels, rows);
+  const lineWins: LineWin[] = [];
+  for (const [lineIndex, line] of demoLines.entries()) {
+    const symbols = line.map((row, reel) => grid[reel]![row]!);
+    const first = symbols[0]!;
+    let count = 1;
+    while (count < reels && (symbols[count] === first || symbols[count] === 'WILD')) count++;
+    if (count < 3) continue;
+
+    const cells: [number, number][] = [];
+    for (let reel = 0; reel < count; reel++) cells.push([reel, line[reel]!]);
+    const pays = paytable?.symbols.find((sym) => sym.id === first)?.pays;
+    const multiplier = pays?.[String(Math.min(count, 5)) as '3' | '4' | '5'] ?? count * 4;
+    lineWins.push({ line: lineIndex, symbol: first, count, multiplier, cells });
+  }
+  // Divided by the game's own payline count, exactly as the engine does —
+  // line wins are quoted per line.
+  const lineCount = paytable?.lines ?? demoLines.length;
+  return {
+    lineWins,
+    baseMultiplier: lineWins.reduce((sum, w) => sum + w.multiplier, 0) / lineCount,
+  };
+}
+
+/**
+ * The same, for a ways game.
+ *
+ * Worth having rather than falling back to lines, because the two are visibly
+ * different on screen: a ways win lights several cells per reel at once, and a
+ * demo that only ever drew single-cell lines would leave that entirely
+ * unexercised on the three games that use it.
+ *
+ * NOT divided by anything. A ways paytable is quoted against the whole stake,
+ * which is the same rule the engine follows and the one place this stub has to
+ * agree with it or the demo balance moves at a completely different rate from
+ * the real one.
+ */
+function demoWaysWins(
+  grid: string[][],
+  paytable: SlotModelInfo | undefined,
+): { lineWins: LineWin[]; baseMultiplier: number } {
+  const lineWins: LineWin[] = [];
+  for (const [index, spec] of (paytable?.symbols ?? []).entries()) {
+    if (spec.kind !== 'normal') continue;
+
+    const hits: [number, number][][] = [];
+    for (const [reel, column] of grid.entries()) {
+      const onReel: [number, number][] = [];
+      for (const [row, symbol] of column.entries()) {
+        if (symbol === spec.id || symbol === 'WILD') onReel.push([reel, row]);
+      }
+      if (onReel.length === 0) break;
+      hits.push(onReel);
+    }
+    if (hits.length < 3) continue;
+
+    const rate = spec.pays[String(Math.min(hits.length, 5)) as '3' | '4' | '5'] ?? 0;
+    if (rate <= 0) continue;
+    const waysCount = hits.reduce((product, onReel) => product * onReel.length, 1);
+    lineWins.push({
+      line: index,
+      symbol: spec.id,
+      count: hits.length,
+      multiplier: rate * waysCount,
+      cells: hits.flat(),
+    });
+  }
+  return {
+    lineWins,
+    baseMultiplier: lineWins.reduce((sum, w) => sum + w.multiplier, 0),
+  };
+}
+
 export class DemoPlayApi implements PlayApi {
   private balance: number;
 
@@ -512,50 +636,19 @@ export class DemoPlayApi implements PlayApi {
       };
     }
 
-    // Deal the shape the real server would for this game — three of the
-    // catalogue's slots are three-reel classics, and a stub that always dealt
-    // 5x3 would render two columns the game does not have.
-    const { reels, rows } = slotShape(request.gameId);
-    const grid: string[][] = Array.from({ length: reels }, () =>
-      Array.from({ length: rows }, () => weightedSymbol()),
+    // Deal the shape the real server would for this game. The catalogue holds
+    // three-reel classics and 3-4-5-4-3 diamonds as well as 5x3s, and a stub
+    // that always dealt a flat rectangle would render columns and rows the
+    // game does not have.
+    const { reels, rows, ways } = slotShape(request.gameId);
+    const grid: string[][] = rows.map((height) =>
+      Array.from({ length: height }, () => weightedSymbol()),
     );
 
-    // A crude payout, purely so win presentation has something to render.
-    //
-    // The shapes below are INVENTED FOR THE DEMO. They are not the engine's
-    // paylines and are not meant to match them — the whole spin is fabricated
-    // here, so there is nothing to be consistent with. What matters is that
-    // they include zig-zags: a stub that only ever produced straight rows
-    // would let the win-line overlay look finished while every bent line it
-    // will meet in production went untested.
-    const demoLines = demoPaylines(reels, rows);
     const paytable = slotPaytable(request.gameId);
-    const lineWins: LineWin[] = [];
-    for (const [lineIndex, line] of demoLines.entries()) {
-      const symbols = line.map((row, reel) => grid[reel]![row]!);
-      const first = symbols[0]!;
-      let count = 1;
-      while (count < reels && (symbols[count] === first || symbols[count] === 'WILD')) count++;
-      if (count >= 3) {
-        const cells: [number, number][] = [];
-        for (let reel = 0; reel < count; reel++) cells.push([reel, line[reel]!]);
-        // The REAL per-line payout for this symbol, not an invented one.
-        //
-        // The grid is still fabricated and the frequencies are nothing like
-        // the certified model — but now that the app carries the paytable for
-        // the rules screen, paying `count * 4` would put a demo that visibly
-        // contradicts the paytable printed two taps away on the same screen.
-        // A player cannot tell "the demo's odds are fake" from "the paytable
-        // is wrong", and only one of those is true.
-        const pays = paytable?.symbols.find((sym) => sym.id === first)?.pays;
-        const multiplier = pays?.[String(Math.min(count, 5)) as '3' | '4' | '5'] ?? count * 4;
-        lineWins.push({ line: lineIndex, symbol: first, count, multiplier, cells });
-      }
-    }
-    // Divided by the game's own payline count, exactly as the engine does —
-    // line wins are quoted per line.
-    const lineCount = paytable?.lines ?? demoLines.length;
-    const baseMultiplier = lineWins.reduce((sum, w) => sum + w.multiplier, 0) / lineCount;
+    const { lineWins, baseMultiplier } = ways
+      ? demoWaysWins(grid, paytable)
+      : demoLineWins(grid, reels, rows[0] ?? 3, paytable);
 
     /**
      * The bonus round, occasionally.
@@ -569,8 +662,8 @@ export class DemoPlayApi implements PlayApi {
     const scatterCount = Math.random() < 1 / 12 ? 3 : 0;
     const freeSpinsAwarded = scatterCount >= 3 ? 8 : 0;
     const freeSpins = Array.from({ length: freeSpinsAwarded }, () => {
-      const fsGrid: string[][] = Array.from({ length: reels }, () =>
-        Array.from({ length: rows }, () => weightedSymbol()),
+      const fsGrid: string[][] = rows.map((height) =>
+        Array.from({ length: height }, () => weightedSymbol()),
       );
       const multiplier = (Math.random() < 0.45 ? Math.random() * 6 : 0);
       return {

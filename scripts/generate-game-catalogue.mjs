@@ -22,6 +22,25 @@ const { SLOT_CATALOGUE, SLOT_MODELS } = await import(
   resolve(root, 'packages/engine/dist/games/slot-catalogue.js')
 );
 
+/** Rows per reel, whether the model declared one number or a shape. */
+const heights = (math) =>
+  typeof math.rows === 'number'
+    ? Array.from({ length: math.reels }, () => math.rows)
+    : [...math.rows];
+
+/**
+ * How many ways there are to win, in whichever sense the model means it.
+ *
+ * A line game has as many as it has paylines. A ways game has the product of
+ * its reel heights — that is the 720 in "720 ways", and it is the number the
+ * player is shown. Reading `.length` off the string `'ways'` returns 4, which
+ * is exactly the sort of wrong answer that looks plausible on a lobby tile.
+ */
+const wayCount = (math) =>
+  math.paylines === 'ways'
+    ? heights(math).reduce((product, h) => product * h, 1)
+    : math.paylines.length;
+
 const entries = SLOT_CATALOGUE.map((game) => {
   const model = SLOT_MODELS[game.model];
   return {
@@ -31,8 +50,10 @@ const entries = SLOT_CATALOGUE.map((game) => {
     rtp: model.rtp,
     volatility: model.volatility,
     reels: model.math.reels,
-    rows: model.math.rows,
-    lines: model.math.paylines.length,
+    rows: heights(model.math),
+    lines: wayCount(model.math),
+    pays: model.math.paylines === 'ways' ? 'ways' : 'lines',
+    ...(model.math.cascade ? { cascades: true } : {}),
     minBet: game.limits.min,
     maxBet: game.limits.max,
     theme: game.theme,
@@ -69,7 +90,9 @@ for (const [id, model] of Object.entries(SLOT_MODELS)) {
   const round = (n) => Math.round(n * 100) / 100;
   models[id] = {
     id,
-    lines: model.math.paylines.length,
+    lines: wayCount(model.math),
+    pays: model.math.paylines === 'ways' ? 'ways' : 'lines',
+    ...(model.math.cascade ? { cascade: { ...model.math.cascade, ladder: [...model.math.cascade.ladder] } } : {}),
     symbols: model.math.symbols
       .filter((s) => s.kind !== 'scatter')
       .map((s) => ({
@@ -85,8 +108,13 @@ for (const [id, model] of Object.entries(SLOT_MODELS)) {
   };
 }
 
-const field = (k, v) =>
-  `${k}: ${typeof v === 'string' ? `'${v.replace(/'/g, "\\'")}'` : v}`;
+const field = (k, v) => {
+  if (typeof v === 'string') return `${k}: '${v.replace(/'/g, "\\'")}'`;
+  // Arrays need brackets. Without this the ragged shapes emitted
+  // `rows: 3,4,5,4,3`, which is four extra object fields and a syntax error.
+  if (Array.isArray(v)) return `${k}: [${v.join(', ')}]`;
+  return `${k}: ${v}`;
+};
 
 const body = entries
   .map((e) => {
