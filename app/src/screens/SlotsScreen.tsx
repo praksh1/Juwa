@@ -5,7 +5,7 @@ import { format, minor } from '@juwa/money';
 import { betOptions, suggestedBet } from '@juwa/economy';
 import { Button, Card, Txt } from '../components/primitives';
 import { useRoute } from '@react-navigation/native';
-import { Reel, SYMBOL_SIZE, type ReelPhase } from '../components/Reel';
+import { Reel, SPIN_UP_SECONDS, SYMBOL_SIZE, type ReelPhase } from '../components/Reel';
 import { useCompactLayout } from '../layout';
 import { scatterTrigger, slotDetails, slotPaytable } from '../api/games';
 import { sounds, spinNow, unlock } from '../sound';
@@ -42,6 +42,21 @@ const STAGGER_SECONDS = 0.27;
 const ANTICIPATION_SECONDS = 0.6;
 /** Booked slightly ahead so the audio thread receives the schedule in time. */
 const LEAD_IN_SECONDS = 0.04;
+/**
+ * The shortest the reels may loop before they are allowed to start landing.
+ *
+ * The reels begin turning on the tap and land when the server answers, which
+ * is the trick that hides the round trip inside an animation the player was
+ * going to watch anyway. But the demo adapter answers in 180ms and a fast
+ * connection is not much slower — less than the 420ms the reels take to reach
+ * full speed. Without a floor the machine would begin decelerating while it
+ * was still accelerating, which does not look like a fast spin; it looks like
+ * a fault.
+ *
+ * The margin on top is so the reels are demonstrably AT speed for a moment
+ * rather than reaching it and immediately giving it up.
+ */
+const MIN_LOOP_SECONDS = SPIN_UP_SECONDS + 0.16;
 /**
  * How long the winning symbols stay lit before they are cleared by a tumble.
  *
@@ -379,6 +394,9 @@ export function SlotsScreen() {
     const token = ++spinToken.current;
     setError(null);
     setRound(null);
+    // On the same clock the reels and the stop sounds use, so the floor below
+    // is measured against the moment the reels actually started turning.
+    const startedTurningAt = spinNow();
     setReelPhase('spinning');
     setPhase('base');
     setRunningWin(0);
@@ -478,6 +496,15 @@ export function SlotsScreen() {
       });
       if (superseded()) return;
 
+      // Let the reels finish getting up to speed before asking them to stop.
+      // See MIN_LOOP_SECONDS: on a fast connection the answer arrives while
+      // they are still accelerating.
+      const spentSoFar = spinNow() - startedTurningAt;
+      if (spentSoFar < MIN_LOOP_SECONDS) {
+        await wait((MIN_LOOP_SECONDS - spentSoFar) * 1000);
+        if (superseded()) return;
+      }
+
       const state = result.state as SlotsState;
       const spinWin = (multiplier: number) => Math.floor(bet * multiplier);
 
@@ -543,9 +570,14 @@ export function SlotsScreen() {
 
           // A short loop before each landing, so a free spin still reads as a
           // spin. The results are already decided — this is presentation.
+          //
+          // Long enough for the shortened spin-up below to complete: a free
+          // spin that starts landing mid-ramp has the same velocity step as a
+          // base spin would, and there are a dozen of them in a row to notice
+          // it in.
           setReelPhase('spinning');
           sounds.spinStart();
-          await wait(260);
+          await wait(SPIN_UP_SECONDS * FS_SPEED * 1000 + 90);
           if (superseded()) return;
 
           // Free spins land faster: the tension that earns a slow base spin is
@@ -647,6 +679,9 @@ export function SlotsScreen() {
               litCells={lit}
               size={symbolSize}
               {...(cascadeStep > 0 ? { travel: CASCADE_TRAVEL } : {})}
+              // Free spins run at roughly half length all through, and a
+              // spin-up left at its base duration would be most of one.
+              spinUp={inFreeSpins ? SPIN_UP_SECONDS * FS_SPEED : SPIN_UP_SECONDS}
               anticipating={anticipating[i] ?? false}
               {...(details?.art ? { family: details.art } : {})}
               // Dimming needs something to contrast AGAINST. A scatter win

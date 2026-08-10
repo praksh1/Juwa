@@ -1,7 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
-import { colors, radius } from '@juwa/ui';
+import {
+  colors,
+  landBlur,
+  landPosition,
+  radius,
+  rampBlur,
+  rampDistance,
+  rampPosition,
+} from '@juwa/ui';
 import { SlotSymbol } from './SlotSymbol';
+import { usePrefersReducedMotion } from '../motion';
 import { spinNow } from '../sound';
 
 /**
@@ -54,22 +63,35 @@ const LANDING_FILLER = 10;
 /** Loop scroll rate, symbols per second. Fast enough to blur. */
 const LOOP_SYMBOLS_PER_SECOND = 18;
 
-export type ReelPhase = 'idle' | 'spinning' | 'landing';
+/**
+ * How long the reel takes to get up to speed — including the pull-back.
+ *
+ * A real reel is a wheel with mass. Pressing the button engages a drive that
+ * has to overcome it, and the wheel rocks BACKWARDS a fraction of a symbol
+ * before it goes anywhere. It is a tiny movement, maybe a quarter of a symbol,
+ * and it is most of the difference between a machine that feels mechanical and
+ * one that feels like a list being scrolled: without it the reels are at full
+ * speed on the first frame, which nothing with mass has ever done.
+ *
+ * The screen must not begin the landing before this has finished — a reel that
+ * decelerates while it is still accelerating reads as a fault. See
+ * `MIN_LOOP_SECONDS` in SlotsScreen.
+ */
+export const SPIN_UP_SECONDS = 0.42;
 
 /**
- * Fast out, hard decelerate, overshoot, settle — a reel hitting its detent.
+ * Peak blur radius as a fraction of the symbol height.
  *
- * The overshoot is not decoration. A curve that approaches its target
- * asymptotically looks stopped well before it formally ends, so a stop sound
- * booked for the end arrives after the picture has already settled. This one is
- * still visibly moving until the last frame.
+ * Scaled rather than fixed, because the machine shrinks to 26 points in
+ * landscape and a blur tuned for a 58-point symbol turns a small one into a
+ * smudge with no shape left in it at all.
  */
-function easeOutBack(u: number): number {
-  const c1 = 1.70158;
-  const c3 = c1 + 1;
-  const p = u - 1;
-  return 1 + c3 * p * p * p + c1 * p * p;
-}
+const BLUR_RATIO = 0.085;
+/** How far the strip fades at full speed. Sells the speed on its own where
+ *  `filter` is not supported, and stops the blur reading as a focus fault. */
+const SPIN_FADE = 0.22;
+
+export type ReelPhase = 'idle' | 'spinning' | 'landing';
 
 export interface ReelProps {
   /** The three symbols this reel shows once landed, top to bottom. */
@@ -137,6 +159,14 @@ export interface ReelProps {
    * and the symbols that replaced it.
    */
   travel?: number;
+  /**
+   * Seconds the reel takes to reach full speed, pull-back included.
+   *
+   * A prop because free spins run the whole machine at roughly half length,
+   * and a spin-up that stayed at its base duration would take most of a free
+   * spin on its own.
+   */
+  spinUp?: number;
   /** Increments once per spin, so each spin is a distinct animation. */
   round?: number;
   /** Fires when this reel physically stops. */
@@ -157,6 +187,7 @@ export function Reel({
   litCells,
   size = SYMBOL_SIZE,
   travel = LANDING_FILLER,
+  spinUp = SPIN_UP_SECONDS,
   anticipating = false,
   celebrating = false,
   round = 0,
@@ -164,6 +195,18 @@ export function Reel({
   onLanded,
 }: ReelProps) {
   const offset = useRef(new Animated.Value(0)).current;
+  /**
+   * How fast this reel is moving right now, as a fraction of its top speed.
+   *
+   * Driven from the same rAF ticks that place the strip, and derived from the
+   * DERIVATIVE of the position curve rather than from elapsed time. That is
+   * what keeps the blur honest: it peaks exactly when the reel is fastest and
+   * reaches zero exactly as it settles, including through the overshoot at the
+   * end of a landing, where a time-based fade would have cleared the blur
+   * while the reel was still visibly moving.
+   */
+  const speed = useRef(new Animated.Value(0)).current;
+  const reduceMotion = usePrefersReducedMotion();
   const loopFiller = useRef<string[]>(randomFiller(LOOP_SYMBOLS)).current;
   const landingFiller = useRef<string[]>(randomFiller(LANDING_FILLER)).current;
 
@@ -234,18 +277,42 @@ export function Reel({
     const startedAt = spinNow();
     let frame = 0;
 
+    /*
+     * The spin-up.
+     *
+     * `rate` is the strip's top speed in points per second. The ramp covers
+     * `rampDistance` in `spinUp` seconds along a back-ease, which dips
+     * backwards before it climbs — the pull-back — and the distance is chosen
+     * so that the ramp's slope where it ends is EXACTLY the loop's rate.
+     * Getting that wrong by any amount puts a velocity step at the handover,
+     * and a velocity step in something that has been accelerating like a wheel
+     * reads instantly as a dropped frame.
+     */
+    const rate = LOOP_SYMBOLS_PER_SECOND * size;
+    const ramp = rampDistance(rate, spinUp);
+
     const tick = () => {
       const elapsed = spinNow() - startedAt;
-      const travelled = elapsed * LOOP_SYMBOLS_PER_SECOND * size;
+      let travelled: number;
+      if (elapsed < spinUp) {
+        const u = elapsed / spinUp;
+        travelled = ramp * rampPosition(u);
+        speed.setValue(rampBlur(u));
+      } else {
+        travelled = ramp + (elapsed - spinUp) * rate;
+        speed.setValue(1);
+      }
       // Modulo keeps the value bounded; without it the transform grows without
-      // limit and eventually loses precision.
-      offset.setValue(((phaseOffset - travelled) % loopSpan) + loopSpan);
+      // limit and eventually loses precision. Adding a span first keeps the
+      // operand positive through the pull-back, where `travelled` is negative
+      // and a bare modulo would flip the strip a whole cycle.
+      offset.setValue((((phaseOffset - travelled) % loopSpan) + loopSpan) % loopSpan);
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spinning, index, loopSpan, size]);
+  }, [spinning, index, loopSpan, size, spinUp]);
 
   // ---------------------------------------------------------------- landing
   useEffect(() => {
@@ -256,7 +323,12 @@ export function Reel({
 
     const tick = () => {
       const u = Math.min(1, Math.max(0, (spinNow() - landFrom) / landDuration));
-      offset.setValue(landingTravel * (1 - easeOutBack(u)));
+      offset.setValue(landingTravel * (1 - landPosition(u)));
+      // Speed from the curve's own slope, normalised by its slope at the start.
+      // It falls to zero exactly at u = 1, THROUGH the overshoot — a blur faded
+      // on elapsed time instead would come off while the reel was still
+      // visibly rocking back into its detent.
+      speed.setValue(landBlur(u));
 
       if (u < 1) {
         frame = requestAnimationFrame(tick);
@@ -265,6 +337,7 @@ export function Reel({
       // Land exactly on zero. The eased value is within a fraction of a pixel
       // at u = 1, but "within a fraction" is not "on the payline".
       offset.setValue(0);
+      speed.setValue(0);
       if (!done) {
         done = true;
         setMoving(false);
@@ -281,7 +354,42 @@ export function Reel({
 
   return (
     <View style={[styles.window, { height: size * rows }]}>
-      <Animated.View style={{ transform: [{ translateY: offset }] }}>
+      {/*
+        The blur is a CSS filter, applied to the strip as a whole.
+
+        react-native-web passes unrecognised style properties straight through
+        to CSS, so `filter` reaches the browser; on a native build it is simply
+        dropped and the reel keeps the opacity fade, which carries the speed on
+        its own. That trade is deliberate now that this ships as a web app.
+
+        It is interpolated from `speed` rather than switched on with the phase.
+        A blur that appears and disappears with the spinning flag is a hard cut
+        at both ends — the reel snaps into focus a third of a second before it
+        stops moving — and the whole reason for deriving speed from the curve's
+        slope is that the blur can come off exactly as the reel settles.
+
+        There is no directional blur available here: CSS blur is isotropic, so
+        the symbols soften sideways as well as vertically. At a twentieth of a
+        symbol's height that is not visible in motion, and the alternative is an
+        SVG filter chain that react-native-svg does not expose.
+      */}
+      <Animated.View
+        style={{
+          transform: [{ translateY: offset }],
+          ...(reduceMotion
+            ? {}
+            : {
+                opacity: speed.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [1, 1 - SPIN_FADE],
+                }),
+                filter: speed.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ['blur(0px)', `blur(${(size * BLUR_RATIO).toFixed(2)}px)`],
+                }),
+              }),
+        }}
+      >
         {strip.map((symbol, i) => {
           const resultRow = i - resultStart;
           const onWinningLine =

@@ -3,3 +3,4 @@ export * from './contrast.js';
 export * from './anticipation.js';
 export * from './cabinet.js';
 export * from './title-metal.js';
+export * from './reel-motion.js';
