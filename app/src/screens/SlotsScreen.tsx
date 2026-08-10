@@ -709,6 +709,7 @@ export function SlotsScreen() {
             cellHeight={symbolSize}
             rows={ROWS}
             ways={details?.pays === 'ways'}
+            {...(details?.art ? { family: details.art } : {})}
           />
         </View>
 

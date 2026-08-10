@@ -18,7 +18,7 @@
 import React from 'react';
 import { Image } from 'react-native';
 import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
-import { symbolImage } from '../art/symbol-art';
+import { symbolDisplayName, symbolImage } from '../art/symbol-art';
 
 const uid = (symbol: string, name: string) => `sym-${symbol}-${name}`;
 
@@ -304,9 +304,11 @@ export function SlotSymbol({
         // `contain` so a wide subject keeps its proportions. `cover` would crop
         // a tiger's face off to fill a square cell.
         resizeMode="contain"
-        // The symbol name, not the file: a screen reader should hear what the
-        // reel landed on, not which theme is loaded.
-        accessibilityLabel={name}
+        // What is DRAWN, not what the engine calls it. Under a theme the
+        // symbol the maths calls LEMON is a pirate's hat, and announcing
+        // "lemon" describes a symbol that is not on the screen — the same
+        // mistake the win badge was making out loud.
+        accessibilityLabel={symbolDisplayName(family, name)}
       />
     );
   }

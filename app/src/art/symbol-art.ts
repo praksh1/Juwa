@@ -23,6 +23,8 @@
  * as a support ticket, not as a style note.
  */
 
+import { assetDisplayName } from '@juwa/ui';
+
 /** The five engine symbols a family re-skins, in descending pay order. */
 export const PICTURE_SYMBOLS = ['DIAMOND', 'BELL', 'CHERRY', 'PLUM', 'LEMON'] as const;
 export type PictureSymbol = (typeof PICTURE_SYMBOLS)[number];
@@ -110,6 +112,31 @@ export function symbolImage(family: string | undefined, symbol: string): string 
   const set = SYMBOL_FAMILIES[family];
   if (!set) return undefined;
   return (set as Record<string, string>)[symbol];
+}
+
+/**
+ * What to CALL a symbol on screen.
+ *
+ * The engine deals nine fixed ids and a theme redraws five of them, so under
+ * the pirate family the symbol the engine calls LEMON is a pirate's hat and
+ * the one it calls CHERRY is a compass. The win badge was printing the engine
+ * id, so a win on four hats announced itself as "4x LEMON" over a machine with
+ * no lemon anywhere on it. A player reported it as the machine paying for
+ * symbols that were not there, which is exactly what it looked like, and is
+ * the single worst thing a slot can appear to do.
+ *
+ * The name is derived from the ASSET FILENAME rather than from a table written
+ * alongside it. `pirate_hat.png` is already the answer; a hand-kept list of
+ * forty-five names is just a second place for the truth to live, and the first
+ * time an artist swaps an image the list is wrong in precisely the way this
+ * function exists to prevent.
+ *
+ * Falls back to the engine id, which is correct where it is also what is drawn:
+ * SEVEN, BAR, WILD and SCATTER are never re-skinned, and an unthemed game is
+ * meant to look like a fruit machine and does show a lemon.
+ */
+export function symbolDisplayName(family: string | undefined, symbol: string): string {
+  return assetDisplayName(symbolImage(family, symbol), symbol);
 }
 
 /**

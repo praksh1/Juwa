@@ -36,6 +36,7 @@ import { Animated, StyleSheet, View } from 'react-native';
 import Svg, { Circle, Polyline } from 'react-native-svg';
 import { colors, radius, spacing } from '@juwa/ui';
 import type { LineWin } from '../api/client';
+import { SlotSymbol } from './SlotSymbol';
 import { Txt } from './primitives';
 
 /**
@@ -48,6 +49,14 @@ import { Txt } from './primitives';
 export const CELL_HEIGHT = 58;
 /** Must match the `gap` on the reels row in SlotsScreen. */
 export const REEL_GAP = spacing.xs;
+/**
+ * Roughly how wide the badge is: a 16pt symbol, a gap, and "x5".
+ *
+ * An estimate rather than a measurement, and that is fine here — it is only
+ * used to keep the badge inside the machine, so being a few points out moves
+ * it a few points, while having no estimate at all hangs it off the edge.
+ */
+const BADGE_WIDTH = 52;
 
 /** How long the combined total is shown before the per-line walk begins. */
 const TOTAL_HOLD_MS = 1400;
@@ -203,6 +212,8 @@ interface WinLinesProps {
    * inferred from the shape of the win.
    */
   ways?: boolean;
+  /** Art family, so the badge can draw the symbol the reels are showing. */
+  family?: string;
 }
 
 /**
@@ -220,6 +231,7 @@ export function WinLines({
   cellHeight = CELL_HEIGHT,
   rows,
   ways = false,
+  family,
 }: WinLinesProps) {
   const fade = useRef(new Animated.Value(0)).current;
   const shown =
@@ -351,6 +363,8 @@ export function WinLines({
           reelWidth={reelWidth}
           cellHeight={cellHeight}
           centreY={centreY}
+          width={width}
+          {...(family ? { family } : {})}
         />
       ) : null}
     </Animated.View>
@@ -369,11 +383,15 @@ function LineBadge({
   reelWidth,
   cellHeight,
   centreY,
+  family,
+  width,
 }: {
   win: LineWin;
   reelWidth: number;
   cellHeight: number;
   centreY: (reel: number, row: number) => number;
+  family?: string;
+  width: number;
 }) {
   const cells = win.cells ?? [];
   const last = cells[cells.length - 1];
@@ -387,14 +405,29 @@ function LineBadge({
       style={[
         styles.badge,
         {
-          left: Math.max(0, x - 34),
+          // Clamped to the grid at BOTH ends. The badge labels the LAST cell
+          // of a win, which on a five-reel game is usually the rightmost reel,
+          // so without a right-hand clamp it hangs off the edge of the machine
+          // every time — which is where it was.
+          left: Math.min(Math.max(0, x - BADGE_WIDTH / 2), Math.max(0, width - BADGE_WIDTH)),
           // Sit above the cell, unless that is off the top of the grid.
           top: row === 0 ? y + cellHeight * 0.45 : y - cellHeight * 0.95,
         },
       ]}
     >
+      {/*
+        The symbol's own picture, not its engine id.
+
+        The id is what the maths deals — LEMON, CHERRY — and a theme redraws
+        five of the nine, so under the pirate family LEMON is a hat. Printing
+        the id put "4x LEMON" over a machine with no lemon on it, which a
+        player read, correctly, as the machine paying for symbols that were not
+        there. Drawing the actual symbol cannot be wrong in any theme, because
+        it is the same picture the reel is showing.
+      */}
+      <SlotSymbol name={win.symbol} size={16} {...(family ? { family } : {})} />
       <Txt variant="caption" color={colors.feedback.winBright}>
-        {win.count}× {win.symbol}
+        ×{win.count}
       </Txt>
     </View>
   );
@@ -403,6 +436,9 @@ function LineBadge({
 const styles = StyleSheet.create({
   badge: {
     position: 'absolute',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
     paddingHorizontal: spacing.xs,
     paddingVertical: 1,
     borderRadius: radius.sm,
