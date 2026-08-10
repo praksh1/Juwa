@@ -122,15 +122,17 @@ export function resolveHoldSpin(
   const cells = heights.reduce((sum, rows) => sum + rows, 0);
 
   /*
-   * Coin values obey `payoutScale` like every other payout.
+   * Coin values are ABSOLUTE — `payoutScale` is deliberately not applied.
    *
-   * Without this a model's return stops being linear in its scale — the base
-   * game moves and the feature does not — and calibrating it becomes an
-   * afternoon of nudging instead of one measurement and one division, which is
-   * the whole reason `payoutScale` exists.
+   * It was, briefly, because that keeps a model's return linear in its scale
+   * and calibration a single division. But the scale is an arbitrary
+   * calibration constant, and multiplying a prize by it turns "25x" into
+   * "17.11x". A player is being shown these numbers on the coins and on the
+   * wheel; a machine that promises 42.77x has stopped being a machine anyone
+   * would design. The base game absorbs the calibration instead, which costs
+   * one extra measurement and is worth it.
    */
-  const scale = math.payoutScale ?? 1;
-  const drawValue = () => (feature.values[weightedPick(feature.weights, rng)] ?? 0) * scale;
+  const drawValue = () => feature.values[weightedPick(feature.weights, rng)] ?? 0;
 
   const held = new Map<string, HeldCoin>();
   const seed: HeldCoin[] = [];
@@ -166,7 +168,7 @@ export function resolveHoldSpin(
   const full = held.size >= cells;
   let multiplier = 0;
   for (const coin of held.values()) multiplier += coin.value;
-  if (full) multiplier += feature.fullBonus * scale;
+  if (full) multiplier += feature.fullBonus;
 
   return { kind: 'hold-spin', seed, steps, full, multiplier };
 }
@@ -174,13 +176,12 @@ export function resolveHoldSpin(
 /** Spin the wheel. One draw, one number, nothing to read. */
 export function resolveWheel(
   feature: Extract<SlotFeature, { kind: 'wheel' }>,
-  math: SlotMath,
   rng: RngStream,
 ): WheelOutcome {
   const index = weightedPick(feature.weights, rng);
-  // Scaled for the same reason the coins are — see `resolveHoldSpin`.
-  const multiplier = (feature.segments[index] ?? 0) * (math.payoutScale ?? 1);
-  return { kind: 'wheel', index, multiplier };
+  // Unscaled, for the reason given in `resolveHoldSpin`: the number on the
+  // segment is the number the player is promised.
+  return { kind: 'wheel', index, multiplier: feature.segments[index] ?? 0 };
 }
 
 /* ------------------------------------------------------------------ round */
@@ -228,7 +229,7 @@ export function resolveRound(
     };
   }
   if (feature?.kind === 'wheel' && base.scatterCount >= feature.trigger) {
-    const outcome = resolveWheel(feature, math, rng);
+    const outcome = resolveWheel(feature, rng);
     return {
       base,
       freeSpins: [],

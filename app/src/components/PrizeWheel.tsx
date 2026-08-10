@@ -112,15 +112,26 @@ export function PrizeWheel({ segments, index, onDone }: PrizeWheelProps) {
             {segments.map((value, i) => {
               const mid = i * arc + arc / 2;
               const rad = ((mid - 90) * Math.PI) / 180;
+              const x = 50 + 30 * Math.cos(rad);
+              const y = 50 + 30 * Math.sin(rad);
               return (
                 <SvgText
                   key={`t${i}`}
-                  x={50 + 30 * Math.cos(rad)}
-                  y={50 + 30 * Math.sin(rad) + 3}
-                  fontSize={9}
+                  x={x}
+                  y={y}
+                  fontSize={10}
                   fontWeight="900"
                   fill="#1A1206"
                   textAnchor="middle"
+                  /*
+                   * Each label turns with its OWN segment, not just with the
+                   * wheel. Drawn axis-aligned inside a rotating group, every
+                   * label below the hub arrived upside down — which is what a
+                   * real wheel avoids by printing its prizes radially. `mid`
+                   * points the baseline out from the centre; the extra 90°
+                   * lays it along the spoke rather than across it.
+                   */
+                  transform={`rotate(${mid + 90}, ${x}, ${y})`}
                 >
                   {`${value}x`}
                 </SvgText>

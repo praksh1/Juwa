@@ -151,7 +151,7 @@ test('a coin that sticks puts the respins back to full', () => {
   assert.ok(out.multiplier >= 109, `expected the full bonus, got ${out.multiplier}`);
 });
 
-test('coin values and the full bonus obey payoutScale', () => {
+test('coin values are absolute — payoutScale must not touch a prize on screen', () => {
   const feature = { ...HOLD, coinChance: 1 } as const;
   const grid: SlotSymbol[][] = [
     ['SCATTER', 'BELL', 'BELL'],
@@ -165,9 +165,17 @@ test('coin values and the full bonus obey payoutScale', () => {
     grid,
     new RngStream('t', 'h', 4),
   );
-  // Same seed, same coins, half the money — which is what keeps a model's
-  // return linear in its scale and calibration a single division.
-  assert.equal(scaled.multiplier, plain.multiplier * 0.5);
+  /*
+   * Same seed, same coins, SAME money.
+   *
+   * This asserted the opposite for a while, because scaling the feature keeps a
+   * model's return linear in its scale and calibration a single division. It is
+   * the wrong trade: `payoutScale` is an arbitrary calibration constant, and
+   * multiplying a prize by it turns a 25x coin into 17.11x and a 50x wheel
+   * segment into 42.77x — numbers printed on the coin and on the wheel, in
+   * front of the player. The base game absorbs the calibration instead.
+   */
+  assert.equal(scaled.multiplier, plain.multiplier);
 });
 
 test('a hold-and-spin round is reproducible from its seed', () => {
@@ -192,19 +200,17 @@ const WHEEL = {
 } as const;
 
 test('the wheel always lands on a real segment', () => {
-  const math = testMath({ feature: WHEEL });
   for (let i = 0; i < 200; i++) {
-    const out = resolveWheel(WHEEL, math, new RngStream('t', 'wheel', i));
+    const out = resolveWheel(WHEEL, new RngStream('t', 'wheel', i));
     assert.ok(out.index >= 0 && out.index < WHEEL.segments.length);
     assert.equal(out.multiplier, WHEEL.segments[out.index]);
   }
 });
 
 test('the wheel respects its weights', () => {
-  const math = testMath({ feature: WHEEL });
   const counts = [0, 0, 0];
   for (let i = 0; i < 4_000; i++) {
-    counts[resolveWheel(WHEEL, math, new RngStream('t', 'w', i)).index]!++;
+    counts[resolveWheel(WHEEL, new RngStream('t', 'w', i)).index]!++;
   }
   // 90/9/1. Wide bands, because this is asserting that the weights are read at
   // all, not that 4,000 samples reproduce them precisely.

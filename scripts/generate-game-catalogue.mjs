@@ -122,7 +122,9 @@ for (const [id, model] of Object.entries(SLOT_MODELS)) {
             model.math.feature.kind === 'wheel'
               ? {
                   kind: 'wheel',
-                  segments: model.math.feature.segments.map((v) => round(v * scale)),
+                  // NOT scaled — see resolveWheel. The segment on screen is the
+                  // segment that pays.
+                  segments: [...model.math.feature.segments],
                 }
               : model.math.feature.kind === 'hold-spin'
                 ? { kind: 'hold-spin', respins: model.math.feature.respins }

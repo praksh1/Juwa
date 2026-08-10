@@ -325,7 +325,7 @@ export const SLOT_MODELS: Record<string, SlotModel> = {
     rtp: 0.9500,
     math: {
       reels: 5, rows: 3, paylines: LINES_20, symbols: fiveReelSymbols(1.6),
-      payoutScale: 0.7147,
+      payoutScale: 0.6882,
       scatterPays: { 3: 5, 4: 25, 5: 150 },
       // Kept for the scatter pay, but never awarded: the feature round below
       // replaces free spins, and `resolveRound` will not run both.
@@ -367,7 +367,7 @@ export const SLOT_MODELS: Record<string, SlotModel> = {
     rtp: 0.9481,
     math: {
       reels: 3, rows: 3, paylines: LINES_5, symbols: THREE_REEL_BONUS_SYMBOLS,
-      payoutScale: 0.8553,
+      payoutScale: 0.8545,
       scatterPays: {},
       freeSpinsAwarded: {},
       freeSpinMultiplier: 1,

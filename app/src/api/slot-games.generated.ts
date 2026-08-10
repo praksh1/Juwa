@@ -324,79 +324,79 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
         "id": "WILD",
         "kind": "wild",
         "pays": {
-          "3": 42.88,
-          "4": 274.44,
-          "5": 1235
+          "3": 41.29,
+          "4": 264.27,
+          "5": 1189.21
         }
       },
       {
         "id": "SEVEN",
         "kind": "normal",
         "pays": {
-          "3": 32.16,
-          "4": 205.83,
-          "5": 926.25
+          "3": 30.97,
+          "4": 198.2,
+          "5": 891.91
         }
       },
       {
         "id": "DIAMOND",
         "kind": "normal",
         "pays": {
-          "3": 25.01,
-          "4": 160.09,
-          "5": 720.42
+          "3": 24.09,
+          "4": 154.16,
+          "5": 693.71
         }
       },
       {
         "id": "BELL",
         "kind": "normal",
         "pays": {
-          "3": 15.72,
-          "4": 100.77,
-          "5": 453.12
+          "3": 15.14,
+          "4": 97.04,
+          "5": 436.32
         }
       },
       {
         "id": "BAR",
         "kind": "normal",
         "pays": {
-          "3": 10.01,
-          "4": 64.32,
-          "5": 288.02
+          "3": 9.63,
+          "4": 61.94,
+          "5": 277.34
         }
       },
       {
         "id": "CHERRY",
         "kind": "normal",
         "pays": {
-          "3": 6.43,
-          "4": 41.45,
-          "5": 185.11
+          "3": 6.19,
+          "4": 39.92,
+          "5": 178.24
         }
       },
       {
         "id": "PLUM",
         "kind": "normal",
         "pays": {
-          "3": 5,
-          "4": 32.16,
-          "5": 144.37
+          "3": 4.82,
+          "4": 30.97,
+          "5": 139.02
         }
       },
       {
         "id": "LEMON",
         "kind": "normal",
         "pays": {
-          "3": 3.57,
-          "4": 22.87,
-          "5": 102.92
+          "3": 3.44,
+          "4": 22.02,
+          "5": 99.1
         }
       }
     ],
     "scatterPays": {
-      "3": 3.57,
-      "4": 17.87,
-      "5": 107.21
+      "3": 3.44,
+      "4": 17.21,
+      "5": 103.23
     },
     "freeSpinsAwarded": {
       "3": 12,
@@ -418,7 +418,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
         "id": "WILD",
         "kind": "wild",
         "pays": {
-          "3": 342.12,
+          "3": 341.8,
           "4": 0,
           "5": 0
         }
@@ -427,7 +427,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
         "id": "SEVEN",
         "kind": "normal",
         "pays": {
-          "3": 171.06,
+          "3": 170.9,
           "4": 0,
           "5": 0
         }
@@ -436,7 +436,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
         "id": "BAR",
         "kind": "normal",
         "pays": {
-          "3": 51.32,
+          "3": 51.27,
           "4": 0,
           "5": 0
         }
@@ -445,7 +445,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
         "id": "BELL",
         "kind": "normal",
         "pays": {
-          "3": 34.21,
+          "3": 34.18,
           "4": 0,
           "5": 0
         }
@@ -454,7 +454,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
         "id": "CHERRY",
         "kind": "normal",
         "pays": {
-          "3": 17.11,
+          "3": 17.09,
           "4": 0,
           "5": 0
         }
@@ -463,7 +463,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
         "id": "PLUM",
         "kind": "normal",
         "pays": {
-          "3": 10.26,
+          "3": 10.25,
           "4": 0,
           "5": 0
         }
@@ -484,14 +484,14 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
     "feature": {
       "kind": "wheel",
       "segments": [
-        1.71,
-        4.28,
-        8.55,
-        2.57,
-        17.11,
-        4.28,
-        42.77,
-        2.57
+        2,
+        5,
+        10,
+        3,
+        20,
+        5,
+        50,
+        3
       ]
     }
   },
