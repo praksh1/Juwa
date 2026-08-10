@@ -140,13 +140,24 @@ console.log(
  */
 const supabaseAdminEnv = supabaseAdminFromEnv();
 const supabaseAdmin = isConfigured(supabaseAdminEnv) ? supabaseAdminEnv : undefined;
-console.log(
-  supabaseAdmin
-    ? `Agent-created player accounts: on, signing in at @${supabaseAdmin.playerEmailDomain}.`
-    : `Agent-created player accounts: off — still needs ${
-        isConfigured(supabaseAdminEnv) ? '' : supabaseAdminEnv.missing.join(' and ')
-      }. Agents can still invite players by link.`,
-);
+if (supabaseAdmin) {
+  console.log(
+    `Agent-created player accounts: on, signing in at @${supabaseAdmin.playerEmailDomain}.`,
+  );
+} else if (!isConfigured(supabaseAdminEnv)) {
+  console.log(
+    `Agent-created player accounts: off — still needs ${supabaseAdminEnv.missing.join(' and ')}. ` +
+      'Agents can still invite players by link.',
+  );
+  // Names only. A near miss is almost always a typo in the variable NAME, and
+  // the platform will never volunteer that a variable nobody reads exists.
+  if (supabaseAdminEnv.nearMisses?.length) {
+    console.log(
+      `  ...but these are set and look close: ${supabaseAdminEnv.nearMisses.join(', ')}. ` +
+        'Check the spelling — the name has to match exactly.',
+    );
+  }
+}
 
 const { server } = createServer({
   db: new PostgresDb(pool),

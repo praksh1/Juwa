@@ -64,7 +64,7 @@ export interface SupabaseAdminConfig {
  */
 export function supabaseAdminFromEnv(
   env: NodeJS.ProcessEnv = process.env,
-): SupabaseAdminConfig | { missing: string[] } {
+): SupabaseAdminConfig | { missing: string[]; nearMisses?: string[] } {
   const url = env['SUPABASE_URL']?.trim().replace(/\/+$/, '');
   const serviceRoleKey = env['SUPABASE_SERVICE_ROLE_KEY']?.trim();
 
@@ -82,7 +82,9 @@ export function supabaseAdminFromEnv(
   const missing: string[] = [];
   if (!url) missing.push('SUPABASE_URL');
   if (!serviceRoleKey) missing.push('SUPABASE_SERVICE_ROLE_KEY');
-  if (missing.length > 0) return { missing };
+  if (missing.length > 0) {
+    return { missing, ...(nearMisses(env, missing).length ? { nearMisses: nearMisses(env, missing) } : {}) };
+  }
 
   return {
     url: url!,
@@ -93,9 +95,58 @@ export function supabaseAdminFromEnv(
   };
 }
 
+/**
+ * Variables that look like somebody meant one of ours and mistyped it.
+ *
+ * The failure this catches is invisible from the outside: you set the variable,
+ * you redeploy, and the log still says it is missing — because the name is
+ * `SUPABASE_SERVICE_ROLE` or `SUPABASE_SERVICE_KEY` or has a stray space, and
+ * nothing in the platform will ever tell you that a variable nobody reads is
+ * not being read. Naming the near miss turns a half-hour of staring into one
+ * line of log.
+ *
+ * NAMES ONLY, never values. A log line is the last place a service-role key
+ * should appear, and printing "you set X" is exactly as useful as printing what
+ * X contains.
+ */
+function nearMisses(env: NodeJS.ProcessEnv, missing: string[]): string[] {
+  /*
+   * Every SUPABASE_* name this deployment legitimately reads.
+   *
+   * The rule is "anything else beginning SUPABASE_ is probably a typo", which
+   * catches mistakes nobody has thought of yet — SUPABASE_SERVICE_KEY,
+   * SUPABASE_SERVICEROLE_KEY, SUPABASE_SECRET. Matching on how similar two
+   * strings look would have caught only the ones I could imagine; matching on
+   * "not one of ours" catches the rest.
+   */
+  const known = new Set([
+    'SUPABASE_URL',
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'SUPABASE_JWT_SECRET',
+    'SUPABASE_ANON_KEY',
+    'EXPO_PUBLIC_SUPABASE_URL',
+    'EXPO_PUBLIC_SUPABASE_ANON_KEY',
+  ]);
+
+  const found: string[] = [];
+  for (const [name, value] of Object.entries(env)) {
+    const upper = name.toUpperCase();
+    if (!upper.includes('SUPABASE')) continue;
+
+    // Set to whitespace is as absent as unset, and much harder to spot — the
+    // platform shows the variable, so it looks done.
+    if (missing.includes(name) && !value?.trim()) {
+      found.push(`${name} (set, but empty)`);
+      continue;
+    }
+    if (!known.has(upper)) found.push(name);
+  }
+  return found;
+}
+
 /** Narrow the result of `supabaseAdminFromEnv`. */
 export function isConfigured(
-  result: SupabaseAdminConfig | { missing: string[] },
+  result: SupabaseAdminConfig | { missing: string[]; nearMisses?: string[] },
 ): result is SupabaseAdminConfig {
   return !('missing' in result);
 }
