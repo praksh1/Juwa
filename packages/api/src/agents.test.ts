@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { randomUUID } from 'node:crypto';
-import { PostgresDb } from '@juwa/server';
+import { AgentsDb, PostgresDb } from '@juwa/server';
 import { createServer } from './server.js';
 import { signJwt } from './jwt.js';
 
@@ -49,6 +49,9 @@ describe('agents', { skip: URL_ENV ? false : 'JUWA_AGENT_TEST_DATABASE_URL not s
   const NEWCOMER = randomUUID();
   const ORPHAN = randomUUID();
   let operatorId: string;
+  // The data layer directly, for the two lookups that have no HTTP route of
+  // their own worth asserting through.
+  let agentsDb: AgentsDb;
 
   const token = (sub: string) =>
     signJwt({ sub, exp: Math.floor(Date.now() / 1000) + 3600 }, SECRET);
@@ -104,6 +107,8 @@ describe('agents', { skip: URL_ENV ? false : 'JUWA_AGENT_TEST_DATABASE_URL not s
        returning id`,
     );
     operatorId = operator.rows[0]!.id;
+
+    agentsDb = new AgentsDb({ query: (text, params) => pool.query(text, params as unknown[]) as never });
 
     const created = createServer({
       db: new PostgresDb(pool),
@@ -387,6 +392,50 @@ describe('agents', { skip: URL_ENV ? false : 'JUWA_AGENT_TEST_DATABASE_URL not s
       // is as a player token.
       assert.equal(response.status, 401, path);
     }
+  });
+
+  /**
+   * The mistake the first real operator made.
+   *
+   * The field was labelled "Player username" and matched `username` exactly.
+   * They typed the EMAIL they had signed up with, and were told no such player
+   * existed while looking at an account that plainly did. Both are accepted
+   * now, and the console searches so nobody has to guess which the field wants.
+   */
+  it('finds a player by email as well as by username', async () => {
+    // The shim has no email column; production's auth.users does.
+    await pool.query(`alter table auth.users add column if not exists email text`);
+    await pool.query(`update auth.users set email = 'ann.lee@example.com' where id = $1`, [
+      PLAYER_A,
+    ]);
+
+    const found = await agentsDb.findPlayers('ann.lee@example');
+    assert.deepEqual(
+      found.map((p) => p.username),
+      ['player_ann'],
+    );
+
+    // And searching by username still works, with the email alongside it so an
+    // operator can tell two similar names apart.
+    const byName = await agentsDb.findPlayers('player_ann');
+    assert.equal(byName[0]?.email, 'ann.lee@example.com');
+
+    // A promotion keyed on the email resolves to the same account.
+    const promoted = await agentsDb.createAgent({
+      username: 'ann.lee@example.com',
+      displayName: 'Ann Distribution',
+      operatorId,
+    });
+    assert.equal(promoted.agentId, PLAYER_A);
+    await pool.query(`delete from agents where profile_id = $1`, [PLAYER_A]);
+  });
+
+  it('refuses a search too short to mean anything', async () => {
+    // One character is a request for the whole player table.
+    const response = await fetch(`${base}/admin/players?q=a`, {
+      headers: { Authorization: `Bearer ${token(AGENT_A)}` },
+    });
+    assert.equal(response.status, 401, 'a player token reached the operator search');
   });
 
   it('will not let an agent grant themselves inventory', async () => {

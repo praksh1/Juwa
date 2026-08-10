@@ -51,8 +51,14 @@ login on somebody else's behalf, and no operator ever sees an agent's password.
 Then, in the operator console at `/admin`:
 
 1. Scroll to **Agents**.
-2. Type their existing **player username**, give them an **agent name** (this
-   is what their players see), and press **Promote to agent**.
+2. Start typing their **username** or the **email on their account** in "Find
+   the player" and pick them from the list that appears. Give them an **agent
+   name** (this is what their players see) and press **Promote to agent**.
+
+   > The username is the name they chose on the "One last thing" screen when
+   > they signed up — not their email, though either will find them. If you are
+   > not sure what it is, the app shows it at the top of the lobby ("WELCOME
+   > BACK <username>") and on their Profile tab.
 3. They start **pending** — they can see the dashboard but cannot allocate or
    invite. Press **Activate** when you are ready.
 4. Type an amount in **Grant inventory**, add a reference if you want one on

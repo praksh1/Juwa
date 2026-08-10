@@ -38,6 +38,14 @@ export interface AgentPlayer {
   lastSeenAt: string | null;
 }
 
+/** A player an operator is searching for, to promote or reassign. */
+export interface PlayerMatch {
+  playerId: string;
+  username: string;
+  /** Null when this connection cannot read Supabase's auth schema. */
+  email: string | null;
+}
+
 export interface AgentTxn {
   id: string;
   type: string;
@@ -351,21 +359,105 @@ export class AgentsDb {
    * credentials — and is then marked as an agent. Nothing in this system ever
    * creates a login on someone else's behalf or knows their password.
    */
+  /**
+   * Find players by username or email, for the operator picking one.
+   *
+   * Exists because the alternative is asking an operator to type an exact
+   * username from memory. The first person to use the console typed the EMAIL
+   * they had signed up with — which is the obvious thing to type, and which
+   * failed with "no player named …" while they were looking at an account that
+   * plainly existed. A field you have to already know the answer to fill in is
+   * not a field, it is a quiz.
+   *
+   * Emails live in Supabase's `auth.users`, not in `profiles`, and whether this
+   * connection may read that schema depends on which role the DATABASE_URL
+   * carries. So the join is attempted and quietly dropped if it is refused —
+   * searching by username alone is degraded, not broken.
+   */
+  async findPlayers(query: string, limit = 20): Promise<PlayerMatch[]> {
+    const needle = `%${query.trim()}%`;
+    try {
+      const { rows } = await this.client.query(
+        `select p.id, p.username, u.email, p.registered_at
+           from profiles p
+           left join auth.users u on u.id = p.id
+          where p.registered_at is not null
+            and (p.username ilike $1 or u.email ilike $1)
+          order by p.registered_at desc
+          limit $2`,
+        [needle, limit],
+      );
+      return (rows as Record<string, string>[]).map((row) => ({
+        playerId: row['id']!,
+        username: row['username']!,
+        email: row['email'] ?? null,
+      }));
+    } catch {
+      // No read access to auth.users. Usernames still work.
+      const { rows } = await this.client.query(
+        `select p.id, p.username
+           from profiles p
+          where p.registered_at is not null and p.username ilike $1
+          order by p.registered_at desc
+          limit $2`,
+        [needle, limit],
+      );
+      return (rows as Record<string, string>[]).map((row) => ({
+        playerId: row['id']!,
+        username: row['username']!,
+        email: null,
+      }));
+    }
+  }
+
+  /**
+   * Promote a player to agent.
+   *
+   * `identifier` is a username OR an email, because an operator should not have
+   * to know which one this field wanted. Username is tried first — it is the
+   * canonical handle and always readable — and email only if that misses.
+   */
   async createAgent(args: {
     username: string;
     displayName: string;
     operatorId: string | null;
     notes?: string;
   }): Promise<AgentSummary> {
+    const identifier = args.username.trim();
+    let profileId: string | null = null;
+
+    const byUsername = await this.client.query(
+      `select id from profiles where lower(username) = lower($1)`,
+      [identifier],
+    );
+    profileId = (byUsername.rows[0] as Record<string, string> | undefined)?.['id'] ?? null;
+
+    if (!profileId && identifier.includes('@')) {
+      try {
+        const byEmail = await this.client.query(
+          `select p.id from profiles p
+             join auth.users u on u.id = p.id
+            where lower(u.email) = lower($1) and p.registered_at is not null`,
+          [identifier],
+        );
+        profileId = (byEmail.rows[0] as Record<string, string> | undefined)?.['id'] ?? null;
+      } catch {
+        // auth.users is not readable by this role — fall through to the error
+        // below, which names the username as the thing to type.
+      }
+    }
+
+    if (!profileId) throw new Error(`No player named ${identifier}`);
+
     const { rows } = await this.client.query(
       `insert into agents (profile_id, display_name, created_by, notes)
-       select p.id, $2, $3, $4 from profiles p where p.username = $1
+       values ($1, $2, $3, $4)
        on conflict (profile_id) do update set display_name = excluded.display_name
        returning profile_id, display_name, status`,
-      [args.username, args.displayName, args.operatorId, args.notes ?? null],
+      [profileId, args.displayName, args.operatorId, args.notes ?? null],
     );
     const row = rows[0] as Record<string, string> | undefined;
-    if (!row) throw new Error(`No player named ${args.username}`);
+    if (!row) throw new Error(`No player named ${identifier}`);
     return {
       agentId: row['profile_id']!,
       displayName: row['display_name']!,

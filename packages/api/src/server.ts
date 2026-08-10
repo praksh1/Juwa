@@ -259,6 +259,7 @@ async function handleAdmin(
       pathname: url.pathname,
       body: body as Record<string, unknown>,
       operator,
+      url,
     });
     if (agentResult !== undefined) {
       send(res, 200, agentResult);

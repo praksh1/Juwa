@@ -102,7 +102,9 @@ function agentError(error: unknown): ApiError {
   }
   if (/No player named/i.test(message)) {
     return new ApiError(
-      `${message}. They must sign up as a player first — this promotes an existing account.`,
+      `${message}. Search for them above — this field takes the USERNAME they ` +
+        `chose when they signed up (or the email on their account), and it ` +
+        `promotes an account that already exists.`,
       404,
       'unknown_player',
     );
@@ -275,6 +277,8 @@ export interface AdminAgentRequest {
   pathname: string;
   body: Record<string, unknown>;
   operator: OperatorIdentity;
+  /** Present for GETs that take a query string, absent otherwise. */
+  url?: URL;
 }
 
 /**
@@ -292,12 +296,25 @@ export async function handleAdminAgents(
   agents: AgentsDb,
   request: AdminAgentRequest,
 ): Promise<unknown | undefined> {
-  const { method, pathname, body, operator } = request;
+  const { method, pathname, body, operator, url } = request;
   const route = `${method} ${pathname}`;
 
   try {
     if (route === 'GET /admin/agents') {
       return { agents: await agents.listAgents() };
+    }
+
+    /**
+     * Find a player, by username or email.
+     *
+     * Operator-only, and it returns email addresses, so it is behind the same
+     * session as everything else here. Requires at least two characters: a
+     * one-letter search is a request for the whole player table.
+     */
+    if (route === 'GET /admin/players') {
+      const query = (url?.searchParams.get('q') ?? '').trim();
+      if (query.length < 2) return { players: [] };
+      return { players: await agents.findPlayers(query) };
     }
 
     /**

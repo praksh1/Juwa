@@ -279,14 +279,19 @@ function renderAgents(agents) {
   const section = $(\`<section><h2>Agents</h2>
     <div class="card" style="margin-bottom:14px">
       <div class="grid">
-        <label>Player username<input name="username" placeholder="their existing account"></label>
+        <label>Find the player
+          <input name="username" placeholder="username or email" autocomplete="off">
+        </label>
         <label>Agent name<input name="displayName" placeholder="shown to their players"></label>
         <label>Notes<input name="notes" placeholder="optional"></label>
         <label>&nbsp;<button id="mkagent">Promote to agent</button></label>
       </div>
-      <p class="hint">The person signs up as a player first, with their own email and password.
-      This promotes that account — nothing here creates a login or sees a password. New agents
-      start <strong>pending</strong> and cannot allocate or invite until activated.</p>
+      <div class="results"></div>
+      <p class="hint">Start typing a <strong>username</strong> or the <strong>email</strong> on
+      their account and pick them from the list. The person signs up as a player first, with their
+      own email and password — this promotes that existing account, and nothing here creates a
+      login or sees a password. New agents start <strong>pending</strong> and cannot allocate or
+      invite until activated.</p>
       <div class="err"></div>
     </div>
     <div class="wrap"><table>
@@ -298,6 +303,56 @@ function renderAgents(agents) {
     every other coin movement uses — nothing is minted, and every allocation an agent makes is a
     real transaction with an audit trail. An agent can never allocate more than they hold.</p>
   </section>\`);
+
+  /**
+   * Live search, so nobody has to already know the answer.
+   *
+   * The first person to use this console typed the EMAIL they had signed up
+   * with into a field labelled "Player username" and was told no such player
+   * existed — while looking at an account that plainly did. Both are accepted
+   * now, but the real fix is not having to guess which one the field wanted.
+   *
+   * Debounced, because this fires on every keystroke against a table that will
+   * eventually have real players in it.
+   */
+  const search = section.querySelector('[name=username]');
+  const results = section.querySelector('.results');
+  let timer = null;
+
+  const renderResults = (players) => {
+    results.innerHTML = '';
+    if (!players.length) return;
+    for (const player of players) {
+      const hit = $(\`<button class="ghost" style="margin:0 6px 6px 0">\${player.username}\${
+        player.email ? ' · ' + player.email : ''
+      }</button>\`);
+      hit.addEventListener('click', () => {
+        // The USERNAME goes in the field, whichever the operator searched by.
+        // It is the canonical handle, and seeing it land teaches what this
+        // field wanted without a paragraph of explanation.
+        search.value = player.username;
+        results.innerHTML = '';
+      });
+      results.append(hit);
+    }
+  };
+
+  search.addEventListener('input', () => {
+    clearTimeout(timer);
+    const query = search.value.trim();
+    if (query.length < 2) {
+      results.innerHTML = '';
+      return;
+    }
+    timer = setTimeout(async () => {
+      try {
+        const found = await api('/admin/players?q=' + encodeURIComponent(query));
+        renderResults(found.players);
+      } catch {
+        results.innerHTML = '';
+      }
+    }, 250);
+  });
 
   const create = async (event) => {
     const button = event.target;
