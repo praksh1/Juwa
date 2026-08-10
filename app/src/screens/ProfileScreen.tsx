@@ -53,10 +53,25 @@ function Row({
 export function ProfileScreen() {
   const api = React.useRef(createPlayApi()).current;
   const [username, setUsername] = React.useState<string | null>(null);
+  /**
+   * The agent who funds this player, if there is one.
+   *
+   * Read-only, deliberately. A player cannot change their agent and there is no
+   * endpoint that would let them — reassignment is an operator action. It is
+   * shown because "who gave me these coins" is the first question support gets
+   * asked, and the answer should not require a support ticket to obtain.
+   */
+  const [agentName, setAgentName] = React.useState<string | null>(null);
   const [soundOn, setSoundOn] = React.useState(!isMuted());
 
   React.useEffect(() => {
-    api.getProfile().then((profile: Profile) => setUsername(profile.username ?? null)).catch(() => {});
+    api
+      .getProfile()
+      .then((profile: Profile) => {
+        setUsername(profile.username ?? null);
+        setAgentName(profile.agentName ?? null);
+      })
+      .catch(() => {});
   }, [api]);
 
   return (
@@ -111,6 +126,7 @@ export function ProfileScreen() {
               }
             }}
           />
+          {agentName ? <Row label="Your agent" hint="Who funds your account" value={agentName} /> : null}
           <Row label="Support" value="Contact" />
         </Card>
       </View>

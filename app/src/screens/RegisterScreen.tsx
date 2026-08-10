@@ -6,6 +6,8 @@ import { RESTRICTED_STATE_MESSAGE, WELCOME_BONUS, isRestrictedState, selectableS
 import { Button, Card, Screen, Txt } from '../components/primitives';
 import { LegalFooter } from '../components/LegalFooter';
 import { StatePicker } from '../components/StatePicker';
+import { API_BASE_URL } from '../api/client';
+import { lookupInvite, pendingInvite } from '../api/invite';
 
 /**
  * One segment of the date of birth.
@@ -85,6 +87,29 @@ export function RegisterScreen({
   const [message, setMessage] = useState<string | null>(null);
   const states = useMemo(() => selectableStates(), []);
 
+  /**
+   * Who invited them, if anyone.
+   *
+   * Worth a network call for one line of text, because without it an agent's
+   * link is indistinguishable from a plain sign-up — the player has been told
+   * "use my link" and has no way to see that it worked. Naming the agent turns
+   * a silent binding into something the player agreed to.
+   *
+   * Failure is silent and means "no line", never a blocked sign-up: the token
+   * is redeemed by the SERVER at registration regardless of what this lookup
+   * said, so a lookup that could not run costs nothing but the reassurance.
+   */
+  const [invitedBy, setInvitedBy] = useState<string | null>(null);
+  React.useEffect(() => {
+    const token = pendingInvite();
+    if (!token) return;
+    let alive = true;
+    void lookupInvite(API_BASE_URL, token).then((name) => alive && setInvitedBy(name));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const dateOfBirth = useMemo(() => {
     if (!/^\d{1,2}$/.test(day) || !/^\d{1,2}$/.test(month) || !/^\d{4}$/.test(year)) return null;
     const iso = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
@@ -152,6 +177,18 @@ export function RegisterScreen({
         <Txt variant="bodySmall" color={colors.text.secondary}>
           Pick a name, and confirm you are old enough to play.
         </Txt>
+
+        {invitedBy ? (
+          <View style={styles.invite}>
+            <Txt variant="caption" color={colors.gold.light}>
+              INVITED BY
+            </Txt>
+            <Txt variant="bodySmall">{invitedBy}</Txt>
+            <Txt variant="caption" color={colors.text.muted}>
+              They will be able to send you coins to play with.
+            </Txt>
+          </View>
+        ) : null}
 
         <TextInput
           style={styles.input}
@@ -224,6 +261,14 @@ export function RegisterScreen({
 }
 
 const styles = StyleSheet.create({
+  invite: {
+    gap: 2,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.gold.default,
+    backgroundColor: 'rgba(200,164,77,0.08)',
+  },
   centered: { flexGrow: 1, justifyContent: 'center', maxWidth: 480 },
   card: { gap: spacing.md },
   checkRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },

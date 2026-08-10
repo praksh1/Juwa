@@ -155,6 +155,60 @@ export interface Profile {
   dailyStreak?: number;
   /** Drives the one-time first-purchase doubler in the store. */
   hasPurchased?: boolean;
+  /**
+   * Set only when this account is an agent. Used to decide whether the agent
+   * tab exists.
+   *
+   * Presentation ONLY. Hiding a tab is not access control — every `/agent/*`
+   * route resolves the caller's agent record from the verified token before it
+   * will do anything, so a player who forges this in their own browser gets a
+   * dashboard whose every request comes back 404.
+   */
+  agent?: AgentSummary | null;
+  /**
+   * The display name of the agent this player belongs to, if any.
+   *
+   * Read-only, and there is deliberately no endpoint that lets a player change
+   * it — reassignment is an operator action. It is here so a player can answer
+   * "who gave me these coins" without opening a support ticket.
+   */
+  agentName?: string | null;
+}
+
+export interface AgentSummary {
+  agentId: string;
+  displayName: string;
+  status: 'pending' | 'active' | 'suspended';
+  /** Undistributed coins. Separate from the agent's own playable balance. */
+  inventory: number;
+  playerCount: number;
+}
+
+export interface AgentPlayer {
+  playerId: string;
+  username: string;
+  balance: number;
+  assignedAt: string;
+  lastSeenAt: string | null;
+}
+
+export interface AgentTxn {
+  id: string;
+  type: string;
+  /** Negative when coins left the inventory. */
+  amount: number;
+  at: string;
+  counterparty: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface AgentInvite {
+  id: string;
+  label: string | null;
+  createdAt: string;
+  expiresAt: string;
+  redeemedAt: string | null;
+  redeemedBy: string | null;
 }
 
 export interface PlayApi {
@@ -173,6 +227,12 @@ export interface PlayApi {
   register(details: {
     username: string;
     dateOfBirth: string;
+    /**
+     * An agent's invitation, if the visitor arrived through one. Sent WITH the
+     * registration so the player is bound to their agent in the same request
+     * that creates them — see `api/invite`.
+     */
+    inviteToken?: string;
     country: string;
     /** USPS state code. Required for US players; the server re-checks it. */
     region: string;
@@ -192,6 +252,28 @@ export interface PlayApi {
     idempotencyKey: string;
   }): Promise<RoundResponse>;
   getPurchase(id: string): Promise<{ id: string; status: string; coins: number; packId: string }>;
+
+  /* --------------------------------------------------------------- agents */
+
+  /**
+   * The agent side of the app, present on every implementation so the screen
+   * does not have to know which one it is talking to.
+   *
+   * All six are scoped SERVER-SIDE to the calling agent. None of them takes an
+   * agent id — there is no parameter here that could widen what comes back,
+   * which is what makes one agent unable to see another's players regardless of
+   * what this client does.
+   */
+  getAgentSummary(): Promise<AgentSummary>;
+  getAgentPlayers(): Promise<{ players: AgentPlayer[] }>;
+  allocateToPlayer(request: {
+    playerId: string;
+    amount: number;
+    idempotencyKey: string;
+  }): Promise<{ txnId: string; inventory: number; playerBalance: number }>;
+  getAgentTransactions(): Promise<{ transactions: AgentTxn[] }>;
+  getAgentInvites(): Promise<{ invites: AgentInvite[] }>;
+  createAgentInvite(label?: string): Promise<{ token: string; id: string; expiresAt: string }>;
 }
 
 /** Demo mode plays any slot; the ids come from the same generated list the lobby uses. */
@@ -463,11 +545,19 @@ export class HttpPlayApi implements PlayApi {
     return this.request<Profile>('/me');
   }
 
-  register(details: { username: string; dateOfBirth: string; country: string; region: string }) {
-    return this.request<{ username: string; balance: number; ageVerified: boolean }>(
-      '/register',
-      details,
-    );
+  register(details: {
+    username: string;
+    dateOfBirth: string;
+    country: string;
+    region: string;
+    inviteToken?: string;
+  }) {
+    return this.request<{
+      username: string;
+      balance: number;
+      ageVerified: boolean;
+      agentName?: string | null;
+    }>('/register', details);
   }
 
   claimDailyBonus() {
@@ -513,6 +603,37 @@ export class HttpPlayApi implements PlayApi {
     idempotencyKey: string;
   }) {
     return this.request<RoundResponse>('/act', request);
+  }
+
+  /* --------------------------------------------------------------- agents */
+
+  getAgentSummary() {
+    return this.request<AgentSummary>('/agent/summary');
+  }
+
+  getAgentPlayers() {
+    return this.request<{ players: AgentPlayer[] }>('/agent/players');
+  }
+
+  allocateToPlayer(request: { playerId: string; amount: number; idempotencyKey: string }) {
+    return this.request<{ txnId: string; inventory: number; playerBalance: number }>(
+      '/agent/allocate',
+      request,
+    );
+  }
+
+  getAgentTransactions() {
+    return this.request<{ transactions: AgentTxn[] }>('/agent/transactions');
+  }
+
+  getAgentInvites() {
+    return this.request<{ invites: AgentInvite[] }>('/agent/invites');
+  }
+
+  createAgentInvite(label?: string) {
+    return this.request<{ token: string; id: string; expiresAt: string }>('/agent/invites', {
+      ...(label ? { label } : {}),
+    });
   }
 }
 
@@ -664,7 +785,26 @@ export class DemoPlayApi implements PlayApi {
   }
 
   async getProfile(): Promise<Profile> {
-    return { registered: true, username: 'demo', ageVerified: true, dailyStreak: 3, hasPurchased: false };
+    return {
+      registered: true,
+      username: 'demo',
+      ageVerified: true,
+      dailyStreak: 3,
+      hasPurchased: false,
+      /**
+       * The demo is NOT an agent, and this is the correct answer rather than a
+       * missing feature.
+       *
+       * The demo build is what anyone sees without signing in. An agent
+       * dashboard there would be a coin-distribution screen offered to the
+       * public — every button on it would fail against the real API, but it
+       * would still be advertising a capability to people who do not have it.
+       * The agent screens are reachable only with a session that resolves to a
+       * real agent record.
+       */
+      agent: null,
+      agentName: null,
+    };
   }
 
   async register() {
@@ -968,6 +1108,45 @@ export class DemoPlayApi implements PlayApi {
       fairness: { serverSeedHash: 'demo-mode-no-fairness-proof', clientSeed: 'demo', nonce: 0 },
     };
   }
+
+  /* --------------------------------------------------------------- agents */
+
+  /**
+   * Every agent method refuses, and that is the feature.
+   *
+   * The demo simulates PLAY because play is the thing this app is for and a
+   * lobby you cannot touch demonstrates nothing. Distributing coins is not
+   * that: a simulated allocation would show a coin count going up on a screen
+   * where no coins moved, which is worse than an error in the one area of the
+   * product where the numbers have to be real. `getProfile` already returns
+   * `agent: null`, so nothing in the app reaches these — they exist so that if
+   * anything ever does, it says so out loud.
+   */
+  private noAgentInDemo(): never {
+    throw new PlayApiError(
+      'Agent tools need a signed-in agent account. Sign in to use them.',
+      'server_required',
+    );
+  }
+
+  async getAgentSummary(): Promise<never> {
+    this.noAgentInDemo();
+  }
+  async getAgentPlayers(): Promise<never> {
+    this.noAgentInDemo();
+  }
+  async allocateToPlayer(): Promise<never> {
+    this.noAgentInDemo();
+  }
+  async getAgentTransactions(): Promise<never> {
+    this.noAgentInDemo();
+  }
+  async getAgentInvites(): Promise<never> {
+    this.noAgentInDemo();
+  }
+  async createAgentInvite(): Promise<never> {
+    this.noAgentInDemo();
+  }
 }
 
 /**
@@ -984,6 +1163,13 @@ export class DemoPlayApi implements PlayApi {
 const API_URL = normaliseBaseUrl(process.env['EXPO_PUBLIC_API_URL'] ?? '');
 
 export const USE_DEMO_API = !API_URL;
+
+/**
+ * Where the API lives, for the one call that has no session to make it with:
+ * looking up who an invitation belongs to before the visitor has an account.
+ * Empty string in demo mode, and `lookupInvite` treats that as "cannot ask".
+ */
+export const API_BASE_URL = API_URL;
 
 export function createPlayApi(): PlayApi {
   if (!API_URL) return new DemoPlayApi();

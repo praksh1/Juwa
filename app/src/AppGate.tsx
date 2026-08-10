@@ -8,6 +8,17 @@ import { onAuthChange, type Session } from './api/auth';
 import { PlayApiError, createPlayApi } from './api/client';
 import { PurchaseWatcher } from './components/PurchaseWatcher';
 import { notifyBalanceChanged } from './api/usePlayer';
+import { captureInviteFromUrl, clearInvite, pendingInvite } from './api/invite';
+
+/**
+ * An agent's invite token, taken out of the URL before anything else runs.
+ *
+ * At module scope rather than in an effect, because the first thing Supabase
+ * does with a magic-link return is rewrite the location — an effect that ran
+ * after that would find the query string already gone. It is idempotent and
+ * does nothing at all when there is no `?invite=`.
+ */
+captureInviteFromUrl();
 
 /**
  * Decides which world the player is in:
@@ -57,17 +68,23 @@ export function AppGate({ children }: { children: React.ReactNode }) {
   }, [api, session]);
 
   const register = useCallback(
-    async (details: {
-      username: string;
-      dateOfBirth: string;
-      country: string;
-      region: string;
-    }) => {
+    async (details: { username: string; dateOfBirth: string; country: string; region: string }) => {
+      const invite = pendingInvite();
       try {
-        await api.register(details);
+        // The token is sent WITH the registration, in the same request, so the
+        // player is bound to their agent in the same moment the account becomes
+        // real. Redeeming it afterwards would leave a window where a failure
+        // produced a registered player attached to nobody, and there is no
+        // self-service way to fix that — reassignment is an operator action.
+        await api.register({ ...details, ...(invite ? { inviteToken: invite } : {}) });
+        clearInvite();
         setRegistered(true);
         return { ok: true };
       } catch (error) {
+        // The token is NOT cleared on failure: a username collision is the most
+        // likely reason to land here, and the player is about to try again with
+        // a different name. Throwing their agent link away because they picked
+        // a taken username would be a strange punishment.
         return {
           ok: false,
           message:

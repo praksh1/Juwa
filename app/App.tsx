@@ -20,6 +20,8 @@ import {
 import { StoreScreen } from './src/screens/StoreScreen';
 import { WalletScreen } from './src/screens/WalletScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
+import { AgentScreen } from './src/screens/AgentScreen';
+import { useAgentRole } from './src/api/useAgent';
 import { AppGate } from './src/AppGate';
 import { registerServiceWorker } from './src/pwa';
 import { SLOT_GAMES } from './src/api/slot-games.generated';
@@ -103,6 +105,7 @@ const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Lobby: 'game-controller',
   Store: 'cart',
   Wallet: 'wallet',
+  Agent: 'people',
   Profile: 'person',
 };
 
@@ -126,6 +129,20 @@ function TickerUnlessCramped() {
 function Tabs() {
   const insets = useSafeAreaInsets();
   const compact = useCompactLayout();
+  /**
+   * The agent tab exists only for accounts that are agents.
+   *
+   * A fifth tab costs every player a fifth of the bar's width, and "Agent"
+   * means nothing to somebody who is not one — so it is not merely disabled for
+   * players, it is absent. While the role is still loading it is also absent,
+   * which is the right way round: a tab that appears a beat late is a small
+   * surprise, one that appears and then vanishes looks like a bug.
+   *
+   * This is presentation. Every `/agent/*` route re-resolves the caller's agent
+   * record from their verified token, so a player who makes this tab appear in
+   * their own browser reaches a screen where every request returns 404.
+   */
+  const { agent } = useAgentRole();
 
   return (
     <Tab.Navigator
@@ -158,6 +175,7 @@ function Tabs() {
       <Tab.Screen name="Lobby" component={LobbyStack} />
       <Tab.Screen name="Store" component={StoreScreen} />
       <Tab.Screen name="Wallet" component={WalletScreen} />
+      {agent ? <Tab.Screen name="Agent" component={AgentScreen} /> : null}
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
