@@ -32,6 +32,7 @@ import { Badge, Button, Card, Screen, SectionHeader, Txt } from '../components/p
 import { useAgentDesk } from '../api/useAgent';
 import type { AgentPlayer } from '../api/client';
 import { StatePicker } from '../components/StatePicker';
+import { PasswordInput } from '../components/PasswordInput';
 import { selectableStates } from '@juwa/economy';
 import { sounds } from '../sound';
 
@@ -557,14 +558,18 @@ function NewPlayerForm({
         style={styles.input}
         accessibilityLabel="Player username"
       />
-      <TextInput
+      {/*
+        Readable by default is the RIGHT default here, unlike everywhere else.
+        The agent is choosing a password to read out loud to somebody standing
+        in front of them — hiding it from the person who is about to say it
+        serves nobody, and a mistyped temporary password means the player cannot
+        get in at all.
+      */}
+      <PasswordInput
         value={password}
         onChangeText={setPassword}
         placeholder="Temporary password"
-        placeholderTextColor={colors.text.muted}
-        autoCapitalize="none"
-        style={styles.input}
-        accessibilityLabel="Temporary password"
+        label="Temporary password"
       />
 
       <Txt variant="caption" color={colors.text.muted}>
@@ -636,8 +641,22 @@ const styles = StyleSheet.create({
   },
   handoverGap: { marginTop: spacing.sm },
   dobRow: { flexDirection: 'row', gap: spacing.sm },
-  dobBox: { flex: 1 },
-  dobYear: { flex: 1.6 },
+  /*
+   * `minWidth: 0` is doing the work here, and without it the year box lands off
+   * the right edge of the card.
+   *
+   * On the web build a TextInput is a real <input>, and an <input> carries an
+   * intrinsic width of about twenty characters. A flex child will not shrink
+   * below its intrinsic size unless it is told it may, so three of them in a
+   * row demand roughly sixty characters of space in a 390pt phone — and the
+   * third one simply overflows. Rotating to landscape gave the row enough width
+   * to fit, which is why the field could be reached that way and no other.
+   *
+   * The padding comes down too: `styles.input` is built for a full-width field,
+   * and 16pt each side of a two-character box is most of the box.
+   */
+  dobBox: { flex: 1, minWidth: 0, paddingHorizontal: spacing.sm, textAlign: 'center' },
+  dobYear: { flex: 1.6, minWidth: 0, paddingHorizontal: spacing.sm, textAlign: 'center' },
   centre: { alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl },
   hero: { gap: spacing.xs, paddingVertical: spacing.lg },
   heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

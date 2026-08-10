@@ -5,6 +5,7 @@ import { Button, Card, Screen, Txt } from '../components/primitives';
 import { Logo } from '../components/Logo';
 import { LegalFooter } from '../components/LegalFooter';
 import { IS_CONFIGURED, signIn, signUp } from '../api/auth';
+import { PasswordInput } from '../components/PasswordInput';
 
 /**
  * Sign up and log in.
@@ -109,16 +110,13 @@ export function AuthScreen({
           onChangeText={setEmail}
           accessibilityLabel={mode === 'signup' ? 'Email address' : 'Email address or username'}
         />
-        <TextInput
-          style={styles.input}
+        <PasswordInput
+          label="Password"
           placeholder="Password"
-          placeholderTextColor={colors.text.muted}
-          secureTextEntry
           autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
           value={password}
           onChangeText={setPassword}
           onSubmitEditing={submit}
-          accessibilityLabel="Password"
         />
 
         {message ? (

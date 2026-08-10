@@ -23,9 +23,10 @@
  */
 
 import React, { useState } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
-import { colors, radius, spacing } from '@juwa/ui';
+import { StyleSheet, View } from 'react-native';
+import { colors, spacing } from '@juwa/ui';
 import { Button, Card, Screen, Txt } from '../components/primitives';
+import { PasswordInput } from '../components/PasswordInput';
 import { changePassword } from '../api/auth';
 import { PlayApiError, createPlayApi } from '../api/client';
 
@@ -88,27 +89,19 @@ export function SetPasswordScreen({ onDone }: { onDone: () => void }) {
           set the account up will not be able to sign in as you afterwards.
         </Txt>
 
-        <TextInput
-          style={styles.input}
+        <PasswordInput
+          label="New password"
           placeholder="New password"
-          placeholderTextColor={colors.text.muted}
-          secureTextEntry
-          autoCapitalize="none"
           autoComplete="new-password"
           value={password}
           onChangeText={setPassword}
-          accessibilityLabel="New password"
         />
-        <TextInput
-          style={styles.input}
+        <PasswordInput
+          label="Confirm new password"
           placeholder="Type it again"
-          placeholderTextColor={colors.text.muted}
-          secureTextEntry
-          autoCapitalize="none"
           autoComplete="new-password"
           value={confirm}
           onChangeText={setConfirm}
-          accessibilityLabel="Confirm new password"
         />
 
         {message ? (
@@ -130,14 +123,4 @@ export function SetPasswordScreen({ onDone }: { onDone: () => void }) {
 const styles = StyleSheet.create({
   centered: { justifyContent: 'center', flexGrow: 1 },
   card: { gap: spacing.md, padding: spacing.xl },
-  input: {
-    backgroundColor: colors.surface.base,
-    borderColor: colors.surface.border,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    color: colors.text.primary,
-    fontSize: 16,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-  },
 });
