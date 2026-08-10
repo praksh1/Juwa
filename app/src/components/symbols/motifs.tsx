@@ -47,6 +47,7 @@ import {
   LinearGradient,
   Path,
   Polygon,
+  RadialGradient,
   Rect,
   Stop,
 } from 'react-native-svg';
@@ -64,18 +65,48 @@ export interface MotifPalette {
   accent: string;
 }
 
-/** The gradient every motif fills with. Emitted once per symbol. */
+/**
+ * The gradients every motif is built from.
+ *
+ * ## Why there are five of them and not one
+ *
+ * The first version of these symbols filled each shape with a single top-to-
+ * bottom gradient and stroked it. That is a flat sticker, and next to the
+ * painted symbols it replaced — which have volume, a specular hit and a cast
+ * shadow — it read, accurately, as something drawn in a hurry.
+ *
+ * What makes an object look solid is not detail, it is LIGHT: a body lit from
+ * one direction, a hard highlight where that light hits, a darker side turned
+ * away from it, and a shadow underneath proving it is in front of something.
+ * Those are four passes, and once they are here every motif in the file gets
+ * them for free — which is the whole reason the drawing goes through `S`.
+ */
 export function MotifDefs({ p }: { p: MotifPalette }) {
   return (
     <Defs>
-      <LinearGradient id={`m-${p.id}`} x1="0" y1="0" x2="0" y2="1">
+      {/* The body, lit from the upper left. Radial rather than linear: a linear
+          ramp reads as a painted panel, a radial one reads as a curved object. */}
+      <RadialGradient id={`m-${p.id}`} cx="34%" cy="26%" rx="88%" ry="88%">
         <Stop offset="0" stopColor={p.light} />
-        <Stop offset="0.48" stopColor={p.mid} />
+        <Stop offset="0.42" stopColor={p.mid} />
         <Stop offset="1" stopColor={p.deep} />
-      </LinearGradient>
-      <LinearGradient id={`m-${p.id}-a`} x1="0" y1="0" x2="0" y2="1">
-        <Stop offset="0" stopColor={p.accent} />
+      </RadialGradient>
+      <RadialGradient id={`m-${p.id}-a`} cx="34%" cy="26%" rx="88%" ry="88%">
+        <Stop offset="0" stopColor="#FFFFFF" />
+        <Stop offset="0.35" stopColor={p.accent} />
         <Stop offset="1" stopColor={p.mid} />
+      </RadialGradient>
+      {/* The specular hit: strong across the top, gone by the middle. This is
+          the single pass that turns a shape into a lit object. */}
+      <LinearGradient id={`m-${p.id}-gloss`} x1="0" y1="0" x2="0.25" y2="1">
+        <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0.62" />
+        <Stop offset="0.34" stopColor="#FFFFFF" stopOpacity="0.16" />
+        <Stop offset="0.52" stopColor="#FFFFFF" stopOpacity="0" />
+      </LinearGradient>
+      {/* Bounce light along the bottom edge, so the underside is not dead. */}
+      <LinearGradient id={`m-${p.id}-bounce`} x1="0" y1="1" x2="0" y2="0">
+        <Stop offset="0" stopColor={p.light} stopOpacity="0.42" />
+        <Stop offset="0.22" stopColor={p.light} stopOpacity="0" />
       </LinearGradient>
     </Defs>
   );
@@ -84,41 +115,104 @@ export function MotifDefs({ p }: { p: MotifPalette }) {
 const face = (p: MotifPalette) => `url(#m-${p.id})`;
 const bright = (p: MotifPalette) => `url(#m-${p.id}-a)`;
 
-/** A filled shape with the standard outline. */
-function S({ d, p, fill }: { d: string; p: MotifPalette; fill?: string }) {
+/**
+ * A solid shape, in four passes.
+ *
+ *   1. A cast shadow, offset down and right. Cheap, and it is what puts the
+ *      symbol IN FRONT of the reel rather than printed on it.
+ *   2. An extruded side in the material's own dark, so the shape has thickness.
+ *   3. The lit body, with the outline that keeps it readable on a busy room.
+ *   4. Gloss over the top and bounce along the bottom.
+ *
+ * `flat` skips the gloss for the small details drawn on top of a body — an
+ * inlay or a pupil that catches its own highlight looks like a second object
+ * floating above the first.
+ */
+function S({
+  d,
+  p,
+  fill,
+  flat,
+}: {
+  d: string;
+  p: MotifPalette;
+  fill?: string;
+  flat?: boolean;
+}) {
   return (
-    <Path
-      d={d}
-      fill={fill ?? face(p)}
-      stroke={p.outline}
-      strokeWidth={4.5}
-      strokeLinejoin="round"
-      strokeLinecap="round"
-    />
+    <G>
+      {flat ? null : (
+        <G x={2} y={5}>
+          <Path d={d} fill={p.outline} opacity={0.42} />
+        </G>
+      )}
+      {flat ? null : (
+        <G x={0} y={3}>
+          <Path
+            d={d}
+            fill={p.deep}
+            stroke={p.outline}
+            strokeWidth={4.5}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        </G>
+      )}
+      <Path
+        d={d}
+        fill={fill ?? face(p)}
+        stroke={p.outline}
+        strokeWidth={4.5}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      {flat ? null : (
+        <>
+          <Path d={d} fill={`url(#m-${p.id}-bounce)`} />
+          <Path d={d} fill={`url(#m-${p.id}-gloss)`} />
+        </>
+      )}
+    </G>
   );
 }
 
-/** A stroked shape, for the motifs that are line drawings — frost, aurora. */
+/**
+ * A stroked shape — frost, aurora, neon tubing, water.
+ *
+ * Three strokes rather than two, and the third is the one that matters: a
+ * bright core narrower than the body turns a flat line into a glass tube with a
+ * light running through it. It is the same trick as the gloss above, applied to
+ * something that has no interior to gloss.
+ */
 function L({ d, p, w = 7, color }: { d: string; p: MotifPalette; w?: number; color?: string }) {
   return (
-    <>
+    <G>
       <Path
         d={d}
         fill="none"
         stroke={p.outline}
-        strokeWidth={w + 4.5}
+        strokeWidth={w + 5.5}
         strokeLinejoin="round"
         strokeLinecap="round"
       />
       <Path
         d={d}
         fill="none"
-        stroke={color ?? p.light}
+        stroke={color ?? p.mid}
         strokeWidth={w}
         strokeLinejoin="round"
         strokeLinecap="round"
       />
-    </>
+      <Path
+        d={d}
+        fill="none"
+        stroke={p.light}
+        strokeOpacity={0.9}
+        strokeWidth={Math.max(1.6, w * 0.3)}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </G>
   );
 }
 
@@ -129,8 +223,8 @@ export type Motif = (p: MotifPalette) => React.ReactElement;
 const icePeak: Motif = (p) => (
   <G>
     <S p={p} d="M8,88 L36,24 L52,52 L64,32 L92,88 Z" />
-    <S p={p} fill={p.light} d="M36,24 L27,44 L34,40 L40,48 L46,41 L52,52 Z" />
-    <S p={p} fill={p.light} d="M64,32 L57,47 L63,44 L69,51 L75,45 Z" />
+    <S p={p} flat fill={p.light} d="M36,24 L27,44 L34,40 L40,48 L46,41 L52,52 Z" />
+    <S p={p} flat fill={p.light} d="M64,32 L57,47 L63,44 L69,51 L75,45 Z" />
   </G>
 );
 
@@ -283,7 +377,7 @@ const bigTop: Motif = (p) => (
       fill="none"
       opacity={0.6}
     />
-    <S p={p} fill={p.accent} d="M50,22 L74,12 L50,4 Z" />
+    <S p={p} flat fill={p.accent} d="M50,22 L74,12 L50,4 Z" />
     <Path d="M50,4 V24" stroke={p.outline} strokeWidth={4} />
   </G>
 );
@@ -315,7 +409,7 @@ const candyFloss: Motif = (p) => (
 const balloon: Motif = (p) => (
   <G>
     <Ellipse cx={50} cy={40} rx={27} ry={31} fill={face(p)} stroke={p.outline} strokeWidth={4.5} />
-    <S p={p} fill={p.accent} d="M44,70 H56 L50,80 Z" />
+    <S p={p} flat fill={p.accent} d="M44,70 H56 L50,80 Z" />
     <Path
       d="M50,80 C58,86 42,88 50,96"
       stroke={p.outline}
@@ -598,7 +692,7 @@ const wristWatch: Motif = (p) => (
 const topHat: Motif = (p) => (
   <G>
     <S p={p} d="M34,8 H66 L69,62 H31 Z" />
-    <S p={p} fill={p.accent} d="M31,44 H69 L69.6,58 H30.4 Z" />
+    <S p={p} flat fill={p.accent} d="M31,44 H69 L69.6,58 H30.4 Z" />
     <S p={p} d="M10,62 H90 A7,7 0 0 1 90,78 H10 A7,7 0 0 1 10,62 Z" />
     <Path d="M40,16 V40" stroke={p.light} strokeWidth={4} opacity={0.5} strokeLinecap="round" />
   </G>
@@ -654,7 +748,7 @@ const pickaxe: Motif = (p) => (
       p={p}
       d="M4,50 C13,24 29,12 50,12 C71,12 87,24 96,50 C81,34 67,28 50,28 C33,28 19,34 4,50 Z"
     />
-    <S p={p} fill={p.accent} d="M38,26 H62 V38 H38 Z" />
+    <S p={p} flat fill={p.accent} d="M38,26 H62 V38 H38 Z" />
     <Path d="M50,42 V88" stroke={p.outline} strokeWidth={3} opacity={0.45} />
   </G>
 );

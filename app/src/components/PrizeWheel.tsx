@@ -88,8 +88,16 @@ export function PrizeWheel({ segments, index, onDone }: PrizeWheelProps) {
         <Svg width={230} height={230} viewBox="0 0 100 100">
           <Defs>
             <LinearGradient id="wheel-rim" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor="#FFF0B8" />
-              <Stop offset="1" stopColor="#8A5F0A" />
+              <Stop offset="0" stopColor="#FFF6D8" />
+              <Stop offset="0.45" stopColor="#E3B23C" />
+              <Stop offset="1" stopColor="#6B4308" />
+            </LinearGradient>
+            {/* Lacquer: a hard sweep across the top of the face, gone by the
+                middle. The same pass that gives the symbols their volume. */}
+            <LinearGradient id="wheel-gloss" x1="0.1" y1="0" x2="0.4" y2="1">
+              <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0.5" />
+              <Stop offset="0.36" stopColor="#FFFFFF" stopOpacity="0.1" />
+              <Stop offset="0.5" stopColor="#FFFFFF" stopOpacity="0" />
             </LinearGradient>
           </Defs>
 
@@ -103,10 +111,10 @@ export function PrizeWheel({ segments, index, onDone }: PrizeWheelProps) {
             {segments.map((value, i) => (
               <Path
                 key={i}
-                d={wedge(50, 50, 44, i * arc, (i + 1) * arc)}
+                d={wedge(50, 50, 43, i * arc, (i + 1) * arc)}
                 fill={SEGMENT_FILL[i % SEGMENT_FILL.length]}
-                stroke="#1A1206"
-                strokeWidth={0.8}
+                stroke="#4A3308"
+                strokeWidth={1}
               />
             ))}
             {segments.map((value, i) => {
@@ -139,17 +147,83 @@ export function PrizeWheel({ segments, index, onDone }: PrizeWheelProps) {
             })}
           </AnimatedG>
 
-          {/* Rim and hub sit OUTSIDE the rotating group: a wheel's frame does
-              not turn with it, and rotating them betrays the whole illusion. */}
-          <Circle cx={50} cy={50} r={44} fill="none" stroke="url(#wheel-rim)" strokeWidth={4} />
-          <Circle cx={50} cy={50} r={7} fill="url(#wheel-rim)" stroke="#1A1206" strokeWidth={1.2} />
+          {/*
+            Rim, jewels and hub sit OUTSIDE the rotating group: a wheel's frame
+            does not turn with it, and rotating them betrays the illusion.
+
+            The jewels are not decoration. A plain gold disc with numbers on it
+            is a pie chart; what makes a prize wheel look like a prize is the
+            brass, the gems set into the rim and the lamps between them, which
+            is what the lobby tile has been promising all along.
+          */}
+          <Circle cx={50} cy={50} r={46.5} fill="none" stroke="#2A1B04" strokeWidth={7} />
+          <Circle cx={50} cy={50} r={46.5} fill="none" stroke="url(#wheel-rim)" strokeWidth={5} />
+          <Circle cx={50} cy={50} r={43} fill="none" stroke="#7A5410" strokeWidth={1.2} />
+
+          {/* A gem on every spoke, a lamp between each pair. */}
+          {segments.map((_, i) => {
+            const gem = ((i * arc - 90) * Math.PI) / 180;
+            const lamp = (((i + 0.5) * arc - 90) * Math.PI) / 180;
+            return (
+              <G key={`j${i}`}>
+                <Path
+                  d={gemPath(50 + 46.5 * Math.cos(gem), 50 + 46.5 * Math.sin(gem), 3.6)}
+                  fill={GEMS[i % GEMS.length]}
+                  stroke="#1A1206"
+                  strokeWidth={0.9}
+                />
+                <Circle
+                  cx={50 + 46.5 * Math.cos(lamp)}
+                  cy={50 + 46.5 * Math.sin(lamp)}
+                  r={2}
+                  fill="#FFF6D8"
+                  stroke="#8A5F0A"
+                  strokeWidth={0.7}
+                />
+              </G>
+            );
+          })}
+
+          {/* The hub: a set stone rather than a peg. */}
+          <Circle cx={50} cy={50} r={9} fill="url(#wheel-rim)" stroke="#1A1206" strokeWidth={1.4} />
+          <Path d={gemPath(50, 50, 5.4)} fill="#E33C6A" stroke="#1A1206" strokeWidth={1} />
+          <Path d={gemPath(50, 50, 5.4)} fill="url(#wheel-gloss)" />
+
+          {/* One specular sweep across the whole face, so it reads as lacquer. */}
+          <Circle cx={50} cy={50} r={43} fill="url(#wheel-gloss)" />
+
           {/* The pointer, at twelve o'clock — the angle above is derived to it. */}
-          <Path d="M50,2 L56,14 H44 Z" fill={colors.gold.light} stroke="#1A1206" strokeWidth={1.2} />
+          <Path
+            d="M50,1 L57.5,15 H42.5 Z"
+            fill={colors.gold.light}
+            stroke="#1A1206"
+            strokeWidth={1.4}
+          />
         </Svg>
       </View>
     </View>
   );
 }
+
+/**
+ * A cut stone: an octagonal brilliant, pointing up.
+ *
+ * Drawn rather than a circle because a circle set in a rim reads as a rivet.
+ * Eight facets is the fewest that still says "gem" at four units across, which
+ * is all a phone gives it.
+ */
+function gemPath(cx: number, cy: number, r: number): string {
+  const pts: string[] = [];
+  for (let i = 0; i < 8; i += 1) {
+    const a = (Math.PI / 4) * i - Math.PI / 2;
+    const rr = i % 2 === 0 ? r : r * 0.74;
+    pts.push(`${(cx + rr * Math.cos(a)).toFixed(2)},${(cy + rr * Math.sin(a)).toFixed(2)}`);
+  }
+  return `M${pts.join(' L')} Z`;
+}
+
+/** The stones set into the rim. Ruby, emerald, sapphire, diamond, round. */
+const GEMS = ['#E33C6A', '#37C77E', '#3E8FE0', '#EAF4FF', '#F5C542', '#B45CE0'];
 
 /** One wedge of the wheel. Angles in degrees, 0 = twelve o'clock. */
 function wedge(cx: number, cy: number, r: number, from: number, to: number): string {

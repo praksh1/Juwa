@@ -1370,10 +1370,12 @@ const styles = StyleSheet.create({
    * At 0.62 over artwork that was already painted dark, every game's room came
    * out as the same black rectangle — which meant the twenty-three distinct
    * backdrops the cabinet work was built around were, on screen, not there at
-   * all. Held back far enough that a symbol still reads in front of it, and no
-   * further.
+   * all. Pulled back to 0.42, and that overshot: Neon Alley's tile has a giant
+   * 777 across the middle of it, and at that strength it competed with the
+   * symbols rather than sitting behind them. This is the value where the room
+   * is legible as a room and loses every argument with a symbol.
    */
-  roomScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(4, 6, 16, 0.42)' },
+  roomScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(4, 6, 16, 0.58)' },
   chip: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
