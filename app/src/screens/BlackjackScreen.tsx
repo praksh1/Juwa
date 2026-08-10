@@ -4,6 +4,7 @@ import { colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
 import { betOptions, suggestedBet } from '@juwa/economy';
 import { Button, Card, Txt } from '../components/primitives';
+import { SoundToggles } from '../components/SoundToggles';
 import { PlayingCard, type Suit } from '../components/PlayingCard';
 import { sounds, unlock } from '../sound';
 import {
@@ -225,6 +226,8 @@ export function BlackjackScreen() {
             Pays 3:2
           </Txt>
         </View>
+        {/* Sound, reachable without leaving the game. See SoundToggles. */}
+        <SoundToggles compact />
       </View>
 
       <Card style={styles.table}>

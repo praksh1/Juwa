@@ -4,6 +4,7 @@ import { BASE_CABINET, anticipatingReels, bonusCabinet, colors, radius, spacing 
 import { format, minor } from '@juwa/money';
 import { betOptions, suggestedBet } from '@juwa/economy';
 import { Card, Txt } from '../components/primitives';
+import { SoundToggles } from '../components/SoundToggles';
 import { useRoute } from '@react-navigation/native';
 import { Reel, SPIN_UP_SECONDS, type ReelPhase } from '../components/Reel';
 import { tintFromAccent } from '../components/SlotSymbol';
@@ -1038,6 +1039,16 @@ export function SlotsScreen() {
           a player who does not should barely notice it is there.
         */}
         {details && paytable ? <PaytableButton game={details} model={paytable} /> : null}
+        {/*
+          Music and effects, right here in the header.
+          
+          The moment a player wants the sound off is during a spin, not on a
+          settings screen two taps away — and a mute they cannot find is a mute
+          they satisfy by silencing the whole browser tab, which turns off every
+          sound in the product permanently. Compact, so it costs two icons of
+          width and no height.
+        */}
+        <SoundToggles compact />
       </View>
 
       {/*

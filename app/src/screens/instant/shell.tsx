@@ -23,6 +23,7 @@ import { format, minor, type Minor } from '@juwa/money';
 import { betOptions, suggestedBet } from '@juwa/economy';
 import { colors, radius, spacing } from '@juwa/ui';
 import { Screen, Txt } from '../../components/primitives';
+import { SoundToggles } from '../../components/SoundToggles';
 import { PlayApiError, createPlayApi, type PlayApi, type RoundResponse } from '../../api/client';
 
 export interface InstantGame {
@@ -184,6 +185,8 @@ export function InstantLayout({
             RTP 99.00%
           </Txt>
         </View>
+        {/* Sound, reachable without leaving the game. See SoundToggles. */}
+        <SoundToggles compact />
       </View>
 
       {children}

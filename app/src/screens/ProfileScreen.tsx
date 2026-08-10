@@ -3,7 +3,8 @@ import { Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { colors, radius, spacing } from '@juwa/ui';
 import { Button, Card, Screen, SectionHeader, Txt } from '../components/primitives';
 import { createPlayApi, type Profile } from '../api/client';
-import { isMuted, setMuted, sounds, unlock } from '../sound';
+import { sounds } from '../sound';
+import { useMuted } from '../components/SoundToggles';
 import { SignOutButton } from '../components/SignOutButton';
 
 /**
@@ -76,7 +77,12 @@ export function ProfileScreen() {
   const [agentLabel, setAgentLabel] = React.useState('');
   const [applyBusy, setApplyBusy] = React.useState(false);
   const [applyProblem, setApplyProblem] = React.useState<string | null>(null);
-  const [soundOn, setSoundOn] = React.useState(!isMuted());
+  /**
+   * Two channels now, not one. Reads through the shared hook so this switch and
+   * the one floating over a game are the same preference and cannot disagree.
+   */
+  const [musicMuted, setMusicMuted] = useMuted('music');
+  const [effectsMuted, setEffectsMuted] = useMuted('effects');
 
   React.useEffect(() => {
     api
@@ -219,19 +225,16 @@ export function ProfileScreen() {
           <Row label="Email" value="alex@example.com" />
           <Row label="Notifications" />
           <Row
-            label="Sound effects"
+            label="Background music"
+            hint="The music bed in the lobby and in games"
+            switchValue={!musicMuted}
+            onToggle={(next) => setMusicMuted(!next)}
+          />
+          <Row
+            label="Game sounds"
             hint="Reels, wins and card sounds"
-            switchValue={soundOn}
-            onToggle={(next) => {
-              setSoundOn(next);
-              setMuted(!next);
-              // Play the confirmation AFTER unmuting, so turning sound on is
-              // audibly confirmed rather than silently accepted.
-              if (next) {
-                unlock();
-                sounds.tap();
-              }
-            }}
+            switchValue={!effectsMuted}
+            onToggle={(next) => setEffectsMuted(!next)}
           />
           {agentName ? <Row label="Your agent" hint="Who funds your account" value={agentName} /> : null}
           <Row label="Support" value="Contact" />

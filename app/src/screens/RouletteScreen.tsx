@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
 import { Button, Card, Txt } from '../components/primitives';
+import { SoundToggles } from '../components/SoundToggles';
 import { playCue, sounds, spinNow, unlock, useSoundSet } from '../sound';
 import { ROULETTE_SOUNDS } from '../api/sound-sets';
 import { RouletteWheel, type WheelPhase } from '../components/RouletteWheel';
@@ -330,6 +331,8 @@ export function RouletteScreen() {
             Single zero · RTP 97.30%
           </Txt>
         </View>
+        {/* Sound, reachable without leaving the game. See SoundToggles. */}
+        <SoundToggles compact />
       </View>
 
       {/* The result */}

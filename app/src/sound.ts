@@ -35,20 +35,48 @@ type Ctx = AudioContext;
 
 let ctx: Ctx | null = null;
 let master: GainNode | null = null;
-let muted = false;
 
-const MUTE_KEY = 'juwa.muted';
+/**
+ * Two channels, muted independently.
+ *
+ * They are genuinely different preferences and one switch could not express
+ * either. Music is the thing somebody turns off to listen to something else
+ * while they play; effects are the thing somebody turns off in a waiting room.
+ * A single toggle forces a player who wants their own music to give up the
+ * reels landing as well, and most simply mute the whole tab instead — at which
+ * point every sound decision in this product is moot.
+ *
+ * `music` is the looping bed. `effects` is everything else: reels, wins, taps,
+ * the counter tick, the lever.
+ */
+export type SoundChannel = 'music' | 'effects';
+
+const MUTE_KEY: Record<SoundChannel, string> = {
+  // The original key, kept for `effects` so an existing player who muted the
+  // app does not have it come back on after this change.
+  effects: 'juwa.muted',
+  music: 'juwa.muted.music',
+};
+
 const isWeb = () => Platform.OS === 'web' && typeof window !== 'undefined';
 
-function loadMute(): boolean {
+function loadMute(channel: SoundChannel): boolean {
+  // Off the web there is no Web Audio at all, so everything is muted.
   if (!isWeb()) return true;
   try {
-    return window.localStorage.getItem(MUTE_KEY) === '1';
+    return window.localStorage.getItem(MUTE_KEY[channel]) === '1';
   } catch {
     return false;
   }
 }
-muted = loadMute();
+
+const muteState: Record<SoundChannel, boolean> = {
+  effects: loadMute('effects'),
+  music: loadMute('music'),
+};
+
+/** Effects are checked on every one-shot; kept as a plain read for brevity. */
+const effectsMuted = () => muteState.effects;
 
 function context(): Ctx | null {
   if (!isWeb()) return null;
@@ -80,25 +108,43 @@ export function unlock(): void {
   if (audio && audio.state === 'suspended') void audio.resume();
 }
 
-export function setMuted(next: boolean): void {
-  muted = next;
-  // The bed is the one sound that is already playing when this is called; every
-  // other effect simply checks `muted` the next time it fires.
-  if (bedGain && ctx) {
+/**
+ * Anything that wants to re-render when a toggle moves.
+ *
+ * The state lives in this module rather than in React, because the audio graph
+ * needs it on every sample and a hook cannot be read from `playSample`. The
+ * listeners are how a switch on screen stays in step with it.
+ */
+const muteListeners = new Set<() => void>();
+
+export function onMuteChange(listener: () => void): () => void {
+  muteListeners.add(listener);
+  return () => muteListeners.delete(listener);
+}
+
+export function setMuted(channel: SoundChannel, next: boolean): void {
+  muteState[channel] = next;
+
+  // The bed is the one sound already playing when this is called; every effect
+  // simply checks the flag the next time it fires.
+  if (channel === 'music' && bedGain && ctx) {
     bedGain.gain.cancelScheduledValues(ctx.currentTime);
     bedGain.gain.setValueAtTime(Math.max(0.0001, bedGain.gain.value), ctx.currentTime);
     bedGain.gain.exponentialRampToValueAtTime(next ? 0.0001 : BED_GAIN, ctx.currentTime + 0.4);
   }
+
+  for (const listener of muteListeners) listener();
+
   if (!isWeb()) return;
   try {
-    window.localStorage.setItem(MUTE_KEY, next ? '1' : '0');
+    window.localStorage.setItem(MUTE_KEY[channel], next ? '1' : '0');
   } catch {
     /* private mode — the preference just does not persist */
   }
 }
 
-export function isMuted(): boolean {
-  return muted;
+export function isMuted(channel: SoundChannel): boolean {
+  return muteState[channel];
 }
 
 // ------------------------------------------------------------------ samples
@@ -242,7 +288,7 @@ function playSample(
 ): boolean {
   if (!url) return false;
   const audio = context();
-  if (!audio || !master || muted) return false;
+  if (!audio || !master || effectsMuted()) return false;
 
   const buffer = sampleBuffers.get(url);
   if (!buffer) {
@@ -308,7 +354,11 @@ export function playBed(url: string): void {
 
   const gain = audio.createGain();
   gain.gain.setValueAtTime(0.0001, audio.currentTime);
-  gain.gain.exponentialRampToValueAtTime(muted ? 0.0001 : BED_GAIN, audio.currentTime + BED_FADE);
+  // The BED is music, so it follows the music channel, not effects.
+  gain.gain.exponentialRampToValueAtTime(
+    muteState.music ? 0.0001 : BED_GAIN,
+    audio.currentTime + BED_FADE,
+  );
   gain.connect(master);
 
   const source = audio.createBufferSource();
@@ -447,7 +497,7 @@ function tone(
   } = {},
 ): void {
   const audio = context();
-  if (!audio || !master || muted) return;
+  if (!audio || !master || effectsMuted()) return;
 
   // `when` is an ABSOLUTE time on the audio clock, for sounds booked in
   // advance; `at` is relative to now, for sounds fired in response to a tap.
@@ -494,7 +544,7 @@ function noise({
   when?: number;
 } = {}): void {
   const audio = context();
-  if (!audio || !master || muted) return;
+  if (!audio || !master || effectsMuted()) return;
 
   const start = Math.max(audio.currentTime, when ?? audio.currentTime + at);
   const frames = Math.max(1, Math.floor(audio.sampleRate * duration));
