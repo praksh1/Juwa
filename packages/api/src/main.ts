@@ -13,6 +13,7 @@ import { CERT_FAILURE_ADVICE, decideSsl, isCertificateError, sslOptionFor } from
 import { describeProblems, parseAllowedOrigins } from './origins.js';
 import { JwksCache, jwksUrlForSupabase } from './jwks.js';
 import { bootstrapOperator } from './bootstrap-operator.js';
+import { supabaseAdminFromEnv } from './supabase-admin.js';
 
 function required(name: string): string {
   const value = process.env[name];
@@ -126,12 +127,32 @@ console.log(
     .join(' and ')}.`,
 );
 
+/**
+ * Service-role access, for accounts an agent creates on a player's behalf.
+ *
+ * SUPABASE_SERVICE_ROLE_KEY bypasses every row-level security policy in the
+ * project — it is the most powerful value in this deployment. It belongs in the
+ * API service's environment and nowhere else: never the app bundle, never the
+ * repository, never a log line.
+ *
+ * Absent, agent-created accounts return 503 and invite links still work. One
+ * missing optional credential must disable one feature, not the product.
+ */
+const supabaseAdmin = supabaseAdminFromEnv();
+console.log(
+  supabaseAdmin
+    ? `Agent-created player accounts: on, signing in at @${supabaseAdmin.playerEmailDomain}.`
+    : 'Agent-created player accounts: off — set SUPABASE_SERVICE_ROLE_KEY to enable. ' +
+      'Invite links work either way.',
+);
+
 const { server } = createServer({
   db: new PostgresDb(pool),
   query: (sql, params) => pool.query(sql, params as unknown[]) as never,
   ...(legacySecret ? { jwtSecret: legacySecret } : {}),
   ...(jwks ? { jwks } : {}),
   allowedOrigins,
+  ...(supabaseAdmin ? { supabaseAdmin } : {}),
   ...(stripe ? { stripe } : {}),
 });
 

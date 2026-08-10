@@ -156,6 +156,91 @@ export class AgentsDb {
     }));
   }
 
+  /**
+   * Attach a freshly created auth user to an agent, as a registered player.
+   *
+   * The auth account already exists by the time this runs — Supabase made it,
+   * and no password ever reaches this database. Everything here is ours: the
+   * profile, the age and jurisdiction checks, the welcome bonus, the binding to
+   * the agent, and the flag that forces the temporary password to be replaced.
+   */
+  async createPlayerForAgent(args: {
+    agentId: string;
+    playerId: string;
+    username: string;
+    dateOfBirth: string;
+    country: string;
+    region: string | null;
+    welcomeCoins: number;
+  }): Promise<{ username: string; balance: number }> {
+    const { rows } = await this.client.query(
+      `select * from create_agent_player($1, $2, $3, $4::date, $5, $6, $7)`,
+      [
+        args.agentId,
+        args.playerId,
+        args.username,
+        args.dateOfBirth,
+        args.country,
+        args.region,
+        args.welcomeCoins,
+      ],
+    );
+    const row = rows[0] as Record<string, string> | undefined;
+    if (!row) throw new Error('Could not create that player');
+    return { username: row['username']!, balance: toInt(row['balance']) };
+  }
+
+  /**
+   * Is this username already spoken for?
+   *
+   * Checked before an auth account is created, not only by the unique index
+   * afterwards — the index fires too late to stop Supabase having already made
+   * a user for a name our own tables will reject.
+   */
+  async usernameTaken(username: string): Promise<boolean> {
+    const { rows } = await this.client.query(
+      `select 1 from profiles where lower(username) = lower($1)`,
+      [username],
+    );
+    return rows.length > 0;
+  }
+
+  /** The player has replaced the temporary password an agent gave them. */
+  async clearMustSetPassword(playerId: string): Promise<void> {
+    await this.client.query(`select clear_must_set_password($1)`, [playerId]);
+  }
+
+  /** Ask to become an agent. Creates a pending row, which grants nothing. */
+  async apply(profileId: string, displayName: string, notes?: string): Promise<string> {
+    const { rows } = await this.client.query(`select apply_to_be_agent($1, $2, $3) as status`, [
+      profileId,
+      displayName,
+      notes ?? null,
+    ]);
+    return (rows[0] as Record<string, string>)['status']!;
+  }
+
+  /**
+   * Undo a mis-sent allocation. ADMIN ONLY — there is no agent-facing caller,
+   * and there must not be. See `reverse_allocation` in migration 0011.
+   */
+  async reverseAllocation(
+    txnId: string,
+    operatorId: string,
+    reason: string,
+  ): Promise<{ txnId: string; agentInventory: number; playerBalance: number }> {
+    const { rows } = await this.client.query(
+      `select * from reverse_allocation($1, $2, $3)`,
+      [txnId, operatorId, reason],
+    );
+    const row = rows[0] as Record<string, string>;
+    return {
+      txnId: row['txn_id']!,
+      agentInventory: toInt(row['agent_inventory']),
+      playerBalance: toInt(row['player_balance']),
+    };
+  }
+
   /** Is this player one of this agent's? Used to fail early with a clear message. */
   async ownsPlayer(agentId: string, playerId: string): Promise<boolean> {
     const { rows } = await this.client.query(

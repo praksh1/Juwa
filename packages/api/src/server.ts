@@ -51,6 +51,7 @@ import {
 } from './admin.js';
 import { GameConfigCache, assertBetAllowed } from './game-config.js';
 import { agentRoutes, handleAdminAgents } from './agent-routes.js';
+import { SupabaseAdmin, type SupabaseAdminConfig } from './supabase-admin.js';
 import { ADMIN_CONSOLE_HTML } from './admin-console.js';
 import {
   WebhookVerificationError,
@@ -70,6 +71,12 @@ export interface ServerConfig {
   jwks?: JwksCache;
   /** Origins allowed to call this API. Never '*' — credentials are involved. */
   allowedOrigins: string[];
+  /**
+   * Service-role access to Supabase Auth, for accounts an AGENT creates on a
+   * player's behalf. Omit and that one route returns 503 — invite links, which
+   * need no privileged credential, keep working.
+   */
+  supabaseAdmin?: SupabaseAdminConfig;
   /** Omit to run without a store; the checkout route then returns 503. */
   stripe?: {
     gateway: StripeGateway;
@@ -291,6 +298,7 @@ export function createServer(config: ServerConfig) {
    * behind each other, which they can only do inside one database.
    */
   const agents = new AgentsDb({ query: (text, values) => config.query(text, values) });
+  const supabaseAdmin = config.supabaseAdmin ? new SupabaseAdmin(config.supabaseAdmin) : undefined;
 
   const sweeper = setInterval(() => {
     for (const limiter of Object.values(limiters)) limiter.sweep();
@@ -456,7 +464,7 @@ export function createServer(config: ServerConfig) {
     'GET /me': async (ctx) => {
       const { rows } = await config.query<Record<string, unknown>>(
         `select username, registered_at, age_verified_at, self_excluded_until,
-                daily_streak, last_bonus_date, has_purchased
+                daily_streak, last_bonus_date, has_purchased, must_set_password
            from profiles where id = $1`,
         [ctx.player.playerId],
       );
@@ -486,6 +494,12 @@ export function createServer(config: ServerConfig) {
         selfExcludedUntil: row['self_excluded_until'],
         dailyStreak: row['daily_streak'],
         hasPurchased: row['has_purchased'],
+        /**
+         * True while an agent-set temporary password is still in force. The
+         * app blocks everything else until it is replaced, which is what stops
+         * the agent's copy of the password from outliving the handover.
+         */
+        mustSetPassword: row['must_set_password'] === true,
         agent,
         // Who they belong to, by NAME only. A player can see which agent funds
         // them — support questions start there — and cannot change it: there is
@@ -654,7 +668,7 @@ export function createServer(config: ServerConfig) {
 
     // Agent-facing routes. Every one of them scopes itself to the caller's own
     // agent record, resolved from the verified token — see agent-routes.ts.
-    ...agentRoutes(agents),
+    ...agentRoutes(agents, supabaseAdmin),
   };
 
   const limiterFor = (route: string) => {
