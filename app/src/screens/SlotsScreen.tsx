@@ -6,6 +6,7 @@ import { betOptions, suggestedBet } from '@juwa/economy';
 import { Card, Txt } from '../components/primitives';
 import { useRoute } from '@react-navigation/native';
 import { Reel, SPIN_UP_SECONDS, SYMBOL_SIZE, type ReelPhase } from '../components/Reel';
+import { tintFromAccent } from '../components/SlotSymbol';
 import { useCompactLayout } from '../layout';
 import { scatterTrigger, slotDetails, slotPaytable } from '../api/games';
 import { sounds, spinNow, unlock } from '../sound';
@@ -19,7 +20,8 @@ import {
 } from '../components/GameRules';
 import { WinLines, litCells, useWinCycle } from '../components/WinLines';
 import { ReelFrame, SlotConsole, SpinLever } from '../components/SlotControls';
-import { cabinetFor } from '../api/cabinets';
+import { cabinetFor, roomFor } from '../api/cabinets';
+import { hasTileArt } from '../components/GameArt';
 import { WinOverlay, useCabinetShake } from '../components/WinOverlay';
 import {
   PlayApiError,
@@ -241,6 +243,17 @@ export function SlotsScreen() {
   const [autoStarting, setAutoStarting] = useState(false);
   /** The machine this game is built as: frame, room, and which controls. */
   const cabinet = useMemo(() => cabinetFor(gameId), [gameId]);
+  /** The room this machine stands in — its own tile unless told otherwise. */
+  const room = useMemo(() => roomFor(gameId, hasTileArt(gameId)), [gameId]);
+  /**
+   * The metal the drawn symbols are cast in.
+   *
+   * SEVEN, BAR, WILD and SCATTER stay vector in every game — they are
+   * typography and the two symbols that must be recognised instantly — so they
+   * were identical everywhere. Same glyph now, but cast in this game's own
+   * colour, which is the difference between one seven and twenty-three.
+   */
+  const symbolTint = useMemo(() => tintFromAccent(details?.theme.accent), [details?.theme.accent]);
 
   /**
    * Resolved by the LAST reel's own stop callback. This is the handshake that
@@ -766,13 +779,19 @@ export function SlotsScreen() {
         <View style={styles.machineRow}>
         <ReelFrame style={cabinet.frame}>
         <Animated.View style={[styles.reelBay, compact && styles.reelBayCompact, bayStyle]}>
-        {cabinet.background ? (
-          <Image
-            source={{ uri: cabinet.background }}
-            style={StyleSheet.absoluteFill}
-            resizeMode="cover"
-            accessibilityElementsHidden
-          />
+        {room ? (
+          <>
+            <Image
+              source={{ uri: room }}
+              style={StyleSheet.absoluteFill}
+              resizeMode="cover"
+              accessibilityElementsHidden
+            />
+            {/* The room has to stay a room. A tile was drawn to be looked at,
+                so at full strength it competes with the symbols in front of
+                it — this holds it back to a setting. */}
+            <View style={styles.roomScrim} pointerEvents="none" />
+          </>
         ) : null}
         <View
           style={styles.reels}
@@ -796,6 +815,7 @@ export function SlotsScreen() {
               spinUp={inFreeSpins ? SPIN_UP_SECONDS * FS_SPEED : SPIN_UP_SECONDS}
               anticipating={anticipating[i] ?? false}
               {...(details?.art ? { family: details.art } : {})}
+              tint={symbolTint}
               // Dimming needs something to contrast AGAINST. A scatter win
               // pays from anywhere on the grid and produces no winning line,
               // so dimming on payout alone turned the whole machine dark and
@@ -1029,6 +1049,7 @@ const styles = StyleSheet.create({
   reelBayCompact: { padding: spacing.xs },
   /** The machine and its lever, side by side. */
   machineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  roomScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(4, 6, 16, 0.62)' },
   chip: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,

@@ -18,18 +18,70 @@
 import React from 'react';
 import { Image } from 'react-native';
 import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
+import { hexToHsl, hslToHex } from '@juwa/ui';
 import { symbolDisplayName, symbolImage } from '../art/symbol-art';
 
 const uid = (symbol: string, name: string) => `sym-${symbol}-${name}`;
 
-/** Shared metal gradient, used by every gold element so they match exactly. */
+/**
+ * The metal every drawn symbol is cast in — per GAME, not per app.
+ *
+ * SEVEN, BAR, WILD and SCATTER are never re-skinned by a theme: they are
+ * typography and they are the two symbols a player must recognise instantly in
+ * every game, so they stay vector. The cost of that decision was that they were
+ * also byte-identical in all twenty-three games — which is why, as the player
+ * put it, "the symbol 7 appears in so many game machines".
+ *
+ * The shape stays the same, so nothing has to be relearned. The METAL changes:
+ * Frost Peak's seven is cast in ice, Neon Alley's in magenta, Midnight Gold's
+ * in gold. Same glyph, different game.
+ */
+export interface SymbolTint {
+  light: string;
+  mid: string;
+  deep: string;
+  shadow: string;
+}
+
+export const GOLD_TINT: SymbolTint = {
+  light: '#FFF0B8',
+  mid: '#F5C542',
+  deep: '#D19A1E',
+  shadow: '#8A5F0A',
+};
+
+const TintContext = React.createContext<SymbolTint>(GOLD_TINT);
+
+/**
+ * Derive a metal from a game's accent colour.
+ *
+ * Lightness and saturation are fixed by the ramp and only the HUE comes from
+ * the game, which is what keeps every version of the seven reading as the same
+ * cast object under different lighting rather than as a different symbol.
+ */
+export function tintFromAccent(accent: string | undefined): SymbolTint {
+  if (!accent) return GOLD_TINT;
+  const { h, s } = hexToHsl(accent);
+  // A washed-out accent would produce grey metal, which reads as a rendering
+  // fault rather than as a choice.
+  const sat = Math.max(0.45, Math.min(0.9, s));
+  return {
+    light: hslToHex({ h, s: sat * 0.55, l: 0.92 }),
+    mid: hslToHex({ h, s: sat, l: 0.62 }),
+    deep: hslToHex({ h, s: sat, l: 0.44 }),
+    shadow: hslToHex({ h, s: sat, l: 0.22 }),
+  };
+}
+
+/** Shared metal gradient, used by every element so they match exactly. */
 function GoldDef({ id }: { id: string }) {
+  const tint = React.useContext(TintContext);
   return (
     <LinearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-      <Stop offset="0" stopColor="#FFF0B8" />
-      <Stop offset="0.42" stopColor="#F5C542" />
-      <Stop offset="0.7" stopColor="#D19A1E" />
-      <Stop offset="1" stopColor="#8A5F0A" />
+      <Stop offset="0" stopColor={tint.light} />
+      <Stop offset="0.42" stopColor={tint.mid} />
+      <Stop offset="0.7" stopColor={tint.deep} />
+      <Stop offset="1" stopColor={tint.shadow} />
     </LinearGradient>
   );
 }
@@ -290,10 +342,13 @@ export function SlotSymbol({
   name,
   size,
   family,
+  tint,
 }: {
   name: string;
   size: number;
   family?: string;
+  /** The metal the drawn symbols are cast in. Ignored by themed artwork. */
+  tint?: SymbolTint;
 }) {
   const image = symbolImage(family, name);
   if (image) {
@@ -316,8 +371,10 @@ export function SlotSymbol({
   const Drawing = SYMBOLS[name];
   if (!Drawing) return null;
   return (
-    <Svg width={size} height={size} viewBox="0 0 100 100">
-      <Drawing />
-    </Svg>
+    <TintContext.Provider value={tint ?? GOLD_TINT}>
+      <Svg width={size} height={size} viewBox="0 0 100 100">
+        <Drawing />
+      </Svg>
+    </TintContext.Provider>
   );
 }

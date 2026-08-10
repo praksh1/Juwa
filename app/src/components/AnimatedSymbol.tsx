@@ -37,7 +37,7 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { radius, type SymbolState } from '@juwa/ui';
-import { SlotSymbol } from './SlotSymbol';
+import { SlotSymbol, type SymbolTint } from './SlotSymbol';
 import { usePrefersReducedMotion } from '../motion';
 
 /**
@@ -74,6 +74,8 @@ interface AnimatedSymbolProps {
   /** Cell size in points. The symbol is drawn inside it with room to grow. */
   size: number;
   family?: string;
+  /** The metal the drawn symbols are cast in, from the game's accent. */
+  tint?: SymbolTint;
   state: SymbolState;
   /**
    * Anything stable and per-cell. Spreads the breathing out so fifteen symbols
@@ -82,7 +84,7 @@ interface AnimatedSymbolProps {
   seed: number;
 }
 
-export function AnimatedSymbol({ name, size, family, state, seed }: AnimatedSymbolProps) {
+export function AnimatedSymbol({ name, size, family, tint, state, seed }: AnimatedSymbolProps) {
   const reduceMotion = usePrefersReducedMotion();
   const scale = useRef(new Animated.Value(1)).current;
   const shine = useRef(new Animated.Value(0)).current;
@@ -206,7 +208,12 @@ export function AnimatedSymbol({ name, size, family, state, seed }: AnimatedSymb
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
       <View style={[styles.glass, { width: size, height: size, borderRadius: radius.sm }]}>
-        <SlotSymbol name={name} size={size} {...(family ? { family } : {})} />
+        <SlotSymbol
+          name={name}
+          size={size}
+          {...(family ? { family } : {})}
+          {...(tint ? { tint } : {})}
+        />
         {winning && !reduceMotion ? (
           <Animated.View
             pointerEvents="none"

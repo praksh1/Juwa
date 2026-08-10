@@ -112,6 +112,29 @@ export const CABINETS: Record<string, CabinetSpec> = {
   'slot-jungle-run': { controls: 'console', frame: 'none' },
 };
 
+/**
+ * The room a game is played in.
+ *
+ * Defaults to THE GAME'S OWN LOBBY TILE. Every game already has a unique,
+ * on-theme, hand-made image — Ocean Drift's is a mermaid underwater, Frost
+ * Peak's is an ice cavern — and until now each was shown once in the lobby and
+ * then thrown away the moment the player tapped it. Twenty-three distinct
+ * rooms were already in the repository, being used as thumbnails.
+ *
+ * That is why the games all felt the same on entry: whatever the tile promised,
+ * the machine behind it was the same dark panel. Standing each machine in its
+ * own tile is the closest thing to a free fix this codebase has.
+ *
+ * A named background still wins where one is set, because a few of the rooms in
+ * `art/backgrounds` are better rooms than a tile is — they were drawn as
+ * backdrops, with the middle deliberately empty.
+ */
+export function roomFor(gameId: string, hasTile: boolean): string | undefined {
+  const named = CABINETS[gameId]?.background;
+  if (named) return named;
+  return hasTile ? `/art/tiles/${gameId}.jpg` : undefined;
+}
+
 export function cabinetFor(gameId: string): CabinetSpec {
   return CABINETS[gameId] ?? DEFAULT_CABINET;
 }
