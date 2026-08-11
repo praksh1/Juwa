@@ -32,10 +32,22 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, View } from 'react-native';
-import Svg, { Circle, G, Path, Text as SvgText } from 'react-native-svg';
+import { Animated, Easing, StyleSheet, View } from 'react-native';
+import Svg, {
+  Circle,
+  Defs,
+  G,
+  LinearGradient,
+  Path,
+  RadialGradient,
+  Stop,
+  Text as SvgText,
+} from 'react-native-svg';
 import { colors } from '@juwa/ui';
 import { spinNow } from '../sound';
+import { usePrefersReducedMotion } from '../motion';
+
+const AnimatedG = Animated.createAnimatedComponent(G);
 
 /**
  * The single-zero wheel, clockwise from the top.
@@ -52,8 +64,9 @@ const POCKETS = WHEEL_ORDER.length;
 const STEP = 360 / POCKETS;
 
 const RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
-const pocketColour = (n: number) =>
-  n === 0 ? '#0E7A3C' : RED.has(n) ? '#B3122B' : '#141019';
+/** Gradient ids, so every pocket is a recess with a lit floor and a dark wall. */
+const pocketFill = (n: number) =>
+  n === 0 ? 'url(#rw-green)' : RED.has(n) ? 'url(#rw-red)' : 'url(#rw-black)';
 
 /** Turns per second while the wheel is free-running. */
 const WHEEL_TURNS_PER_SEC = 0.55;
@@ -103,9 +116,40 @@ export function RouletteWheel({
   const wheel = useRef(new Animated.Value(0)).current;
   const ballX = useRef(new Animated.Value(0)).current;
   const ballY = useRef(new Animated.Value(0)).current;
+  /** Breathes on the pocket that won, once the ball is in it. */
+  const winGlow = useRef(new Animated.Value(0)).current;
+  const reduced = usePrefersReducedMotion();
 
   const landed = useRef(onLanded);
   landed.current = onLanded;
+
+  /**
+   * The winning pocket, but only once the ball is actually sitting in it.
+   *
+   * Gated on `idle` deliberately. `target` is set the moment the server
+   * replies, which is roughly three seconds before the ball arrives — marking
+   * the pocket then would show the player the answer while the wheel was still
+   * turning, which is the one thing the whole landing sequence exists to avoid.
+   */
+  const winner =
+    phase === 'idle' && target !== null
+      ? WHEEL_ORDER.indexOf(target as (typeof WHEEL_ORDER)[number])
+      : -1;
+
+  useEffect(() => {
+    if (winner < 0 || reduced) {
+      winGlow.setValue(winner < 0 ? 0 : 1);
+      return undefined;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(winGlow, { toValue: 1, duration: 620, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.timing(winGlow, { toValue: 0.35, duration: 620, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [winner, reduced, winGlow]);
 
   const centre = size / 2;
   /** Where the ball runs before it drops, and where it comes to rest. */
@@ -219,20 +263,154 @@ export function RouletteWheel({
 
   return (
     <View style={{ width: size, height: size }} accessibilityElementsHidden>
+      {/*
+        THE PARTS THAT TURN.
+        Everything painted on the wheel: pockets, frets, the turret. Nothing
+        that belongs to the room.
+      */}
       <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ rotate }] }]}>
         <Svg width={size} height={size} viewBox="0 0 100 100">
-          {/* Rim */}
-          <Circle cx={50} cy={50} r={49} fill="#1B1410" stroke={colors.gold.dark} strokeWidth={2} />
+          <Defs>
+            <LinearGradient id="rw-gold" x1="0.1" y1="0" x2="0.7" y2="1">
+              <Stop offset="0" stopColor="#FFF3CE" />
+              <Stop offset="0.42" stopColor="#E8BC4E" />
+              <Stop offset="1" stopColor="#7A5210" />
+            </LinearGradient>
+            {/*
+              Pocket fills as gradients rather than flat colour.
+
+              A pocket is a recess with a floor and a wall, so it is darker at
+              the rim than at the fret. Flat fills are what made this read as a
+              pie chart with numbers on it — the shape was right and the light
+              was missing.
+            */}
+            <RadialGradient id="rw-red" cx="50%" cy="50%" rx="50%" ry="50%">
+              <Stop offset="0.42" stopColor="#D01B36" />
+              <Stop offset="1" stopColor="#71091B" />
+            </RadialGradient>
+            <RadialGradient id="rw-black" cx="50%" cy="50%" rx="50%" ry="50%">
+              <Stop offset="0.42" stopColor="#241E2E" />
+              <Stop offset="1" stopColor="#08060C" />
+            </RadialGradient>
+            <RadialGradient id="rw-green" cx="50%" cy="50%" rx="50%" ry="50%">
+              <Stop offset="0.42" stopColor="#12A452" />
+              <Stop offset="1" stopColor="#07542A" />
+            </RadialGradient>
+            {/* The cone under the turret, which is a polished dome. */}
+            <RadialGradient id="rw-hub" cx="36%" cy="30%" rx="72%" ry="72%">
+              <Stop offset="0" stopColor="#6E5B44" />
+              <Stop offset="0.55" stopColor="#2C2118" />
+              <Stop offset="1" stopColor="#120C08" />
+            </RadialGradient>
+          </Defs>
+
+          <Circle cx={50} cy={50} r={49} fill="#1B1410" />
+
           <G>
             {WHEEL_ORDER.map((n, i) => (
               <Pocket key={n} number={n} index={i} />
             ))}
           </G>
-          {/* Hub */}
-          <Circle cx={50} cy={50} r={20} fill="#241A12" stroke={colors.gold.dark} strokeWidth={1.5} />
-          <Circle cx={50} cy={50} r={7} fill={colors.gold.default} />
+
+          {/* The winning pocket, lit from underneath once the ball is in it. */}
+          {winner >= 0 ? (
+            <AnimatedG opacity={winGlow as unknown as number}>
+              <Path
+                d={pocketWedge(winner)}
+                fill="#FFD86B"
+                opacity={0.34}
+              />
+              <Path
+                d={pocketWedge(winner)}
+                fill="none"
+                stroke="#FFF0B8"
+                strokeWidth={1.1}
+                strokeLinejoin="round"
+              />
+            </AnimatedG>
+          ) : null}
+
+          {/* The turret: a machined cone with a brass finial, not a peg. */}
+          <Circle cx={50} cy={50} r={20} fill="url(#rw-hub)" />
+          <Circle cx={50} cy={50} r={20} fill="none" stroke="url(#rw-gold)" strokeWidth={1.4} />
+          {/* Four arms across the cone, which is what a real turret has and
+              what makes the wheel's rotation legible near the middle — the
+              pockets are too fine to track at this size. */}
+          {[0, 45, 90, 135].map((angle) => (
+            <Path
+              key={angle}
+              d="M50,31 L50,69"
+              stroke="url(#rw-gold)"
+              strokeWidth={1.1}
+              opacity={0.55}
+              transform={`rotate(${angle} 50 50)`}
+            />
+          ))}
+          <Circle cx={50} cy={50} r={7.4} fill="url(#rw-gold)" stroke="#4A3308" strokeWidth={0.9} />
+          <Circle cx={48.2} cy={47.8} r={2.4} fill="#FFF6D8" opacity={0.8} />
         </Svg>
       </Animated.View>
+
+      {/*
+        THE PARTS THAT DO NOT TURN.
+
+        The bezel, the lamps around it, and — the important one — the specular
+        sweep. A highlight painted inside the rotating group travels with the
+        wheel, which reads as a pale streak PAINTED ON the wheel rather than as
+        light falling on it. Kept still, the same shape becomes a reflection,
+        and the wheel underneath it starts to look like polished wood and
+        lacquer. That single separation is most of the difference between this
+        and the flat disc it replaces.
+      */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Svg width={size} height={size} viewBox="0 0 100 100">
+          <Defs>
+            <LinearGradient id="rwf-gold" x1="0.1" y1="0" x2="0.7" y2="1">
+              <Stop offset="0" stopColor="#FFF3CE" />
+              <Stop offset="0.42" stopColor="#E8BC4E" />
+              <Stop offset="1" stopColor="#7A5210" />
+            </LinearGradient>
+            <LinearGradient id="rw-gloss" x1="0.12" y1="0" x2="0.5" y2="0.95">
+              <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0.30" />
+              <Stop offset="0.34" stopColor="#FFFFFF" stopOpacity="0.07" />
+              <Stop offset="0.55" stopColor="#FFFFFF" stopOpacity="0" />
+            </LinearGradient>
+            {/* A shadow along the bottom inside edge, so the bowl has depth
+                rather than being a flat ring drawn on a flat face. */}
+            <LinearGradient id="rw-bowl" x1="0.5" y1="0.45" x2="0.5" y2="1">
+              <Stop offset="0" stopColor="#000000" stopOpacity="0" />
+              <Stop offset="1" stopColor="#000000" stopOpacity="0.42" />
+            </LinearGradient>
+          </Defs>
+
+          <Circle cx={50} cy={50} r={46.5} fill="url(#rw-bowl)" />
+          <Circle cx={50} cy={50} r={46.5} fill="url(#rw-gloss)" />
+
+          {/* The bezel: a wide gold band with a dark lip either side, which is
+              what makes the rim read as machined metal at 230 points. */}
+          <Circle cx={50} cy={50} r={47.6} fill="none" stroke="#1A0F06" strokeWidth={3.4} />
+          <Circle cx={50} cy={50} r={47.6} fill="none" stroke="url(#rwf-gold)" strokeWidth={2.2} />
+          <Circle cx={50} cy={50} r={44.6} fill="none" stroke="url(#rwf-gold)" strokeWidth={0.9} opacity={0.7} />
+
+          {/* Lamps around the bezel. Eight, not thirty-seven: they mark the
+              rim as a lit fixture without competing with the pockets, which
+              are the thing being read. */}
+          {Array.from({ length: 8 }, (_, i) => {
+            const a = ((i * 45 - 90) * Math.PI) / 180;
+            return (
+              <Circle
+                key={i}
+                cx={50 + 47.6 * Math.cos(a)}
+                cy={50 + 47.6 * Math.sin(a)}
+                r={1.7}
+                fill="#FFF6D8"
+                stroke="#8A5F0A"
+                strokeWidth={0.5}
+              />
+            );
+          })}
+        </Svg>
+      </View>
 
       {/* The ball is OUTSIDE the rotating group: it has its own motion, and
           rotating it with the wheel would glue it to one pocket for the whole
@@ -244,18 +422,58 @@ export function RouletteWheel({
           {
             width: ballSize,
             height: ballSize,
-            borderRadius: ballSize / 2,
             left: centre - ballSize / 2,
             top: centre - ballSize / 2,
             transform: [{ translateX: ballX }, { translateY: ballY }],
           },
         ]}
-      />
+      >
+        {/*
+          Drawn rather than styled. A flat disc with a border is a dot; an
+          ivory ball has a highlight up and left of centre and a terminator
+          opposite it, and at nine points across that is still the difference
+          between something rolling and something drawn.
+        */}
+        <Svg width={ballSize} height={ballSize} viewBox="0 0 10 10">
+          <Defs>
+            <RadialGradient id="rw-ball" cx="34%" cy="30%" rx="72%" ry="72%">
+              <Stop offset="0" stopColor="#FFFFFF" />
+              <Stop offset="0.45" stopColor="#F2EEE2" />
+              <Stop offset="1" stopColor="#9C9382" />
+            </RadialGradient>
+          </Defs>
+          <Circle cx={5} cy={5} r={4.7} fill="url(#rw-ball)" />
+        </Svg>
+      </Animated.View>
     </View>
   );
 }
 
-/** One pocket: a wedge, its dividing fret, and the number. */
+/** The wedge path for one pocket, in the same geometry `Pocket` uses. */
+function pocketWedge(index: number): string {
+  const start = index * STEP - STEP / 2 - 90;
+  const end = start + STEP;
+  const rad = (deg: number) => (deg * Math.PI) / 180;
+  const outer = 46;
+  const inner = 21;
+  const p = (angle: number, r: number) =>
+    `${(50 + Math.cos(rad(angle)) * r).toFixed(2)},${(50 + Math.sin(rad(angle)) * r).toFixed(2)}`;
+  return (
+    `M${p(start, outer)} A${outer},${outer} 0 0 1 ${p(end, outer)} ` +
+    `L${p(end, inner)} A${inner},${inner} 0 0 0 ${p(start, inner)} Z`
+  );
+}
+
+/**
+ * One pocket: a wedge, its dividing fret, and the number.
+ *
+ * The fret is drawn as a separate bright line rather than as the wedge's own
+ * stroke. A stroke follows the whole outline, including the arc at the rim,
+ * which put a gold hoop around the outside of every pocket and turned the
+ * pocket ring into a solid gold band at this size. A real wheel's frets are
+ * radial only — they are the metal walls BETWEEN pockets — so that is what is
+ * drawn, and the rim stays dark where the ball runs.
+ */
 function Pocket({ number, index }: { number: number; index: number }) {
   const start = index * STEP - STEP / 2 - 90;
   const end = start + STEP;
@@ -279,10 +497,9 @@ function Pocket({ number, index }: { number: number; index: number }) {
     <>
       <Path
         d={`M${x1},${y1} A${outer},${outer} 0 0 1 ${x2},${y2} L${x3},${y3} A${inner},${inner} 0 0 0 ${x4},${y4} Z`}
-        fill={pocketColour(number)}
-        stroke={colors.gold.dark}
-        strokeWidth={0.4}
+        fill={pocketFill(number)}
       />
+      <Path d={`M${x1},${y1} L${x4},${y4}`} stroke="url(#rw-gold)" strokeWidth={0.55} />
       <SvgText
         x={tx}
         y={ty + 1.6}
@@ -303,12 +520,11 @@ function Pocket({ number, index }: { number: number; index: number }) {
 const styles = StyleSheet.create({
   ball: {
     position: 'absolute',
-    backgroundColor: '#F6F4EF',
-    borderWidth: 1,
-    borderColor: '#8A8272',
+    // The drop shadow stays on the container rather than in the SVG: it is the
+    // ball's shadow ON THE WHEEL, so it belongs to the space between them.
     shadowColor: '#000',
-    shadowOpacity: 0.6,
+    shadowOpacity: 0.65,
     shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 1.5 },
   },
 });

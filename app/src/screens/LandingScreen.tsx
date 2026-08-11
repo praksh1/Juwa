@@ -10,7 +10,7 @@
  * of "create account" for the same reason.
  */
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, spacing, typography } from '@juwa/ui';
@@ -56,6 +56,18 @@ export function LandingScreen({
 }) {
   const featured = GAMES.filter((g) => PLAYABLE.has(g.id)).slice(0, 4);
   const packs = COIN_PACKS.slice(0, 3);
+  /**
+   * "Browse games" scrolls to the games; it does not open sign-in.
+   *
+   * It briefly did both, sitting next to a "Sign in" button that went to the
+   * same place — two adjacent buttons with different words and identical
+   * behaviour, which teaches a visitor that the labels on this page do not mean
+   * anything. The whole point of offering browsing ahead of an account is that
+   * somebody can look before they commit, so the button has to actually take
+   * them to the looking.
+   */
+  const scroller = useRef<ScrollView>(null);
+  const gamesY = useRef(0);
 
   return (
     <View style={styles.screen}>
@@ -66,7 +78,7 @@ export function LandingScreen({
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView ref={scroller} contentContainerStyle={styles.scroll}>
         <View style={styles.hero}>
           <LinearGradient
             colors={['#1A1030', '#08070E']}
@@ -90,7 +102,13 @@ export function LandingScreen({
             no agent and no coins.
           */}
           <View style={styles.heroButtons}>
-            <Button label="Browse games" variant="secondary" onPress={onSignIn} />
+            <Button
+              label="Browse games"
+              variant="secondary"
+              onPress={() =>
+                scroller.current?.scrollTo({ y: Math.max(0, gamesY.current - 12), animated: true })
+              }
+            />
             <Button label="Sign in" onPress={onSignIn} />
           </View>
           {/*
@@ -128,9 +146,13 @@ export function LandingScreen({
           ))}
         </View>
 
-        <Txt variant="h1" style={styles.sectionTitle}>
-          The games
-        </Txt>
+        {/* Measured rather than estimated: the hero's height depends on how
+            the headline wraps, which depends on the device. */}
+        <View onLayout={(event) => (gamesY.current = event.nativeEvent.layout.y)}>
+          <Txt variant="h1" style={styles.sectionTitle}>
+            The games
+          </Txt>
+        </View>
         <View style={styles.grid}>
           {/*
             The SAME GameCard the lobby uses, not a second rendering of the art.

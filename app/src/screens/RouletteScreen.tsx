@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Animated, Easing, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
 import { Button, Card, Txt } from '../components/primitives';
@@ -7,6 +8,7 @@ import { SoundToggles } from '../components/SoundToggles';
 import { playCue, sounds, spinNow, unlock, useSoundSet } from '../sound';
 import { ROULETTE_SOUNDS } from '../api/sound-sets';
 import { RouletteWheel, type WheelPhase } from '../components/RouletteWheel';
+import { usePrefersReducedMotion } from '../motion';
 import { ROULETTE_GAME_ID } from '../api/games';
 import {
   PlayApiError,
@@ -61,8 +63,16 @@ interface Bet {
 
 /** How long the wheel takes to come to rest once it has its answer. */
 const WHEEL_LAND_SECONDS = 3.4;
-/** Big enough that the painted numbers are readable on a phone. */
-const WHEEL_SIZE = 230;
+/**
+ * Big enough that the painted numbers are readable on a phone, small enough
+ * that the whole result — wheel, number, and the win line — clears the dock.
+ *
+ * It was 230, and on a 664-point viewport that put "WIN 200 GC" underneath the
+ * pinned controls: the player was scrolled back to the top to be shown a result
+ * that was covered up. The cluster is measured against the dock now rather than
+ * sized on its own.
+ */
+const WHEEL_SIZE = 206;
 
 /** Payout quoted as "X to 1"; the stake comes back on top. */
 const ODDS: Record<BetType, number> = {
@@ -71,6 +81,9 @@ const ODDS: Record<BetType, number> = {
 };
 
 const CHIPS = [50, 100, 500, 1_000, 5_000];
+
+/** Button (52) plus the dock's own padding. Reserved at the foot of the scroll. */
+const DOCK_HEIGHT = 52 + 24;
 
 /** Stable key so tapping the same spot twice stacks rather than duplicates. */
 const keyOf = (type: BetType, selection: number[]) => `${type}:${selection.join(',')}`;
@@ -122,6 +135,61 @@ export function RouletteScreen() {
   /** Resolved by the wheel's own stop, so the readout can never run ahead. */
   const wheelStopped = useRef<(() => void) | null>(null);
   const scroller = useRef<ScrollView>(null);
+  /**
+   * The winning number's entrance.
+   *
+   * Overshoots to 1.3 and settles back, which is the shape of something being
+   * put down rather than something fading in. It is keyed on `display`, so it
+   * fires exactly once per spin and exactly when the ball has stopped — the
+   * same moment the number becomes true.
+   */
+  const revealScale = useRef(new Animated.Value(1)).current;
+  const reduced = usePrefersReducedMotion();
+
+  /**
+   * Where to scroll so the player can SEE the result of the spin they paid for.
+   *
+   * This used to be `y: 0`, which is right only if the whole result card
+   * happens to fit above the pinned controls. It does on a 664-point phone and
+   * it does not on a 553-point one, where scrolling to the top put the wheel on
+   * screen and "WIN 200 GC" underneath the dock — the player was returned to a
+   * view of the answer being covered up.
+   *
+   * So it is derived instead: put the BOTTOM of the result card at the bottom
+   * of the space the dock leaves. On a tall screen the whole card fits and this
+   * is zero, i.e. the top, which is what it always was. On a short screen it
+   * scrolls past part of the wheel to show the number and the win line — the
+   * right thing to sacrifice, because the wheel has already finished saying
+   * what it had to say.
+   */
+  const cardBottom = useRef(0);
+  const viewport = useRef(0);
+  const resultScrollTarget = useCallback(
+    () => Math.max(0, cardBottom.current - (viewport.current - DOCK_HEIGHT) + spacing.sm),
+    [],
+  );
+
+  useEffect(() => {
+    if (display === null || reduced) {
+      revealScale.setValue(1);
+      return;
+    }
+    revealScale.setValue(0.55);
+    Animated.sequence([
+      Animated.timing(revealScale, {
+        toValue: 1.3,
+        duration: 190,
+        easing: Easing.out(Easing.back(2.2)),
+        useNativeDriver: true,
+      }),
+      Animated.spring(revealScale, {
+        toValue: 1,
+        friction: 5,
+        tension: 120,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [display, reduced, revealScale]);
 
   useEffect(() => {
     let alive = true;
@@ -229,7 +297,7 @@ export function RouletteScreen() {
       // scrolled to the bottom — and the wheel, the number and the win amount
       // are all off-screen above them. Without this they never see the result
       // of the spin they just paid for.
-      scroller.current?.scrollTo({ y: 0, animated: true });
+      scroller.current?.scrollTo({ y: resultScrollTarget(), animated: true });
 
       const payout = result.settlement?.payout ?? 0;
       setTimeout(() => {
@@ -271,14 +339,12 @@ export function RouletteScreen() {
           won && styles.cellWon,
         ]}
       >
+        {/* A lit top half. Thirty-seven gradients would be thirty-seven SVGs;
+            one flat overlay at 9% white does the same job — the cell stops
+            being a coloured rectangle and starts being a moulded lozenge. */}
+        <CellGloss />
         <Txt variant="bodySmall">{n}</Txt>
-        {bet ? (
-          <View style={styles.chipMark}>
-            <Txt variant="caption" color={colors.text.inverse}>
-              {bet.amount >= 1000 ? `${bet.amount / 1000}k` : bet.amount}
-            </Txt>
-          </View>
-        ) : null}
+        {bet ? <ChipMark amount={bet.amount} /> : null}
       </Pressable>
     );
   };
@@ -316,7 +382,13 @@ export function RouletteScreen() {
   };
 
   return (
-    <ScrollView ref={scroller} style={styles.screen} contentContainerStyle={styles.content}>
+    <View style={styles.screen}>
+    <ScrollView
+      ref={scroller}
+      style={styles.screen}
+      contentContainerStyle={styles.content}
+      onLayout={(event) => (viewport.current = event.nativeEvent.layout.height)}
+    >
       <View style={styles.header}>
         <View>
           <Txt variant="caption" color={colors.text.muted}>
@@ -335,7 +407,14 @@ export function RouletteScreen() {
         <SoundToggles compact />
       </View>
 
-      {/* The result */}
+      {/* The result. Wrapped because the measurement has to be of the whole
+          cluster and `Card` takes no onLayout of its own. */}
+      <View
+        onLayout={(event) => {
+          const { y, height } = event.nativeEvent.layout;
+          cardBottom.current = y + height;
+        }}
+      >
       <Card style={styles.wheel}>
         <RouletteWheel
           size={WHEEL_SIZE}
@@ -351,17 +430,22 @@ export function RouletteScreen() {
         />
         {/* The number, under the wheel rather than inside it: at this size the
             pocket the ball is sitting in is legible as a colour but not as a
-            two-digit number, and the payout depends on the number. */}
-        <View
+            two-digit number, and the payout depends on the number.
+
+            It ARRIVES rather than appearing. A number that simply swaps in is
+            indistinguishable from a number that was always there — the thing
+            the player is waiting for goes past unmarked. */}
+        <Animated.View
           style={[
             styles.ball,
             display !== null && colourOf(display) === 'red' && styles.red,
             display !== null && colourOf(display) === 'black' && styles.black,
             display !== null && colourOf(display) === 'green' && styles.green,
+            { transform: [{ scale: revealScale }] },
           ]}
         >
           <Txt variant="h1">{display ?? '—'}</Txt>
-        </View>
+        </Animated.View>
         <View style={styles.readout} accessibilityLiveRegion="polite">
           {spinning ? (
             <Txt variant="bodySmall" color={colors.text.muted}>
@@ -378,6 +462,14 @@ export function RouletteScreen() {
             >
               {payout > 0 ? `WIN ${format(minor(payout), 'GC')}` : 'No win this time'}
             </Txt>
+          ) : bets.size > 0 ? (
+            // It went on saying "pick a chip, then tap the table" while the
+            // table already had chips on it — an instruction the player has
+            // visibly finished following, which reads as the game not having
+            // noticed.
+            <Txt variant="bodySmall" color={colors.text.secondary}>
+              {bets.size} {bets.size === 1 ? 'bet' : 'bets'} down · tap Spin
+            </Txt>
           ) : (
             <Txt variant="bodySmall" color={colors.text.muted}>
               Pick a chip, then tap the table
@@ -385,6 +477,7 @@ export function RouletteScreen() {
           )}
         </View>
       </Card>
+      </View>
 
       {/* Chip denomination */}
       <View style={styles.chipRow}>
@@ -416,13 +509,10 @@ export function RouletteScreen() {
           accessibilityLabel={`Bet ${format(minor(chip), 'GC')} on zero`}
           style={[styles.zero, result?.winningNumber === 0 && styles.cellWon]}
         >
+          <CellGloss />
           <Txt variant="bodySmall">0</Txt>
           {bets.get(keyOf('straight', [0])) ? (
-            <View style={styles.chipMark}>
-              <Txt variant="caption" color={colors.text.inverse}>
-                ●
-              </Txt>
-            </View>
+            <ChipMark amount={bets.get(keyOf('straight', [0]))!.amount} />
           ) : null}
         </Pressable>
 
@@ -480,7 +570,37 @@ export function RouletteScreen() {
         </Card>
       ) : null}
 
-      <View style={styles.actions}>
+    </ScrollView>
+
+      {/*
+        THE DOCK.
+
+        Spin and Clear used to be the last thing on the page, below twelve rows
+        of felt, three rows of outside bets and the bet slip. Placing a bet
+        means scrolling to the bottom of that; spinning meant scrolling further;
+        and then the code scrolled the player back to the top to show them the
+        result. Three scrolls per spin, on a game whose whole rhythm is bet,
+        spin, look.
+
+        The founder asked for the controls to be moved up next to the wheel.
+        Pinned is that request taken seriously: next to the wheel is reachable
+        from the top of the page and nowhere else, whereas a dock is reachable
+        from everywhere — including the bottom of the felt, which is exactly
+        where a player is standing when they have finished betting.
+
+        It carries the staked total as well, because the number a player wants
+        before committing is what this spin costs, and that was three sections
+        further up in the slip.
+      */}
+      <View style={styles.dock}>
+        <View style={styles.dockTotal}>
+          <Txt variant="caption" color={colors.text.muted}>
+            STAKED
+          </Txt>
+          <Txt variant="bodySmall" color={total > 0 ? colors.gold.default : colors.text.muted}>
+            {format(minor(total), 'GC')}
+          </Txt>
+        </View>
         <Button
           label="Clear"
           variant="secondary"
@@ -496,13 +616,65 @@ export function RouletteScreen() {
           style={styles.spin}
         />
       </View>
-    </ScrollView>
+    </View>
+  );
+}
+
+/**
+ * The lit face of a felt cell.
+ *
+ * A flat white overlay at fifty per cent height was the first attempt, and on
+ * the red numbers it passed — but on the black ones it read as a hard two-tone
+ * band across the middle of the cell rather than as light. A gloss is a
+ * FALLOFF; the edge is the whole thing. So it is a real gradient, which on the
+ * web compiles to a CSS `linear-gradient` and costs nothing per cell.
+ */
+function CellGloss() {
+  return (
+    <View style={styles.cellGloss} pointerEvents="none">
+      <LinearGradient
+        colors={['rgba(255,255,255,0.20)', 'rgba(255,255,255,0.05)', 'rgba(255,255,255,0)']}
+        locations={[0, 0.42, 0.78]}
+        style={styles.cellGlossFill}
+      />
+    </View>
+  );
+}
+
+/**
+ * A stake sitting on a number, drawn as a chip.
+ *
+ * It was a gold pill in the corner of the cell with the amount in it, which is
+ * a label. A player scanning a felt for their own money is looking for the
+ * shape of a chip — a disc with an edge and a lighter face — and the amount
+ * printed on it is a detail they read second, after they have found it.
+ *
+ * The edge is drawn with a ring rather than a border so the disc keeps its full
+ * diameter: at 22 points a 2-point border eats a tenth of the face, and the
+ * number stops fitting.
+ */
+function ChipMark({ amount }: { amount: number }) {
+  const label = amount >= 1_000_000
+    ? `${Math.round(amount / 100_000) / 10}m`
+    : amount >= 1000
+      ? `${Math.round(amount / 100) / 10}k`
+      : String(amount);
+  return (
+    <View style={styles.chipMark} pointerEvents="none">
+      <View style={styles.chipEdge} />
+      <View style={styles.chipFace}>
+        <Txt variant="caption" color="#3A2A05" style={styles.chipText}>
+          {label}
+        </Txt>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.surface.base },
-  content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing['4xl'] },
+  // The bottom padding clears the dock, which floats over this scroll view.
+  content: { padding: spacing.lg, gap: spacing.md, paddingBottom: DOCK_HEIGHT + spacing.lg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   rtpPill: {
     paddingHorizontal: spacing.md,
@@ -512,11 +684,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.surface.border,
   },
-  wheel: { alignItems: 'center', gap: spacing.md, borderColor: colors.gold.dark },
+  wheel: { alignItems: 'center', gap: spacing.sm, borderColor: colors.gold.dark },
   ball: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surface.overlay,
@@ -558,14 +730,53 @@ const styles = StyleSheet.create({
   cellWon: { borderWidth: 2, borderColor: colors.gold.light },
   chipMark: {
     position: 'absolute',
-    right: 2,
-    top: 2,
-    minWidth: 18,
-    paddingHorizontal: 3,
-    borderRadius: radius.pill,
-    backgroundColor: colors.gold.default,
+    right: 3,
+    top: 3,
+    width: 24,
+    height: 24,
     alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.5,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
   },
+  /** The rim: darker gold, full diameter, sitting behind the face. */
+  chipEdge: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 12,
+    backgroundColor: '#8A5F0A',
+  },
+  chipFace: {
+    position: 'absolute',
+    left: 2.5,
+    right: 2.5,
+    top: 2.5,
+    bottom: 2.5,
+    borderRadius: 9.5,
+    backgroundColor: colors.gold.light,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipText: { fontWeight: '900', fontSize: 10, lineHeight: 12 },
+  /**
+   * The lit face of a felt cell. See CellGloss.
+   *
+   * The gradient covers the cell edge to edge and is painted before the
+   * number, so it lies over the cell's background and under its text. That
+   * means a tap anywhere except directly on the digits lands on the gloss
+   * first — hence the `pointerEvents="none"` wrapper, without which the outer
+   * two thirds of every betting cell would be dead while the middle still
+   * worked. A half-responsive tap target is worse than an obviously broken
+   * one, because the player concludes the app is slow rather than that they
+   * missed.
+   */
+  cellGloss: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: radius.sm,
+    overflow: 'hidden',
+  },
+  cellGlossFill: { flex: 1 },
   outsideGroup: { gap: 3 },
   outside: {
     height: 40,
@@ -584,7 +795,30 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     marginTop: spacing.xs,
   },
-  actions: { flexDirection: 'row', gap: spacing.sm },
+  /**
+   * The pinned control bar.
+   *
+   * Absolute rather than a flex sibling, so the felt scrolls UNDER it and the
+   * dock keeps its own opaque background — a translucent bar over a bright red
+   * number cell is a bar you cannot read. `content` reserves the matching
+   * height at the bottom so nothing is permanently hidden behind it.
+   */
+  dock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+    backgroundColor: colors.surface.raised,
+    borderTopWidth: 1,
+    borderTopColor: colors.gold.dark,
+  },
+  dockTotal: { minWidth: 74 },
   clear: { flex: 1 },
-  spin: { flex: 2, minHeight: 56 },
+  spin: { flex: 2, minHeight: 52 },
 });
