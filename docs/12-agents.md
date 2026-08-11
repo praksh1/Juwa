@@ -96,6 +96,35 @@ email and their own password, so nobody ever knows their credentials but them.
 Prefer the link where the player has an email. Use account creation where they
 do not.
 
+## A player has forgotten their password
+
+The agent resets it. There is no other way, and there never will be.
+
+Accounts an agent created sign in at `@players.juwa.invalid` — a domain chosen
+precisely because it **cannot receive mail**. A real domain there would mean
+password-reset links for real player accounts being delivered to whoever happens
+to own that mailbox. The permanent consequence is that "email me a reset link"
+does not exist for these players and cannot be added later, so recovery has to
+be a person with authority doing it in front of them.
+
+On the agent desk, every player row has a **KEY** button. The agent taps it,
+takes the suggested temporary password (or types their own), taps *Reset*, and
+reads the new password out. The player's old password stops working
+immediately.
+
+> The account is flagged `must_set_password` **before** the password is
+> changed, and the order is not incidental. The agent knows a working credential
+> from the moment they tap the button until the player signs in and replaces it,
+> and the flag is the only thing that closes that window. If the flag were
+> raised second and something failed in between, the agent would be left holding
+> a permanent working password for somebody else's balance — which is exactly
+> what this whole design exists to prevent.
+
+An agent can only do this for **their own** players. The query that raises the
+flag is joined through `player_agents`, so an agent aiming it at somebody else's
+player is refused before anything is touched — the other player's password is
+not changed and their account is not flagged.
+
 ## Fixing a mistake
 
 An agent who sends 500,000 instead of 50,000 cannot undo it — there is no
@@ -138,6 +167,7 @@ are not related, because the function that moves them refuses.
 | --- | --- |
 | An agent can only fund their own players | `allocate_to_player` ownership check |
 | An agent-set password stops working at first sign-in | `must_set_password`, checked by the app gate and cleared only by the server |
+| An agent can only reset passwords for their own players | `player_agents` join in `requirePasswordChange`, run before the password is touched |
 | An agent cannot create an account for a minor or in a restricted state | `complete_registration`, unchanged, inside `create_agent_player` |
 | A reversal cannot run twice or push a player negative | `reverse_allocation` plus the non-negative trigger |
 | An agent can never allocate more than they hold | `account_balance_cache` non-negative trigger |
@@ -161,7 +191,11 @@ None of these exist as endpoints. They are not unbuilt features.
 - A player cannot change which agent they belong to.
 - An agent cannot take coins back from a player, including one they created.
 - An agent cannot reverse their own allocation. Only an operator can.
-- An agent cannot see or reset a player's password after the player has set it.
+- An agent cannot **see** a player's password, ever — not one the player chose,
+  and not one they set themselves after they have left the screen. They can
+  **reset** it to a new temporary one, which the player is then forced to
+  replace; that is a deliberate power, because these accounts have no email and
+  no other route back in.
 - An agent cannot transfer inventory to another agent.
 - An agent cannot create another agent, or grant themselves inventory.
 

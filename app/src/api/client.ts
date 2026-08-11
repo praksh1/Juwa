@@ -284,7 +284,7 @@ export interface PlayApi {
    * The agent side of the app, present on every implementation so the screen
    * does not have to know which one it is talking to.
    *
-   * All six are scoped SERVER-SIDE to the calling agent. None of them takes an
+   * All of them are scoped SERVER-SIDE to the calling agent. None takes an
    * agent id — there is no parameter here that could widen what comes back,
    * which is what makes one agent unable to see another's players regardless of
    * what this client does.
@@ -318,6 +318,18 @@ export interface PlayApi {
     signInWith: string;
     mustSetPassword: boolean;
   }>;
+  /**
+   * Reset one of the agent's own players to a new temporary password.
+   *
+   * These accounts have no real email address, by design, so there is no reset
+   * link to send and never can be — recovery has to be the agent doing it in
+   * person. The account is flagged again, so the temporary password the agent
+   * chooses is replaced at the player's next sign-in.
+   */
+  resetPlayerPassword(request: {
+    playerId: string;
+    password: string;
+  }): Promise<{ ok: boolean; mustSetPassword: boolean }>;
   /** Ask to become an agent. Creates a pending application, which grants nothing. */
   applyToBeAgent(displayName: string, notes?: string): Promise<{ status: string }>;
   /** Record that the player has replaced their temporary password. */
@@ -729,6 +741,21 @@ export class HttpPlayApi implements PlayApi {
       signInWith: string;
       mustSetPassword: boolean;
     }>('/agent/players', details);
+  }
+
+  /**
+   * Give a player who has forgotten their password a new temporary one.
+   *
+   * The password goes up, nothing comes back but an acknowledgement — the agent
+   * already has it on their own screen, and echoing it would put it in a
+   * response body for no gain. The account is flagged to demand a replacement
+   * at the player's next sign-in.
+   */
+  resetPlayerPassword(request: { playerId: string; password: string }) {
+    return this.request<{ ok: boolean; mustSetPassword: boolean }>(
+      '/agent/players/reset-password',
+      request,
+    );
   }
 
   applyToBeAgent(displayName: string, notes?: string) {
@@ -1271,6 +1298,9 @@ export class DemoPlayApi implements PlayApi {
     this.noAgentInDemo();
   }
   async createAgentPlayer(): Promise<never> {
+    this.noAgentInDemo();
+  }
+  async resetPlayerPassword(): Promise<never> {
     this.noAgentInDemo();
   }
   async applyToBeAgent(): Promise<never> {

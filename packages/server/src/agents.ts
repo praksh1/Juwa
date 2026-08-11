@@ -205,6 +205,29 @@ export class AgentsDb {
     return rows.length > 0;
   }
 
+  /**
+   * Put a player back on a temporary password.
+   *
+   * The mirror of `clearMustSetPassword`. Called after Supabase has accepted an
+   * agent-set reset, so the player is made to choose their own the moment they
+   * sign in — the agent's copy is a one-use key, not a spare.
+   *
+   * Scoped to the agent's OWN player: the update matches on `player_agents`, so
+   * an agent cannot raise the flag on somebody else's account even by sending
+   * the right id.
+   */
+  async requirePasswordChange(agentId: string, playerId: string): Promise<boolean> {
+    const { rows } = await this.client.query(
+      `update profiles p
+          set must_set_password = true
+         from player_agents pa
+        where p.id = $2 and pa.player_id = p.id and pa.agent_id = $1
+      returning p.id`,
+      [agentId, playerId],
+    );
+    return rows.length > 0;
+  }
+
   /** The player has replaced the temporary password an agent gave them. */
   async clearMustSetPassword(playerId: string): Promise<void> {
     await this.client.query(`select clear_must_set_password($1)`, [playerId]);

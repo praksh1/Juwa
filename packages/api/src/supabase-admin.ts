@@ -229,6 +229,26 @@ export class SupabaseAdmin {
   }
 
   /**
+   * Set a new password on an existing account.
+   *
+   * Used when a player has forgotten theirs. They have no email address — the
+   * account was made by an agent with a synthetic one — so there is no reset
+   * link to send and never can be: recovery has to be somebody with authority
+   * doing it on their behalf.
+   *
+   * The caller is responsible for re-raising `must_set_password`, so the
+   * temporary password the agent chooses is replaced the moment the player
+   * signs in with it. Without that step this would hand the agent a permanent
+   * credential, which is the one thing the whole design is arranged to avoid.
+   */
+  async setPassword(userId: string, password: string): Promise<void> {
+    await this.request(`/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ password }),
+    });
+  }
+
+  /**
    * Remove an auth account.
    *
    * Used only to clean up after a failed creation: if Supabase makes the user

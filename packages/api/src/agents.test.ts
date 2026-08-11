@@ -65,6 +65,16 @@ describe('agents', { skip: URL_ENV ? false : 'JUWA_AGENT_TEST_DATABASE_URL not s
    * invisible to a mock and expensive to check against the real Supabase.
    */
   const authUsers = new Map<string, string>();
+  /**
+   * What each account's password currently is, at the provider.
+   *
+   * Kept separately from `authUsers` so `size` still counts accounts. It exists
+   * for one assertion that cannot be made any other way: that a refused reset
+   * left the player's real password ALONE. A test that only checked the HTTP
+   * status would pass just as happily if the route changed the password and
+   * then returned 403.
+   */
+  const authPasswords = new Map<string, string>();
   let authStop: () => void;
   /** An operator session, for the admin-only routes. */
   let adminToken: string;
@@ -152,6 +162,7 @@ describe('agents', { skip: URL_ENV ? false : 'JUWA_AGENT_TEST_DATABASE_URL not s
           if (!password || password.length < 6) return send(422, { msg: 'Password is too short' });
           const id = randomUUID();
           authUsers.set(id, email!);
+          authPasswords.set(id, password);
           // The auth row has to exist for our profiles foreign key, exactly as
           // it would in a real project.
           void pool
@@ -160,9 +171,25 @@ describe('agents', { skip: URL_ENV ? false : 'JUWA_AGENT_TEST_DATABASE_URL not s
         });
         return;
       }
+      // A password reset. GoTrue takes a PUT on the user with whatever fields
+      // are changing, and 404s for an id it has never issued.
+      if (request.method === 'PUT' && request.url?.startsWith('/auth/v1/admin/users/')) {
+        const id = decodeURIComponent(request.url.slice('/auth/v1/admin/users/'.length));
+        let raw = '';
+        request.on('data', (chunk) => (raw += chunk));
+        request.on('end', () => {
+          if (!authUsers.has(id)) return send(404, { msg: 'User not found' });
+          const { password } = JSON.parse(raw) as Record<string, string>;
+          if (!password || password.length < 6) return send(422, { msg: 'Password is too short' });
+          authPasswords.set(id, password);
+          return send(200, { id, email: authUsers.get(id) });
+        });
+        return;
+      }
       if (request.method === 'DELETE' && request.url?.startsWith('/auth/v1/admin/users/')) {
         const id = decodeURIComponent(request.url.slice('/auth/v1/admin/users/'.length));
         authUsers.delete(id);
+        authPasswords.delete(id);
         void pool.query(`delete from auth.users where id = $1`, [id]).then(() => send(200, {}));
         return;
       }
@@ -659,6 +686,100 @@ describe('agents', { skip: URL_ENV ? false : 'JUWA_AGENT_TEST_DATABASE_URL not s
 
       await call('/agent/password-set', { auth: token(wes), body: {} });
       assert.equal((await call('/me', { auth: token(wes) })).body['mustSetPassword'], false);
+    });
+
+    /**
+     * Forgotten passwords, which have no self-service route and never will.
+     *
+     * These accounts sign in at `players.juwa.invalid`, a domain chosen because
+     * it CANNOT receive mail — the alternative is password-reset links for real
+     * player accounts landing in a stranger's inbox. So "email me a link" is
+     * permanently unavailable to them and recovery has to be an agent doing it
+     * in person.
+     *
+     * That is a real power, so these tests are about its two limits: it reaches
+     * only the agent's own players, and it does not survive its own use.
+     */
+    describe('resetting a forgotten password', () => {
+      /** walkin_wes, created by AGENT_A at the top of this block. */
+      const wesId = async () =>
+        (await pool.query<{ id: string }>(`select id from profiles where username = 'walkin_wes'`))
+          .rows[0]!.id;
+
+      it('sets a new password and demands it be replaced again', async () => {
+        const wes = await wesId();
+        const before = authPasswords.get(wes);
+        assert.equal(before, 'temp-pass-123', 'fixture drift: wes was not created as expected');
+        // Cleared by the previous test, which is what makes the re-raise below
+        // an observable change rather than a value that was already true.
+        assert.equal((await call('/me', { auth: token(wes) })).body['mustSetPassword'], false);
+
+        const response = await call('/agent/players/reset-password', {
+          auth: token(AGENT_A),
+          body: { playerId: wes, password: 'second-temp-456' },
+        });
+        assert.equal(response.status, 200, JSON.stringify(response.body));
+
+        // The password really changed at the provider...
+        assert.equal(authPasswords.get(wes), 'second-temp-456');
+        // ...and the account is blocked until the player replaces it, which is
+        // the only thing stopping the agent's copy from being a permanent
+        // credential for an account that is not theirs.
+        assert.equal((await call('/me', { auth: token(wes) })).body['mustSetPassword'], true);
+
+        // The password is NOT echoed back. The agent typed it; a response body
+        // is a worse place for it than the screen it is already on.
+        assert.equal(
+          JSON.stringify(response.body).includes('second-temp-456'),
+          false,
+          'the temporary password came back in the response',
+        );
+      });
+
+      it('will not reset a password for a player who belongs to another agent', async () => {
+        const wes = await wesId();
+        const response = await call('/agent/players/reset-password', {
+          auth: token(AGENT_B),
+          body: { playerId: wes, password: 'not-bobs-to-set' },
+        });
+        assert.equal(response.status, 403, JSON.stringify(response.body));
+        assert.equal(response.body['code'], 'not_your_player');
+        // And crucially: nothing happened. A route that refused AFTER changing
+        // the password would pass a status assertion and still have locked a
+        // stranger's player out of their account.
+        assert.equal(authPasswords.get(wes), 'second-temp-456');
+      });
+
+      it('refuses a plain player, a weak password and a made-up id', async () => {
+        const wes = await wesId();
+
+        // No agent record for this caller, so there is nothing to scope to.
+        const asPlayer = await call('/agent/players/reset-password', {
+          auth: token(PLAYER_A),
+          body: { playerId: wes, password: 'temp-pass-999' },
+        });
+        assert.equal(asPlayer.status, 404);
+
+        // Refused before anything is touched, so the flag is not raised on a
+        // player whose password is then left as it was — which would lock them
+        // into a set-password prompt they cannot get past.
+        const weak = await call('/agent/players/reset-password', {
+          auth: token(AGENT_A),
+          body: { playerId: wes, password: 'short' },
+        });
+        assert.equal(weak.status, 400);
+
+        // A uuid that is nobody's is "not your player", not a 500. The agent
+        // sees the same sentence for a typo as for a real stranger's id, which
+        // is also all they should be able to learn from it.
+        const nobody = await call('/agent/players/reset-password', {
+          auth: token(AGENT_A),
+          body: { playerId: randomUUID(), password: 'temp-pass-999' },
+        });
+        assert.equal(nobody.status, 403);
+
+        assert.equal(authPasswords.get(wes), 'second-temp-456', 'a refused reset changed something');
+      });
     });
   });
 

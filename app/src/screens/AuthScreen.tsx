@@ -96,7 +96,26 @@ export function AuthScreen({
       </View>
 
       <Card style={styles.card}>
-        <Txt variant="h2">{mode === 'signup' ? 'Create an account' : 'Welcome back'}</Txt>
+        <Txt variant="h2">{mode === 'signup' ? 'Create an agent account' : 'Welcome back'}</Txt>
+        {/*
+          Said before the email field, not after.
+          
+          Players do not sign themselves up any more — an agent creates their
+          account and hands them a username. Somebody arriving here who is not
+          an agent has come to the wrong place, and telling them that at the top
+          costs one line and saves them making an account that will never have
+          any coins in it.
+        */}
+        {mode === 'signup' ? (
+          <Txt variant="bodySmall" color={colors.text.secondary}>
+            This is for people who want to distribute coins as an agent. Applications are
+            reviewed by hand.
+          </Txt>
+        ) : (
+          <Txt variant="bodySmall" color={colors.text.secondary}>
+            Players: sign in with the username and password your agent gave you.
+          </Txt>
+        )}
 
         <TextInput
           style={styles.input}
@@ -125,14 +144,27 @@ export function AuthScreen({
           </Txt>
         ) : null}
 
+        {/*
+          The way out for a player who landed on the wrong form.
+          
+          Without it their only options are to make an agent application they do
+          not want, or to close the app. Neither ends with them playing.
+        */}
+        {mode === 'signup' ? (
+          <Txt variant="caption" color={colors.text.muted}>
+            Just want to play? You do not need to sign up. Ask the person who runs your local
+            Juwa to create your account — they will give you a username and a password.
+          </Txt>
+        ) : null}
+
         <Button
-          label={mode === 'signup' ? 'Sign up' : 'Log in'}
+          label={mode === 'signup' ? 'Create agent account' : 'Log in'}
           onPress={submit}
           loading={busy}
           disabled={busy}
         />
         <Button
-          label={mode === 'signup' ? 'I already have an account' : 'Create an account instead'}
+          label={mode === 'signup' ? 'I already have an account' : 'Become an agent instead'}
           variant="ghost"
           onPress={() => {
             setMode(mode === 'signup' ? 'login' : 'signup');

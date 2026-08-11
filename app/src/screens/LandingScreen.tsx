@@ -32,8 +32,8 @@ const STATS = [
 const STEPS = [
   {
     n: '01',
-    title: 'Create an account',
-    body: 'Takes a minute. You get 100,000 coins to start, free.',
+    title: 'Get an account from an agent',
+    body: 'They set it up in a minute and give you a username. No email needed.',
   },
   {
     n: '02',
@@ -42,8 +42,8 @@ const STEPS = [
   },
   {
     n: '03',
-    title: 'Top up, or wait',
-    body: 'Free coins every day. Buy more only if you want to — never required.',
+    title: 'Top up with your agent',
+    body: 'Free coins every day, and your agent can add more whenever you need them.',
   },
 ];
 
@@ -81,9 +81,17 @@ export function LandingScreen({
             A free-to-play social casino. Real games, real odds, published and
             provable — with play money that stays play money.
           </Txt>
+          {/*
+            SIGN IN is the primary action now, not sign up.
+            
+            Players do not create their own accounts — an agent does, and hands
+            them a username. Offering "Create account" as the loudest button on
+            the page sent every player down a path that ends in an account with
+            no agent and no coins.
+          */}
           <View style={styles.heroButtons}>
             <Button label="Browse games" variant="secondary" onPress={onSignIn} />
-            <Button label="Create account" onPress={onCreateAccount} />
+            <Button label="Sign in" onPress={onSignIn} />
           </View>
           {/*
             The agent door.
@@ -97,11 +105,11 @@ export function LandingScreen({
           */}
           <View style={styles.agentRow}>
             <Txt variant="caption" color={colors.text.muted}>
-              Working with us as an agent?{' '}
+              Want to distribute coins as an agent?{' '}
             </Txt>
-            <Pressable onPress={onSignIn} accessibilityRole="link">
+            <Pressable onPress={onCreateAccount} accessibilityRole="link">
               <Txt variant="caption" color={colors.neon.cyan}>
-                Sign in here
+                Apply here
               </Txt>
             </Pressable>
           </View>
@@ -180,7 +188,11 @@ export function LandingScreen({
         ))}
 
         <View style={styles.cta}>
-          <Button label="Create account" onPress={onCreateAccount} />
+          <Button label="Sign in and play" onPress={onSignIn} />
+          <Txt variant="caption" color={colors.text.muted} style={styles.ctaNote}>
+            No account? Ask your local Juwa agent to set one up — it takes them a minute and
+            you do not need an email address.
+          </Txt>
         </View>
 
         <LegalFooter />
@@ -213,6 +225,7 @@ const styles = StyleSheet.create({
   heroSub: { maxWidth: 460 },
   heroButtons: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, flexWrap: 'wrap' },
   agentRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.md, flexWrap: 'wrap' },
+  ctaNote: { textAlign: 'center', marginTop: spacing.sm },
   statStrip: {
     flexDirection: 'row',
     flexWrap: 'wrap',

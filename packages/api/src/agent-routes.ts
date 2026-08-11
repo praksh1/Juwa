@@ -469,6 +469,79 @@ export function agentRoutes(
         throw agentError(error);
       }
     },
+
+    /**
+     * Reset a player's password to a new temporary one.
+     *
+     * ## Why an agent has to be able to do this
+     *
+     * These players sign in with a synthetic address at a domain that cannot
+     * receive mail, which is deliberate — a routable domain would mean reset
+     * links for real accounts landing in a stranger's inbox. The permanent
+     * consequence is that "email me a reset link" does not exist for them and
+     * never will. Somebody with authority has to do it in person, and the
+     * person standing in front of them is their agent.
+     *
+     * ## What stops this being a back door
+     *
+     * The flag is raised BEFORE the password is changed, and the two steps are
+     * ordered that way on purpose. `requirePasswordChange` is scoped to the
+     * agent's own players, so it doubles as the ownership check: if it returns
+     * false we refuse having touched nothing. And if the Supabase call then
+     * fails, the account is left with its OLD password plus a pending change —
+     * which is a harmless state. The reverse order would leave a live agent-set
+     * password with no obligation to replace it, which is precisely the
+     * permanent credential this design exists to prevent.
+     *
+     * The password is not echoed back. The agent typed it and it is on their
+     * screen already; a response body is a worse place for it than that.
+     */
+    'POST /agent/players/reset-password': async (ctx) => {
+      const agent = await asActiveAgent(ctx);
+      if (!supabase) {
+        throw new ApiError(
+          'Password resets are not switched on for this deployment.',
+          503,
+          'account_creation_unavailable',
+        );
+      }
+
+      const playerId = requireString(ctx.body['playerId'], 'playerId', 64);
+      const password = ctx.body['password'];
+      if (typeof password !== 'string' || password.length < 8) {
+        throw new ApiError(
+          'The temporary password must be at least 8 characters.',
+          400,
+          'invalid_input',
+        );
+      }
+
+      let owned: boolean;
+      try {
+        owned = await agents.requirePasswordChange(agent.agentId, playerId);
+      } catch (error) {
+        throw agentError(error);
+      }
+      if (!owned) {
+        throw new ApiError('That player is not one of yours.', 403, 'not_your_player');
+      }
+
+      await supabase.setPassword(playerId, password).catch((error) => {
+        if (error instanceof SupabaseAdminError) {
+          if (error.status === 404) {
+            throw new ApiError('That player has no sign-in to reset.', 404, 'not_found');
+          }
+          throw new ApiError(
+            `Could not reset that password: ${error.message}`,
+            502,
+            'auth_provider_failed',
+          );
+        }
+        throw error;
+      });
+
+      return { ok: true, mustSetPassword: true };
+    },
   };
 }
 

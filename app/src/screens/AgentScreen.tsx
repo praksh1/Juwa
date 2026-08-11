@@ -54,6 +54,18 @@ export function AgentScreen() {
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
   const [made, setMade] = useState<{ username: string; password: string } | null>(null);
+  /**
+   * The password-reset flow, which lives inside the player list rather than in
+   * a section of its own.
+   *
+   * An agent resetting a password is looking at a person and at that person's
+   * row. Making them find the row, remember the name, then scroll to a separate
+   * form and pick the name again out of a second list is how the wrong account
+   * gets reset — and a reset cannot be undone by picking the right one
+   * afterwards, because the first player's password is already gone.
+   */
+  const [resetting, setResetting] = useState<AgentPlayer | null>(null);
+  const [resetDone, setResetDone] = useState<{ username: string; password: string } | null>(null);
 
   const parsed = Number(amount.replace(/[^0-9]/g, ''));
   const valid = Number.isInteger(parsed) && parsed > 0;
@@ -325,38 +337,136 @@ export function AgentScreen() {
                   : 'No player by that name.'}
               </Txt>
             </View>
-          ) : (
-            visible.map((player) => (
-              <Pressable
-                key={player.playerId}
-                onPress={() => {
-                  sounds.tap();
-                  setSelected(player);
-                  setAmount('');
-                  setNotice(null);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel={`Send coins to ${player.username}`}
-                style={({ pressed }) => [
-                  styles.row,
-                  pressed && styles.rowPressed,
-                  selected?.playerId === player.playerId && styles.rowSelected,
-                ]}
-              >
-                <View style={styles.flex}>
-                  <Txt variant="bodySmall">{player.username}</Txt>
-                  <Txt variant="caption" color={colors.text.muted}>
-                    {player.lastSeenAt
-                      ? `Last seen ${new Date(player.lastSeenAt).toLocaleDateString()}`
-                      : 'Not played yet'}
-                  </Txt>
+          ) : null}
+          {visible.length > 0 ? (
+            <View style={styles.hint}>
+              <Txt variant="caption" color={colors.text.muted}>
+                Tap a player to send them coins. Tap KEY if they have forgotten their password —
+                there is no email on these accounts, so you are the only way back in.
+              </Txt>
+            </View>
+          ) : null}
+          {visible.map((player) => (
+              <React.Fragment key={player.playerId}>
+                {/*
+                  Two buttons side by side, NOT one button inside another.
+
+                  A nested Pressable would rely on the responder system giving
+                  the touch to the deepest view that claims it, which is true on
+                  native and something I would rather not bet a money screen on
+                  in react-native-web. As siblings there is no negotiation to get
+                  wrong: the reset key is its own target and the rest of the row
+                  is the allocation target.
+                */}
+                <View
+                  style={[
+                    styles.row,
+                    selected?.playerId === player.playerId && styles.rowSelected,
+                  ]}
+                >
+                  <Pressable
+                    onPress={() => {
+                      sounds.tap();
+                      setSelected(player);
+                      setAmount('');
+                      setNotice(null);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Send coins to ${player.username}`}
+                    style={({ pressed }) => [styles.rowMain, pressed && styles.rowPressed]}
+                  >
+                    <View style={styles.flex}>
+                      <Txt variant="bodySmall">{player.username}</Txt>
+                      <Txt variant="caption" color={colors.text.muted}>
+                        {player.lastSeenAt
+                          ? `Last seen ${new Date(player.lastSeenAt).toLocaleDateString()}`
+                          : 'Not played yet'}
+                      </Txt>
+                    </View>
+                    <Txt variant="bodySmall" color={colors.text.secondary}>
+                      {coins(player.balance)}
+                    </Txt>
+                  </Pressable>
+
+                  {/*
+                    A key rather than the word "Reset": it has to be small
+                    enough not to compete with the row, and a second block of
+                    small text next to an amount is a mis-tap waiting to happen.
+                  */}
+                  <Pressable
+                    onPress={() => {
+                      sounds.tap();
+                      setNotice(null);
+                      setResetDone(null);
+                      setResetting((current) =>
+                        current?.playerId === player.playerId ? null : player,
+                      );
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Reset the password for ${player.username}`}
+                    style={({ pressed }) => [styles.resetKey, pressed && styles.resetKeyPressed]}
+                  >
+                    <Txt variant="caption" color={colors.text.secondary}>
+                      KEY
+                    </Txt>
+                  </Pressable>
                 </View>
-                <Txt variant="bodySmall" color={colors.text.secondary}>
-                  {coins(player.balance)}
-                </Txt>
-              </Pressable>
-            ))
-          )}
+
+                {resetDone?.username === player.username ? (
+                  /*
+                    The same one-time handover panel a new account gets, for the
+                    same reason: this is the only screen the new password will
+                    ever appear on. The server does not store it and will not
+                    return it, so an agent who navigates away before reading it
+                    out has to reset again.
+                  */
+                  <View style={styles.resetPanel}>
+                    <Txt variant="caption" color={colors.gold.light}>
+                      PASSWORD RESET — READ THIS TO THEM
+                    </Txt>
+                    <View style={styles.handover}>
+                      <Txt variant="caption" color={colors.text.muted}>
+                        USERNAME
+                      </Txt>
+                      <Txt variant="h3">{resetDone.username}</Txt>
+                      <Txt variant="caption" color={colors.text.muted} style={styles.handoverGap}>
+                        TEMPORARY PASSWORD
+                      </Txt>
+                      <Txt variant="h3">{resetDone.password}</Txt>
+                    </View>
+                    <Txt variant="caption" color={colors.text.muted}>
+                      Their old password no longer works. The app will make them choose their own
+                      the moment they sign in with this one, and this one stops working then.
+                    </Txt>
+                    <Button label="Done" variant="secondary" onPress={() => setResetDone(null)} />
+                  </View>
+                ) : null}
+
+                {resetting?.playerId === player.playerId ? (
+                  <ResetPasswordForm
+                    username={player.username}
+                    busy={busy}
+                    onCancel={() => setResetting(null)}
+                    onReset={async (password) => {
+                      setBusy(true);
+                      setNotice(null);
+                      const result = await desk.resetPassword(player.playerId, password);
+                      setBusy(false);
+                      if (result.ok) {
+                        sounds.tap();
+                        setResetting(null);
+                        setResetDone({ username: player.username, password });
+                      } else {
+                        setNotice({
+                          text: result.message ?? 'Could not reset that password',
+                          good: false,
+                        });
+                      }
+                    }}
+                  />
+                ) : null}
+              </React.Fragment>
+          ))}
         </Card>
       </View>
 
@@ -640,7 +750,152 @@ function NewPlayerForm({
   );
 }
 
+/**
+ * Give a player who has forgotten their password a new temporary one.
+ *
+ * ## Why this has to exist
+ *
+ * These accounts sign in at a domain that cannot receive mail — deliberately,
+ * because a routable one would mean password-reset links for real player
+ * accounts being delivered to whoever happens to own that mailbox. The
+ * permanent consequence is that "email me a link" does not exist for a player
+ * an agent signed up, and cannot be added later. The only recovery is somebody
+ * with authority doing it in person, and the agent is who that is.
+ *
+ * ## Why it suggests a password
+ *
+ * Left to themselves, a person choosing a password they have to read aloud to
+ * somebody else picks one that is easy to say, which is the same set as the
+ * ones that are easy to guess. The suggestion is four random syllables and a
+ * number: pronounceable over a counter, and not in anybody's wordlist. Typing
+ * over it is still allowed, because an agent may have a house convention and
+ * refusing it would just move the problem.
+ *
+ * The confirmation names the player, because the button next to this one on
+ * every other row does the same thing to a different person and there is no
+ * undo — the old password is gone the moment this succeeds.
+ */
+function ResetPasswordForm({
+  username,
+  busy,
+  onCancel,
+  onReset,
+}: {
+  username: string;
+  busy: boolean;
+  onCancel: () => void;
+  onReset: (password: string) => void;
+}) {
+  const [password, setPassword] = useState(() => suggestPassword());
+  const [problem, setProblem] = useState<string | null>(null);
+
+  return (
+    <View style={styles.resetPanel}>
+      <Txt variant="caption" color={colors.text.muted}>
+        NEW TEMPORARY PASSWORD FOR
+      </Txt>
+      <Txt variant="h3">{username}</Txt>
+
+      {/* Readable by default, like the creation form — the agent is about to
+          say this out loud, so hiding it from them helps nobody. */}
+      <PasswordInput
+        value={password}
+        onChangeText={setPassword}
+        placeholder="Temporary password"
+        label="New temporary password"
+      />
+
+      <Button
+        label="Suggest another"
+        variant="secondary"
+        onPress={() => {
+          setProblem(null);
+          setPassword(suggestPassword());
+        }}
+      />
+
+      <Txt variant="caption" color={colors.text.muted}>
+        Their current password stops working straight away. They will be asked to choose their own
+        as soon as they sign in with this one.
+      </Txt>
+
+      {problem ? (
+        <Txt variant="caption" color={colors.feedback.loss}>
+          {problem}
+        </Txt>
+      ) : null}
+
+      <View style={styles.sendRow}>
+        <Button label="Cancel" variant="secondary" onPress={onCancel} style={styles.flex} />
+        <Button
+          label={`Reset ${username}'s password`}
+          loading={busy}
+          onPress={() => {
+            if (password.length < 8) {
+              setProblem('The temporary password needs at least 8 characters.');
+              return;
+            }
+            setProblem(null);
+            onReset(password);
+          }}
+          style={styles.flex2}
+        />
+      </View>
+    </View>
+  );
+}
+
+/**
+ * A password that survives being read across a counter.
+ *
+ * Consonant-vowel syllables, so it can be said once and typed correctly by
+ * somebody who has never seen it written down. No characters that argue with
+ * each other out loud or on paper — no O against 0, no l against 1, no S
+ * against 5 — because the failure mode of a temporary password is not that it
+ * is guessed, it is that the player cannot get in and has to come back.
+ *
+ * Four syllables plus two digits is roughly 24 bits. That is not a password to
+ * defend an account with, and it is not being asked to: it is valid until the
+ * player's first sign-in, which is the next thing that happens.
+ */
+function suggestPassword(): string {
+  const consonants = 'bcdfghjkmnprtvwxz';
+  const vowels = 'aeiou';
+  const pick = (from: string) => from[Math.floor(Math.random() * from.length)]!;
+  let word = '';
+  for (let i = 0; i < 4; i += 1) word += pick(consonants) + pick(vowels);
+  return `${word}${Math.floor(Math.random() * 90) + 10}`;
+}
+
 const styles = StyleSheet.create({
+  /**
+   * The reset panel sits BETWEEN rows, so it needs the row's own top border to
+   * read as attached to the player above it rather than floating in the list.
+   */
+  resetPanel: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.surface.border,
+    backgroundColor: colors.surface.overlay,
+  },
+  resetKey: {
+    // 44pt square-ish, which is the accessibility floor for a tap target. It
+    // sits beside a control that moves money, so it has to be unmissable in
+    // both directions: easy to hit deliberately, hard to hit by accident.
+    minWidth: 52,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.surface.border,
+    backgroundColor: colors.surface.base,
+  },
+  hint: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xs },
+  resetKeyPressed: { backgroundColor: colors.surface.overlay, borderColor: colors.gold.default },
   handover: {
     padding: spacing.md,
     borderRadius: radius.md,
@@ -707,6 +962,21 @@ const styles = StyleSheet.create({
     // buttons that move money, and a mis-tap here sends coins to the wrong
     // person.
     minHeight: 60,
+  },
+  /**
+   * The allocation half of a player row.
+   *
+   * Stretched to the row's full height so the tap target is the whole strip
+   * rather than the two lines of text in the middle of it — a 60pt row with a
+   * 34pt hit area is a row that feels unreliable.
+   */
+  rowMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    gap: spacing.md,
+    minWidth: 0,
   },
   rowPressed: { backgroundColor: colors.surface.overlay },
   rowSelected: { backgroundColor: 'rgba(200,164,77,0.10)' },

@@ -79,6 +79,10 @@ export interface AgentDesk {
     dateOfBirth: string;
     region: string;
   }) => Promise<{ ok: boolean; signInWith?: string; message?: string }>;
+  resetPassword: (
+    playerId: string,
+    password: string,
+  ) => Promise<{ ok: boolean; message?: string }>;
 }
 
 export function useAgentDesk(): AgentDesk {
@@ -197,6 +201,35 @@ export function useAgentDesk(): AgentDesk {
     [api, refresh],
   );
 
+  /**
+   * A player has forgotten their password.
+   *
+   * There is no "email me a link" for these accounts and there never will be —
+   * they sign in at a domain that cannot receive mail, deliberately. So the
+   * agent sets a new temporary one in person, exactly as they did when the
+   * account was created, and the same flag makes the player replace it at the
+   * next sign-in.
+   *
+   * `refresh` is called so the player row shows the pending-password state; it
+   * is the only visible sign an agent has that the reset landed.
+   */
+  const resetPassword = useCallback(
+    async (playerId: string, password: string) => {
+      try {
+        await api.resetPlayerPassword({ playerId, password });
+        void refresh();
+        return { ok: true };
+      } catch (caught) {
+        return {
+          ok: false,
+          message:
+            caught instanceof PlayApiError ? caught.message : 'Could not reset that password',
+        };
+      }
+    },
+    [api, refresh],
+  );
+
   return useMemo(
     () => ({
       summary,
@@ -209,6 +242,7 @@ export function useAgentDesk(): AgentDesk {
       allocate,
       createInvite,
       createPlayer,
+      resetPassword,
     }),
     [
       summary,
@@ -221,6 +255,7 @@ export function useAgentDesk(): AgentDesk {
       allocate,
       createInvite,
       createPlayer,
+      resetPassword,
     ],
   );
 }
