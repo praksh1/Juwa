@@ -253,6 +253,15 @@ export function AgentScreen() {
                 They sign in with the username — no email needed. The app will make them choose
                 their own password straight away, and this one stops working then.
               </Txt>
+              {/*
+                Said plainly, because it is the next thing to do and it is not
+                obvious. An account created this way starts at ZERO — no welcome
+                bonus — precisely so the coins a player has are the coins their
+                agent gave them.
+              */}
+              <Txt variant="caption" color={colors.gold.light}>
+                Their balance is 0. Send them coins from &ldquo;Send coins&rdquo; above.
+              </Txt>
               <Button label="Done" variant="secondary" onPress={() => setMade(null)} />
             </View>
           ) : creating ? (

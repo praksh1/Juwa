@@ -25,7 +25,7 @@ import type { AddressInfo } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { createServer as createHttpServer } from 'node:http';
 import { AgentsDb, PostgresDb } from '@juwa/server';
-import { RESTRICTED_STATES, WELCOME_BONUS } from '@juwa/economy';
+import { RESTRICTED_STATES } from '@juwa/economy';
 import { createServer } from './server.js';
 import { signJwt } from './jwt.js';
 import { hashToken } from './admin.js';
@@ -526,7 +526,7 @@ describe('agents', { skip: URL_ENV ? false : 'JUWA_AGENT_TEST_DATABASE_URL not s
    * flag existing, blocking, and clearing.
    */
   describe('agent-created players', () => {
-    it('creates a working account bound to the agent, flagged to change password', async () => {
+    it('starts an agent-created account empty, and funds it only by allocation', async () => {
       const response = await call('/agent/players', {
         auth: token(AGENT_A),
         body: {
@@ -540,7 +540,15 @@ describe('agents', { skip: URL_ENV ? false : 'JUWA_AGENT_TEST_DATABASE_URL not s
       assert.equal(response.status, 200, JSON.stringify(response.body));
       assert.equal(response.body['username'], 'walkin_wes');
       assert.equal(response.body['mustSetPassword'], true);
-      assert.equal(response.body['balance'], WELCOME_BONUS);
+      /*
+       * ZERO, not the 100,000 a self-service sign-up gets.
+       *
+       * The agent funds them. Paying a full welcome bonus on top made a 50,000
+       * coin allocation look like it had done nothing — the player opened the
+       * app to 150,000 and could not tell which part came from their agent —
+       * and it minted coins outside the inventory the model rests on.
+       */
+      assert.equal(response.body['balance'], 0);
       // The sign-in identity is a synthetic address on a non-routable domain.
       assert.match(String(response.body['signInWith']), /^walkin_wes@/);
 

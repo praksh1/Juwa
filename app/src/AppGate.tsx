@@ -52,11 +52,38 @@ export function AppGate({ children }: { children: React.ReactNode }) {
   const [mustSetPassword, setMustSetPassword] = useState(false);
   const [loading, setLoading] = useState(true);
   const api = React.useRef(createPlayApi()).current;
+  /**
+   * Accounts that have finished choosing a password in THIS session.
+   *
+   * A latch, and it fixes a bug that made the whole feature look broken: a
+   * player set their new password, the screen cleared, and it asked again.
+   * Only the second attempt stuck.
+   *
+   * The cause is that changing a password makes Supabase emit an auth event of
+   * its own. That reloads the profile — and the reload can land before the API
+   * has recorded that the password was set, so the server still says
+   * `mustSetPassword` and the gate slams shut on somebody who just walked
+   * through it. Nothing about the ordering is under our control, so instead we
+   * remember. The server is still the only thing that can clear the flag; this
+   * only stops a stale read from re-raising it under the same player.
+   */
+  const passwordDone = React.useRef(new Set<string>());
 
   useEffect(() => {
     const unsubscribe = onAuthChange((next) => {
-      setSession(next);
-      setRegistered(null);
+      setSession((current) => {
+        /*
+         * Only tear the app down when the PLAYER changes.
+         *
+         * Supabase fires this on every auth event, including the hourly token
+         * refresh and the USER_UPDATED that a password change causes. Resetting
+         * `registered` on all of them meant a full-screen loading spinner over
+         * a working app once an hour, and a re-fetch mid-password-change that
+         * caused the bug above.
+         */
+        if (current?.userId !== next?.userId) setRegistered(null);
+        return next;
+      });
       setLoading(false);
     });
     return unsubscribe;
@@ -70,7 +97,9 @@ export function AppGate({ children }: { children: React.ReactNode }) {
       .then((profile) => {
         if (!alive) return;
         setRegistered(profile.registered);
-        setMustSetPassword(profile.mustSetPassword === true);
+        setMustSetPassword(
+          profile.mustSetPassword === true && !passwordDone.current.has(session.userId),
+        );
       })
       // A failure here is far more likely to be an unreachable API than a
       // genuinely unregistered player, but showing the age gate is the safe
@@ -141,7 +170,16 @@ export function AppGate({ children }: { children: React.ReactNode }) {
    * their agent typed does not get to use the app until they have replaced it —
    * every second in this state is a second somebody else can sign in as them.
    */
-  if (mustSetPassword) return <SetPasswordScreen onDone={() => setMustSetPassword(false)} />;
+  if (mustSetPassword) {
+    return (
+      <SetPasswordScreen
+        onDone={() => {
+          passwordDone.current.add(session.userId);
+          setMustSetPassword(false);
+        }}
+      />
+    );
+  }
 
   return (
     <View style={styles.app}>

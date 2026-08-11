@@ -34,8 +34,8 @@
 import { randomUUID } from 'node:crypto';
 import { ApiError, type AgentsDb } from '@juwa/server';
 import {
+  AGENT_CREATED_WELCOME,
   RESTRICTED_STATE_MESSAGE,
-  WELCOME_BONUS,
   isKnownState,
   isRestrictedState,
 } from '@juwa/economy';
@@ -442,7 +442,9 @@ export function agentRoutes(
           dateOfBirth,
           country,
           region,
-          welcomeCoins: WELCOME_BONUS,
+          // Zero, not the 100,000 a self-service sign-up gets. The agent funds
+          // them — see AGENT_CREATED_WELCOME.
+          welcomeCoins: AGENT_CREATED_WELCOME,
         });
         return {
           playerId: created.id,

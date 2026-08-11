@@ -117,3 +117,20 @@ export function canTopUp(
 
 /** New players start with enough to have a genuinely good first session. */
 export const WELCOME_BONUS = minor(100_000);
+
+/**
+ * What an AGENT-created account starts with: nothing.
+ *
+ * The welcome bonus above exists to give a stranger arriving from an ad
+ * something to play with before they will consider paying for anything. An
+ * account an agent created in person has no such problem — the agent is
+ * standing there, holding an inventory, and funding the player is the next
+ * thing they do.
+ *
+ * Paying the full welcome bonus on top made a 50,000 coin allocation look like
+ * it had done nothing: the player opened the app to 150,000 coins and could not
+ * tell which part was their agent's. It is the same reasoning that took the
+ * daily bonus down to a token — anything that mints coins outside an agent's
+ * inventory undermines the point of having one.
+ */
+export const AGENT_CREATED_WELCOME = minor(0);
