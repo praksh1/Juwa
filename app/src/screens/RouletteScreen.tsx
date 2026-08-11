@@ -166,9 +166,17 @@ export function RouletteScreen() {
    * must not leave a ball rolling round an idle wheel.
    */
   const stopRoll = useRef<(() => void) | null>(null);
+  /** The wheel's hum, which loops for the same span as the ball. */
+  const stopHum = useRef<(() => void) | null>(null);
 
   /** A spin abandoned by leaving the screen must not leave a ball rolling. */
-  useEffect(() => () => stopRoll.current?.(), []);
+  useEffect(
+    () => () => {
+      stopRoll.current?.();
+      stopHum.current?.();
+    },
+    [],
+  );
   const scroller = useRef<ScrollView>(null);
   /**
    * The winning number's entrance.
@@ -280,7 +288,6 @@ export function RouletteScreen() {
     }
 
     unlock();
-    sounds.spinStart();
 
     /*
      * Show the wheel NOW, not when the result arrives.
@@ -311,8 +318,23 @@ export function RouletteScreen() {
      * that depends on how quickly the server answers — and it is stopped on the
      * frame the ball lands, underneath the drop.
      */
+    /*
+     * TWO looped layers, for the whole length of the spin.
+     *
+     * The first attempt looped only the ball and left `sounds.spinStart()` —
+     * which plays `roulette-wheel.mp3` ONCE, and that file is also one second
+     * long. So the wheel hum still stopped a third of the way in, and the
+     * founder still heard the spin fall out of sync with the picture.
+     *
+     * Both files are one-second recordings and the spin lasts as long as it
+     * lasts, so both have to loop. The wheel sits underneath (it is the room,
+     * quiet) and the ball rattles on top. They are stopped together on the
+     * frame the ball lands, underneath the drop.
+     */
     stopRoll.current?.();
     stopRoll.current = playLoop(ROULETTE_SOUNDS.ball, 0.42);
+    stopHum.current?.();
+    stopHum.current = playLoop(ROULETTE_SOUNDS.wheel, 0.22);
 
     setSpinning(true);
     setError(null);
@@ -368,6 +390,8 @@ export function RouletteScreen() {
        */
       stopRoll.current?.();
       stopRoll.current = null;
+      stopHum.current?.();
+      stopHum.current = null;
       playCue(ROULETTE_SOUNDS.drop, 0.7);
 
       /*
@@ -390,6 +414,8 @@ export function RouletteScreen() {
     } catch (caught) {
       stopRoll.current?.();
       stopRoll.current = null;
+      stopHum.current?.();
+      stopHum.current = null;
       setWheelPhase('idle');
       setDisplay(null);
       setBalance((current) => minor(current + total));

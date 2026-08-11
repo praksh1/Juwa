@@ -351,7 +351,10 @@ function playSample(
 
 let bedSource: AudioBufferSourceNode | null = null;
 let bedGain: GainNode | null = null;
+/** The bed most recently REQUESTED — may still be downloading. */
 let bedUrl: string | null = null;
+/** The bed actually SOUNDING right now. See playBed for why these differ. */
+let bedPlaying: string | null = null;
 
 /** How long a bed takes to arrive and to leave. */
 const BED_FADE = 1.2;
@@ -370,24 +373,52 @@ const BED_GAIN = 0.22;
  * Idempotent on the same URL, which matters because the screen re-runs its
  * effect on every re-render: restarting the music each time the balance
  * changed would be a stutter every spin.
+ *
+ * ## The bug that made every bed after the first one silent
+ *
+ * There used to be one variable for two different facts — what has been ASKED
+ * for and what is actually SOUNDING — and the difference between them is the
+ * whole of this function, because a bed that is not in the cache has to be
+ * fetched first.
+ *
+ * The sequence was:
+ *
+ *   playBed(table)   buffer missing -> start fetch, set bedUrl = table, return
+ *   fetch resolves   -> playBed(table)
+ *                    -> `bedUrl === url && bedSource` is now TRUE, because
+ *                       bedUrl was set optimistically and bedSource is still
+ *                       the LOBBY's source -> return, having played nothing.
+ *
+ * So the first bed of a session played (there was no bedSource to trip the
+ * guard) and every bed after it was dropped on the floor. The lobby had music,
+ * the roulette table did not, and neither did any slot machine — which is
+ * exactly what the founder kept reporting, and which I had twice attributed to
+ * something else.
+ *
+ * `bedPlaying` is what is sounding; `bedUrl` is what was last requested. The
+ * guard reads the first, the fetch callback reads the second.
  */
 export function playBed(url: string): void {
-  if (bedUrl === url && bedSource) return;
+  if (bedPlaying === url && bedSource) return;
   const audio = context();
   if (!audio || !master) return;
 
   const buffer = sampleBuffers.get(url);
   if (!buffer) {
     // Fetch it, then come back. A 700KB bed is not worth blocking anything for.
-    void preloadSample(url).then(() => {
-      if (bedUrl === url || sampleBuffers.has(url)) playBed(url);
-    });
     bedUrl = url;
+    void preloadSample(url).then(() => {
+      // Only if this is still the bed anybody wants: a player who opened a
+      // game and left again before the download finished must not have the
+      // music of a screen they are no longer on start up underneath them.
+      if (bedUrl === url) playBed(url);
+    });
     return;
   }
 
   stopBed();
   bedUrl = url;
+  bedPlaying = url;
 
   const gain = audio.createGain();
   gain.gain.setValueAtTime(0.0001, audio.currentTime);
@@ -481,6 +512,51 @@ export function playLoop(url: string, gain = 0.4, rate = 1): () => void {
   };
 }
 
+/**
+ * Stop the bed ONLY if the one playing is the one the caller started.
+ *
+ * ## Why the roulette table was silent
+ *
+ * Screens stop their own music on the way out. But React Navigation runs the
+ * arriving screen's focus effect and the leaving screen's cleanup in an order
+ * nobody controls, and the cleanup usually goes last. So opening roulette from
+ * the lobby did this:
+ *
+ *     roulette focuses  -> playBed(bed-classic)
+ *     lobby blurs       -> stopBed()            <- kills the roulette bed
+ *
+ * The lobby's music worked, the table's did not, and the reason was entirely
+ * invisible from either screen: each one was correct on its own. The founder
+ * reported the roulette table still had no music after it had been added, and
+ * they were right.
+ *
+ * Making the stop conditional removes the ordering problem instead of trying to
+ * win the race. A screen can only ever silence its OWN bed, so a late cleanup
+ * from a screen that has already been replaced does nothing at all.
+ */
+export function stopBedIfPlaying(url: string): void {
+  /*
+   * `bedUrl`, not `bedPlaying`, and the distinction is the whole fix.
+   *
+   * `bedUrl` is the bed most recently REQUESTED by anybody. If it is still this
+   * screen's, nothing has replaced us and we should go quiet. If it is not,
+   * another screen has already asked for its own bed — possibly one that is
+   * still downloading — and this cleanup must do nothing at all, because
+   * `stopBed` clears the pending request and the arriving screen would be left
+   * permanently silent.
+   *
+   * Matching on `bedPlaying` instead is what caused exactly that: the lobby's
+   * cleanup ran while the table's bed was mid-download, stopped the lobby, and
+   * wiped the pending url on the way past. The fetch then resolved into a
+   * no-op and the roulette table had no music.
+   *
+   * Leaving the old bed running for the extra half second until the new one
+   * arrives is the right trade: `playBed` crossfades, so what the player hears
+   * is one room becoming another rather than a gap.
+   */
+  if (bedUrl === url) stopBed();
+}
+
 export function stopBed(): void {
   const audio = context();
   const source = bedSource;
@@ -488,6 +564,7 @@ export function stopBed(): void {
   bedSource = null;
   bedGain = null;
   bedUrl = null;
+  bedPlaying = null;
   if (!source || !gain || !audio) return;
 
   // Faded rather than cut. A loop stopping dead is the most obvious edit there

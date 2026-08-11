@@ -29,7 +29,10 @@ import { SoundToggles } from '../../components/SoundToggles';
 import { HowToPlayButton } from '../../components/HowToPlay';
 import { INSTANT_BED, useAmbientBed } from '../../ambience';
 import { INSTANT_RULES } from './rules';
-import { sounds, unlock } from '../../sound';
+import { sounds, unlock, useSoundSet } from '../../sound';
+import { INSTANT_SOUNDS } from '../../api/sound-sets';
+import { Fireworks, type FireworksHandle } from '../../components/Fireworks';
+import { usePrefersReducedMotion } from '../../motion';
 import { PlayApiError, createPlayApi, type PlayApi, type RoundResponse } from '../../api/client';
 
 export interface InstantGame {
@@ -199,6 +202,18 @@ export function InstantLayout({
    */
   useAmbientBed(INSTANT_BED);
 
+  /*
+   * Recorded wins, not the synthesised fallback.
+   *
+   * These five never installed a sound set — `SoundSet` is written in the
+   * vocabulary of a reel and none of them has reels — so every win here played
+   * the two-oscillator chime that exists only to cover a slow download. See
+   * INSTANT_SOUNDS.
+   */
+  useEffect(() => {
+    useSoundSet(INSTANT_SOUNDS);
+  }, []);
+
   return (
     <View style={styles.frame}>
     <Screen contentStyle={styles.scrollBody}>
@@ -310,9 +325,59 @@ export function InstantLayout({
  * games have no artwork — no reels, no felt, no cards — so colour is doing the
  * work that a painted cabinet does on a slot.
  */
-export function Board({ accent, children }: { accent: string; children: React.ReactNode }) {
+export function Board({
+  accent,
+  children,
+  /** Set on the frame a win is revealed — the panel flares and throws sparks. */
+  celebrate,
+}: {
+  accent: string;
+  children: React.ReactNode;
+  celebrate?: CelebrationHandle;
+}) {
+  const [size, setSize] = useState({ width: 320, height: 320 });
+  const flare = useRef(new Animated.Value(0)).current;
+  const reduced = usePrefersReducedMotion();
+
+  /**
+   * The rim flares when a win lands.
+   *
+   * Cheap, and it does most of the work: the border already carries the game's
+   * accent, so driving it to full brightness for half a second turns the whole
+   * panel into the thing that reacted. A number changing colour is a detail
+   * you have to be looking at; the frame lighting up is not.
+   */
+  useEffect(() => {
+    if (!celebrate) return undefined;
+    celebrate.onWin = (power: number) => {
+      if (reduced) return;
+      flare.setValue(0);
+      Animated.sequence([
+        Animated.timing(flare, { toValue: 1, duration: 110, useNativeDriver: false }),
+        Animated.timing(flare, { toValue: 0, duration: 620, useNativeDriver: false }),
+      ]).start();
+      celebrate.sparks.current?.fire(power);
+    };
+    return () => {
+      celebrate.onWin = undefined;
+    };
+  }, [celebrate, flare, reduced]);
+
+  const borderColor = flare.interpolate({
+    inputRange: [0, 1],
+    outputRange: [`${accent}55`, '#FFFFFF'],
+  });
+
   return (
-    <View style={[styles.boardOuter, { borderColor: `${accent}55`, shadowColor: accent }]}>
+    <Animated.View
+      style={[styles.boardOuter, { borderColor, shadowColor: accent }]}
+      onLayout={(event) =>
+        setSize({
+          width: event.nativeEvent.layout.width,
+          height: event.nativeEvent.layout.height,
+        })
+      }
+    >
       <LinearGradient
         colors={['#111A33', '#080C1C', '#04060F']}
         locations={[0, 0.55, 1]}
@@ -328,8 +393,58 @@ export function Board({ accent, children }: { accent: string; children: React.Re
         />
       </View>
       <View style={styles.boardBody}>{children}</View>
-    </View>
+      {celebrate ? (
+        <Fireworks
+          accent={accent}
+          width={size.width}
+          height={size.height}
+          controller={celebrate.sparks}
+        />
+      ) : null}
+    </Animated.View>
   );
+}
+
+/**
+ * The handle a game uses to set its own board off.
+ *
+ * A mutable object rather than a prop, because the celebration is an EVENT at
+ * a moment, not a state the board is in. Passing `won` as a prop would mean the
+ * board re-firing whenever it re-rendered while that flag was true, and
+ * deriving "is this a new win" inside the board from a payout it does not own.
+ */
+export interface CelebrationHandle {
+  sparks: React.MutableRefObject<FireworksHandle | null>;
+  onWin?: (power: number) => void;
+}
+
+/**
+ * Wire a board for celebration, and get back the trigger.
+ *
+ * `power` is derived from the payout against the stake and clamped: a win of
+ * ten times the stake or more is a full burst, and everything smaller scales
+ * down from there. So a 1.01× cash-out gets a flicker and a 40× gets fireworks,
+ * which is the ordering a player expects without being told.
+ */
+export function useCelebration(): {
+  handle: CelebrationHandle;
+  celebrate: (round: RoundResponse | null) => void;
+} {
+  const sparks = useRef<FireworksHandle | null>(null);
+  const handle = useRef<CelebrationHandle>({ sparks }).current;
+
+  const celebrate = useCallback(
+    (round: RoundResponse | null) => {
+      const payout = round?.settlement?.payout ?? 0;
+      const stake = round?.settlement?.stake ?? 0;
+      if (payout <= 0 || stake <= 0) return;
+      const ratio = payout / stake;
+      handle.onWin?.(Math.max(0, Math.min(1, (ratio - 1) / 9)));
+    },
+    [handle],
+  );
+
+  return { handle, celebrate };
 }
 
 /**
@@ -424,17 +539,40 @@ const lighten = (hex: string) => mix(hex, 255, 0.42);
 const darken = (hex: string) => mix(hex, 0, 0.34);
 
 /**
- * Play the right sound when a round settles, once per round.
+ * Play the right sound for a settled round — WHEN THE PICTURE SAYS SO.
  *
- * Lives here rather than in each game because all five settle the same way —
- * a payout against a stake — and five copies of this would be five chances for
- * one game to forget. Keyed on the round id so a re-render cannot replay a
- * fanfare over a result the player is already reading.
+ * ## The bug this replaces, which was mine and was serious
+ *
+ * The first version was an effect keyed on the round: the moment the server's
+ * response arrived, the sound played. But every one of these games now has an
+ * animation between the response and the reveal — Crash climbs for up to four
+ * seconds, Plinko falls peg by peg, Limbo and Dice churn. So the win chime
+ * sounded first and the game announced the win afterwards.
+ *
+ * The founder's reading of that was exact and damning: "feels like the system
+ * knows when the player is going to win and the sound appears first". It is a
+ * fair description of what was happening. The client did know — it had been
+ * told, correctly, several seconds earlier — and it leaked that knowledge
+ * through the speaker.
+ *
+ * In a real-money product this is the kind of defect that ends a licence
+ * application. In this one it destroys the only thing a social casino has to
+ * sell, which is that the game is straight.
+ *
+ * ## So it is called, not observed
+ *
+ * There is no effect and nothing watches the round. Each game calls `announce`
+ * at the exact frame its own animation finishes, which is the frame the player
+ * learns the result. A game that forgets to call it is silent — a bug, but a
+ * safe one, and much easier to notice than a sound arriving early.
+ *
+ * Guarded by round id so a re-render cannot replay a fanfare over a result the
+ * player is already reading.
  */
-export function useSettlementSound(round: RoundResponse | null): void {
+export function useSettlementAnnouncer(): (round: RoundResponse | null) => void {
   const announced = useRef<string | null>(null);
 
-  useEffect(() => {
+  return useCallback((round: RoundResponse | null) => {
     if (!round || round.status !== 'settled') return;
     if (announced.current === round.roundId) return;
     announced.current = round.roundId;
@@ -450,7 +588,7 @@ export function useSettlementSound(round: RoundResponse | null): void {
     // win everywhere in the app rather than per screen.
     if (payout >= stake * 10) sounds.bigWin();
     else sounds.win();
-  }, [round]);
+  }, []);
 }
 
 /** The pinned button (58) plus the dock's own padding, top and bottom. */

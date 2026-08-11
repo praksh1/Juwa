@@ -12,7 +12,7 @@ import { tintFromAccent } from '../components/SlotSymbol';
 import { materialFor } from '../components/symbols/materials';
 import { useCompactLayout } from '../layout';
 import { scatterTrigger, slotDetails, slotPaytable } from '../api/games';
-import { sounds, spinNow, stopBed, unlock, useSoundSet } from '../sound';
+import { sounds, spinNow, stopBedIfPlaying, unlock, useSoundSet } from '../sound';
 import { soundSetFor } from '../api/sound-sets';
 import { winTier, rollUpDuration, type WinTier } from '../motion';
 import { CoinCounter } from '../components/CoinCounter';
@@ -402,11 +402,21 @@ export function SlotsScreen() {
    * waits for a download.
    */
   useEffect(() => {
-    useSoundSet(soundSetFor(gameId));
-    // Leaving the game takes its music with it, faded rather than cut. Without
-    // this, backing out to the lobby leaves the last cabinet still playing
-    // underneath it.
-    return () => stopBed();
+    const set = soundSetFor(gameId);
+    useSoundSet(set);
+    /*
+     * Leaving the game takes its music with it, faded rather than cut. Without
+     * this, backing out to the lobby leaves the last cabinet still playing
+     * underneath it.
+     *
+     * Conditional, because this cleanup can run AFTER the next screen has
+     * already started its own bed — see stopBedIfPlaying. Unconditional, it
+     * silenced whatever the player had just navigated to.
+     */
+    const bed = set.bed;
+    return () => {
+      if (bed) stopBedIfPlaying(bed);
+    };
   }, [gameId]);
 
   /**
@@ -1272,6 +1282,7 @@ export function SlotsScreen() {
             trigger={bonusSpec.trigger}
             scatters={visibleScatters}
             active={phase === 'feature' || phase === 'fs' || phase === 'fs-intro'}
+            {...(details?.art ? { family: details.art } : {})}
           />
         ) : null}
         </View>

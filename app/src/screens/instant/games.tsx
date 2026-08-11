@@ -37,11 +37,13 @@ import {
   InstantLayout,
   PlayButton,
   useInstantGame,
-  useSettlementSound,
+  useCelebration,
+  useSettlementAnnouncer,
   styles as shell,
   type InstantGame,
 } from './shell';
 import { sounds } from '../../sound';
+import type { RoundResponse } from '../../api/client';
 import { usePrefersReducedMotion } from '../../motion';
 
 const GAMES: Record<string, InstantGame> = {
@@ -119,7 +121,13 @@ export function CrashScreen() {
   const game = GAMES['crash']!;
   const state = useInstantGame(game);
   const [target, setTarget] = useState(2);
-  useSettlementSound(state.round);
+  const announce = useSettlementAnnouncer();
+  const { handle, celebrate } = useCelebration();
+  // Sound and sparks together, on the frame the picture says so.
+  const reveal = (round: RoundResponse | null) => {
+    announce(round);
+    celebrate(round);
+  };
 
   const result = state.round?.state as { crashPoint: number; cashedOut: boolean } | undefined;
   const won = result?.cashedOut ?? false;
@@ -129,7 +137,10 @@ export function CrashScreen() {
   const play = async () => {
     const round = await state.play({ type: 'set-target', target });
     const crashAt = (round?.state as { crashPoint: number } | undefined)?.crashPoint;
-    if (crashAt) run(crashAt, target);
+    // The fanfare fires when the curve STOPS, not when the answer arrives —
+    // which on a 25x round is four seconds later. See useSettlementAnnouncer.
+    if (crashAt) run(crashAt, target, () => reveal(round));
+    else reveal(round);
   };
 
   // While it is climbing, the big number is the LIVE one; once it has stopped,
@@ -148,7 +159,7 @@ export function CrashScreen() {
           />
       }
     >
-      <Board accent={game.accent}>
+      <Board accent={game.accent} celebrate={handle}>
         <CrashCurve
           progress={Math.min(1, (shown - 1) / Math.max(0.6, target * 1.6 - 1))}
           accent={game.accent}
@@ -215,11 +226,12 @@ function useClimb() {
 
   useEffect(() => () => cancelAnimationFrame(frame.current), []);
 
-  const run = (crashPoint: number, target: number) => {
+  const run = (crashPoint: number, target: number, onDone: () => void) => {
     cancelAnimationFrame(frame.current);
     if (reduced) {
       setValue(crashPoint);
       setRunning(false);
+      onDone();
       return;
     }
 
@@ -256,6 +268,7 @@ function useClimb() {
       }
       setValue(crashPoint);
       setRunning(false);
+      onDone();
     };
 
     setRunning(true);
@@ -365,7 +378,12 @@ export function LimboScreen() {
   const game = GAMES['limbo']!;
   const state = useInstantGame(game);
   const [target, setTarget] = useState(2);
-  useSettlementSound(state.round);
+  const announce = useSettlementAnnouncer();
+  const { handle, celebrate } = useCelebration();
+  const reveal = (round: RoundResponse | null) => {
+    announce(round);
+    celebrate(round);
+  };
 
   const result = state.round?.state as { result: number; won: boolean } | undefined;
   const { display, rolling, roll } = useNumberRoll(2);
@@ -373,7 +391,8 @@ export function LimboScreen() {
   const play = async () => {
     const round = await state.play({ type: 'set-target', target });
     const drawn = (round?.state as { result: number } | undefined)?.result;
-    if (drawn !== undefined) roll(drawn, 100);
+    if (drawn !== undefined) roll(drawn, 100, () => reveal(round));
+    else reveal(round);
   };
 
   const settled = !rolling && result;
@@ -389,7 +408,7 @@ export function LimboScreen() {
           />
       }
     >
-      <Board accent={game.accent}>
+      <Board accent={game.accent} celebrate={handle}>
         <Txt variant="caption" color={colors.text.muted}>
           YOU NEED
         </Txt>
@@ -455,11 +474,12 @@ function useNumberRoll(initial: number) {
 
   useEffect(() => () => cancelAnimationFrame(frame.current), []);
 
-  const roll = (final: number, ceiling: number) => {
+  const roll = (final: number, ceiling: number, onDone: () => void) => {
     cancelAnimationFrame(frame.current);
     if (reduced) {
       setDisplay(final);
       setRolling(false);
+      onDone();
       return;
     }
 
@@ -485,6 +505,7 @@ function useNumberRoll(initial: number) {
       }
       setDisplay(final);
       setRolling(false);
+      onDone();
     };
 
     setRolling(true);
@@ -526,13 +547,19 @@ export function DiceScreen() {
     }
   }, [target, direction]);
 
-  useSettlementSound(state.round);
+  const announce = useSettlementAnnouncer();
+  const { handle, celebrate } = useCelebration();
+  const reveal = (round: RoundResponse | null) => {
+    announce(round);
+    celebrate(round);
+  };
   const { display, rolling, roll } = useNumberRoll(50);
 
   const play = async () => {
     const round = await state.play({ type: 'roll', target, direction });
     const rolled = (round?.state as { roll: number } | undefined)?.roll;
-    if (rolled !== undefined) roll(rolled, 100);
+    if (rolled !== undefined) roll(rolled, 100, () => reveal(round));
+    else reveal(round);
   };
 
   const settled = !rolling && result;
@@ -548,7 +575,7 @@ export function DiceScreen() {
           />
       }
     >
-      <Board accent={game.accent}>
+      <Board accent={game.accent} celebrate={handle}>
         {/*
           The track — the single most useful thing that was missing.
 
@@ -701,13 +728,19 @@ export function PlinkoScreen() {
     | { path: ('L' | 'R')[]; bucket: number; multiplier: number }
     | undefined;
 
-  useSettlementSound(state.round);
+  const announce = useSettlementAnnouncer();
+  const { handle, celebrate } = useCelebration();
+  const reveal = (round: RoundResponse | null) => {
+    announce(round);
+    celebrate(round);
+  };
   const { step, dropping, drop } = useDrop();
 
   const play = async () => {
     const round = await state.play({ type: 'drop', rows, risk });
     const path = (round?.state as { path: ('L' | 'R')[] } | undefined)?.path;
-    if (path) drop(path.length);
+    if (path) drop(path.length, () => reveal(round));
+    else reveal(round);
   };
 
   // The bucket only lights up once the ball has arrived in it. Lighting it on
@@ -725,7 +758,7 @@ export function PlinkoScreen() {
           />
       }
     >
-      <Board accent={game.accent}>
+      <Board accent={game.accent} celebrate={handle}>
         <PlinkoBoard
           rows={rows}
           path={result?.path}
@@ -835,11 +868,12 @@ function useDrop() {
     if (timer.current) clearInterval(timer.current);
   }, []);
 
-  const drop = (steps: number) => {
+  const drop = (steps: number, onDone: () => void) => {
     if (timer.current) clearInterval(timer.current);
     if (reduced) {
       setStep(steps);
       setDropping(false);
+      onDone();
       return;
     }
     setStep(0);
@@ -853,6 +887,7 @@ function useDrop() {
         if (timer.current) clearInterval(timer.current);
         timer.current = null;
         setDropping(false);
+        onDone();
       }
     }, 105);
   };
@@ -966,7 +1001,18 @@ export function MinesScreen() {
     return 'hidden';
   };
 
-  useSettlementSound(state.round);
+  /*
+   * Mines is the one game that can announce immediately: the tile turns over in
+   * the same frame the response lands, so there is no gap for a sound to fall
+   * into ahead of the picture.
+   */
+  const announce = useSettlementAnnouncer();
+  const { handle, celebrate } = useCelebration();
+  useEffect(() => {
+    if (state.round?.status !== 'settled') return;
+    announce(state.round);
+    celebrate(state.round);
+  }, [state.round, announce, celebrate]);
 
   /**
    * A safe tile and a mine must not sound the same.
@@ -1016,7 +1062,7 @@ export function MinesScreen() {
         )
       }
     >
-      <Board accent={game.accent}>
+      <Board accent={game.accent} celebrate={handle}>
         <View style={local.grid}>
           {Array.from({ length: MINES_TILES }, (_, tile) => (
             <MineTile

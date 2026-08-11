@@ -25,7 +25,7 @@
 
 import { useCallback, useEffect } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { playBed, stopBed, unlock, unlockOnFirstGesture } from './sound';
+import { playBed, stopBedIfPlaying, unlock, unlockOnFirstGesture } from './sound';
 
 /**
  * The lobby, store and wallet share one bed.
@@ -61,7 +61,9 @@ export function useAmbientBed(url: string | null): void {
       if (!url) return undefined;
       unlock();
       playBed(url);
-      return () => stopBed();
+      // Only ever silences THIS screen's bed — see stopBedIfPlaying for the
+      // navigation race that made the roulette table silent.
+      return () => stopBedIfPlaying(url);
     }, [url]),
   );
 }

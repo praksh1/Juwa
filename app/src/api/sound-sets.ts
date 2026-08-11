@@ -219,6 +219,42 @@ export const ROULETTE_SOUNDS = {
   win: `${A}/roulette-win.mp3`,
 } as const;
 
+/**
+ * The five instant games.
+ *
+ * ## Why they had none
+ *
+ * `useSoundSet` was built for slot machines and every field on it describes a
+ * reel — spin, stops, lever, scatter, near-miss. Crash has no reels, so the
+ * instant games never installed a set at all, and `sounds.win()` fell all the
+ * way through to its SYNTHESISED fallback: a two-oscillator chime that exists
+ * so a game is never silent while its files download.
+ *
+ * That fallback is a stopgap and it sounded like one. It is a large part of
+ * why these five were described as feeling built in the 1990s — every other
+ * screen in the app plays a recorded fanfare and these played a beep.
+ *
+ * ## What they get
+ *
+ * The mechanical layer (taps, ticks) plus the three win tiers, and nothing
+ * else, because there is nothing else: no reel to stop, no lever to pull, no
+ * scatter to land. The tick doubles as the peg strike in Plinko and the digit
+ * churn in Limbo and Dice, which is the right instrument for both — it is a
+ * small hard click, and that is what a ball hitting a pin sounds like.
+ *
+ * One set across all five: they share a bed and a visual language already, and
+ * a win should sound like a win wherever the player is standing.
+ */
+export const INSTANT_SOUNDS: SoundSet = {
+  win: WIN[2]!,
+  big: BIG[1]!,
+  mega: MEGA[2]!,
+  bonus: `${A}/bonus-trigger-2.mp3`,
+  coinLock: `${A}/coin-lock-2.mp3`,
+  tick: `${A}/coin-tick-2.mp3`,
+  tap: `${A}/ui-tap-1.mp3`,
+};
+
 /** Every file, for the service worker and for a warm cache on the lobby. */
 export const ALL_SOUND_FILES: string[] = [
   ...new Set([
@@ -228,6 +264,7 @@ export const ALL_SOUND_FILES: string[] = [
     ...BIG,
     ...MEGA,
     ...Object.values(ROULETTE_SOUNDS),
+    ...(Object.values(INSTANT_SOUNDS).filter((v) => typeof v === 'string') as string[]),
   ]),
 ];
 
