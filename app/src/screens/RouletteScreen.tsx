@@ -3,10 +3,12 @@ import { Animated, Easing, Pressable, ScrollView, StyleSheet, View } from 'react
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
+import { publishBalance } from '../api/usePlayer';
 import { Button, Card, Txt } from '../components/primitives';
 import { SoundToggles } from '../components/SoundToggles';
-import { playCue, sounds, spinNow, unlock, useSoundSet } from '../sound';
+import { playCue, playLoop, preloadSamples, sounds, spinNow, unlock, useSoundSet } from '../sound';
 import { ROULETTE_SOUNDS } from '../api/sound-sets';
+import { ROULETTE_BED, useAmbientBed } from '../ambience';
 import { RouletteWheel, type WheelPhase } from '../components/RouletteWheel';
 import { usePrefersReducedMotion } from '../motion';
 import { ROULETTE_GAME_ID } from '../api/games';
@@ -118,7 +120,29 @@ export function RouletteScreen() {
    */
   useEffect(() => {
     useSoundSet({ spin: ROULETTE_SOUNDS.wheel, win: ROULETTE_SOUNDS.win, big: ROULETTE_SOUNDS.win });
+    /*
+     * The ball's two recordings, fetched on arrival rather than on demand.
+     *
+     * `SoundSet` has no field for them — they belong to this table and to
+     * nothing else — so they were being loaded lazily by the first `playLoop`
+     * and `playCue` that wanted them. That made the FIRST spin of a session
+     * the one spin with no ball on it, which is the spin a new player judges
+     * the table by.
+     */
+    void preloadSamples([ROULETTE_SOUNDS.ball, ROULETTE_SOUNDS.drop]);
   }, []);
+
+  /**
+   * The room the table is in.
+   *
+   * The slots have had music since they were built and this screen had none —
+   * so walking from a machine to the roulette table meant walking out of a
+   * casino into a silent room, which is a bigger tonal drop than any single
+   * missing effect. `bed-classic` is the right family: this is the oldest game
+   * in the building.
+   */
+  useAmbientBed(ROULETTE_BED);
+
 
   const [error, setError] = useState<string | null>(null);
   /**
@@ -134,6 +158,17 @@ export function RouletteScreen() {
   const [wheelPlan, setWheelPlan] = useState({ from: 0, duration: WHEEL_LAND_SECONDS });
   /** Resolved by the wheel's own stop, so the readout can never run ahead. */
   const wheelStopped = useRef<(() => void) | null>(null);
+  /**
+   * Stops the looping ball rattle.
+   *
+   * In a ref because it is created in one branch of an async function and
+   * called in two others — including the error path, where a spin that failed
+   * must not leave a ball rolling round an idle wheel.
+   */
+  const stopRoll = useRef<(() => void) | null>(null);
+
+  /** A spin abandoned by leaving the screen must not leave a ball rolling. */
+  useEffect(() => () => stopRoll.current?.(), []);
   const scroller = useRef<ScrollView>(null);
   /**
    * The winning number's entrance.
@@ -246,8 +281,39 @@ export function RouletteScreen() {
 
     unlock();
     sounds.spinStart();
-    // The ball running round the rim, under the wheel.
-    playCue(ROULETTE_SOUNDS.ball, 0.5);
+
+    /*
+     * Show the wheel NOW, not when the result arrives.
+     *
+     * A player who scrolled to the bottom of the felt to place their bets taps
+     * Spin from down there — and then watches a static betting grid for three
+     * and a half seconds while the wheel they paid for spins off-screen above
+     * them. Scrolling only after the ball landed meant the entire animation
+     * happened where nobody could see it, and the first thing they saw was the
+     * answer.
+     *
+     * This is the same target the result uses, so the view does not move again
+     * when the ball stops: one scroll per spin, at the moment the spin starts.
+     */
+    scroller.current?.scrollTo({ y: resultScrollTarget(), animated: true });
+
+    /*
+     * The ball running round the rim, for as long as it actually runs.
+     *
+     * This was one `playCue` of a ONE SECOND recording under a spin that lasts
+     * three and a half. The rattle stopped a third of the way in, the table
+     * went silent, and then the drop arrived from nowhere — which is what "the
+     * spin and stop sounds feel out of sync" was describing. Nothing was
+     * mistimed; there was simply no sound for most of the spin, so the drop had
+     * nothing to be the end of.
+     *
+     * Looped, it runs exactly as long as the ball does — including the part
+     * that depends on how quickly the server answers — and it is stopped on the
+     * frame the ball lands, underneath the drop.
+     */
+    stopRoll.current?.();
+    stopRoll.current = playLoop(ROULETTE_SOUNDS.ball, 0.42);
+
     setSpinning(true);
     setError(null);
     setRound(null);
@@ -289,14 +355,30 @@ export function RouletteScreen() {
       setDisplay(state.winningNumber);
       setRound(result);
       setBalance(minor(result.balance));
-      // The ball into the pocket, over the mechanical stop the slots use.
-      playCue(ROULETTE_SOUNDS.drop, 0.7);
-      sounds.reelStop(0);
+      publishBalance(minor(result.balance));
 
-      // The felt is long, so by the time a player has placed bets they are
-      // scrolled to the bottom — and the wheel, the number and the win amount
-      // are all off-screen above them. Without this they never see the result
-      // of the spin they just paid for.
+      /*
+       * The rattle ends and the ball drops, in that order and on the same
+       * frame the picture says it happened.
+       *
+       * `sounds.reelStop(0)` used to play over the top of this. That is the
+       * detent of a slot machine's reel — a mechanism this table does not have
+       * — and layering it under the drop made the landing sound like a
+       * fruit machine stopping rather than a ball settling into a pocket.
+       */
+      stopRoll.current?.();
+      stopRoll.current = null;
+      playCue(ROULETTE_SOUNDS.drop, 0.7);
+
+      /*
+       * Again, and deliberately not redundant.
+       *
+       * The scroll at the top of this function is the one that matters — it
+       * puts the wheel on screen before it starts turning. This one catches
+       * the case where the player scrolled away DURING the spin, which is
+       * exactly when they would most want bringing back. On the normal path it
+       * is a no-op, because the view is already here.
+       */
       scroller.current?.scrollTo({ y: resultScrollTarget(), animated: true });
 
       const payout = result.settlement?.payout ?? 0;
@@ -306,6 +388,8 @@ export function RouletteScreen() {
         else sounds.lose();
       }, 220);
     } catch (caught) {
+      stopRoll.current?.();
+      stopRoll.current = null;
       setWheelPhase('idle');
       setDisplay(null);
       setBalance((current) => minor(current + total));

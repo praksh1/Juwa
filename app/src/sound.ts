@@ -109,6 +109,43 @@ export function unlock(): void {
 }
 
 /**
+ * Unlock on the player's first touch ANYWHERE, once.
+ *
+ * ## The problem it solves
+ *
+ * Every browser refuses to start audio outside a user gesture, so `unlock()`
+ * has to be called from inside a tap. Until now the only things that called it
+ * were the spin controls and the felt — which is fine for a slot machine and
+ * useless for a room tone, because the lobby's music is meant to be playing
+ * BEFORE the player commits to anything. The bed would be requested, the
+ * context would still be suspended, and the lobby was silent until the player
+ * entered a game and came back.
+ *
+ * Listening at the document means the gesture that unlocks the audio is
+ * whatever the player did first — scrolling the lobby, tapping a tile, opening
+ * a tab — rather than a specific control we remembered to wire up.
+ *
+ * Registered once and removed on the first event. `capture` and `passive` so it
+ * cannot interfere with anything it observes: this listener must be incapable
+ * of changing the behaviour of the app it is attached to.
+ */
+let armed = false;
+export function unlockOnFirstGesture(): void {
+  if (armed || typeof document === 'undefined') return;
+  armed = true;
+
+  const fire = () => {
+    unlock();
+    for (const type of ['pointerdown', 'touchstart', 'keydown'] as const) {
+      document.removeEventListener(type, fire, { capture: true });
+    }
+  };
+  for (const type of ['pointerdown', 'touchstart', 'keydown'] as const) {
+    document.addEventListener(type, fire, { capture: true, passive: true });
+  }
+}
+
+/**
  * Anything that wants to re-render when a toggle moves.
  *
  * The state lives in this module rather than in React, because the audio graph
@@ -369,6 +406,79 @@ export function playBed(url: string): void {
 
   bedSource = source;
   bedGain = gain;
+}
+
+/**
+ * Loop a sound effect for as long as something is happening, and stop it.
+ *
+ * ## Why this had to exist
+ *
+ * `roulette-ball-roll.mp3` is ONE SECOND long. The ball runs for three and a
+ * half. Firing it once at the tap gave a second of rattle followed by two and a
+ * half seconds of silence and then, out of nowhere, the drop — which is exactly
+ * what "the spin and stop sounds feel out of sync" describes. Nothing was
+ * mistimed; there was simply no sound for most of the spin, so the drop had
+ * nothing to be the end OF.
+ *
+ * A looping source fixes it properly: the rattle runs for as long as the ball
+ * does, whatever that turns out to be, and the caller stops it at the moment
+ * the ball lands. It is on the EFFECTS channel, not music, because it is a
+ * thing happening rather than a room tone.
+ *
+ * Returns its own stop function. Calling it twice is safe.
+ */
+export function playLoop(url: string, gain = 0.4, rate = 1): () => void {
+  const audio = context();
+  if (!audio || !master || effectsMuted()) return () => {};
+
+  const buffer = sampleBuffers.get(url);
+  if (!buffer) {
+    /*
+     * Not loaded yet. Start it as soon as it is — unless the caller has
+     * already given up, which is what the flag is for. A spin that finishes
+     * before the file arrives must not leave a rattle looping over an idle
+     * table.
+     */
+    let abandoned = false;
+    let stopLate: (() => void) | null = null;
+    void preloadSample(url).then(() => {
+      if (!abandoned) stopLate = playLoop(url, gain, rate);
+    });
+    return () => {
+      abandoned = true;
+      stopLate?.();
+    };
+  }
+
+  const env = audio.createGain();
+  // A short ramp in, so starting the loop is not a click.
+  env.gain.setValueAtTime(0.0001, audio.currentTime);
+  env.gain.exponentialRampToValueAtTime(gain, audio.currentTime + 0.08);
+  env.connect(master);
+
+  const source = audio.createBufferSource();
+  source.buffer = buffer;
+  source.playbackRate.value = rate;
+  source.loop = true;
+  source.connect(env);
+  source.start();
+
+  let stopped = false;
+  return () => {
+    if (stopped) return;
+    stopped = true;
+    // Ramped out over 120ms. Cutting a rattle dead is audible as an edit, and
+    // this one ends underneath the drop, which would make it obvious.
+    const end = audio.currentTime + 0.12;
+    env.gain.cancelScheduledValues(audio.currentTime);
+    env.gain.setValueAtTime(Math.max(0.0001, env.gain.value), audio.currentTime);
+    env.gain.exponentialRampToValueAtTime(0.0001, end);
+    try {
+      source.stop(end + 0.02);
+    } catch {
+      // Already stopped.
+    }
+  };
 }
 
 export function stopBed(): void {

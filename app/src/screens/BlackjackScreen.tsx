@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, StyleSheet, View } from 'react-native';
 import { colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
+import { publishBalance } from '../api/usePlayer';
 import { betOptions, suggestedBet } from '@juwa/economy';
 import { Button, Card, Txt } from '../components/primitives';
 import { SoundToggles } from '../components/SoundToggles';
@@ -155,6 +156,7 @@ export function BlackjackScreen() {
       });
       setRound(result);
       setBalance(minor(result.balance));
+      publishBalance(minor(result.balance));
 
       const state = result.state as BlackjackPublic;
       // Four cards, dealt in sequence.
@@ -188,6 +190,7 @@ export function BlackjackScreen() {
         });
         setRound(result);
         setBalance(minor(result.balance));
+        publishBalance(minor(result.balance));
 
         if (result.status === 'settled') {
           const state = result.state as BlackjackPublic;

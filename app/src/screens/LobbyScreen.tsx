@@ -20,6 +20,7 @@ import {
   type GameCategory,
   type GameSummary,
 } from '../api/games';
+import { LOBBY_BED, useAmbientBed } from '../ambience';
 
 /**
  * The lobby — the screen that decides whether a player stays.
@@ -38,6 +39,8 @@ export function LobbyScreen() {
 
   // The real balance, from the server. Never a local guess — see usePlayer.
   const { balance, dailyStreak, vipLevel, bonusClaimedToday, claimDaily } = usePlayer();
+  // The room the player is standing in. See ambience.ts.
+  useAmbientBed(LOBBY_BED);
   const [bonusMessage, setBonusMessage] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   /**

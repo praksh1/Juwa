@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, Image, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { BASE_CABINET, anticipatingReels, bonusCabinet, colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
+import { publishBalance } from '../api/usePlayer';
 import { betOptions, suggestedBet } from '@juwa/economy';
 import { Card, Txt } from '../components/primitives';
 import { SoundToggles } from '../components/SoundToggles';
@@ -28,7 +29,7 @@ import { hasTileArt } from '../components/GameArt';
 import { WinOverlay, useCabinetShake } from '../components/WinOverlay';
 import { HoldSpinRound } from '../components/HoldSpinRound';
 import { PrizeWheel } from '../components/PrizeWheel';
-import { WheelMeter } from '../components/WheelMeter';
+import { BonusMeter, type BonusReward } from '../components/BonusMeter';
 import {
   PlayApiError,
   createPlayApi,
@@ -677,13 +678,41 @@ export function SlotsScreen() {
    * Present only on games whose model actually has a wheel, so the meter beside
    * the reels appears on Triple Bar and Fruit Stand and on no other machine.
    */
-  const wheelSpec = useMemo(() => {
-    const spec = paytable?.feature;
-    // The paytable the app is served does not carry the trigger count, and
-    // three is the rule for every wheel in the catalogue. Hard-coding it here
-    // rather than guessing per game: if a two-scatter wheel is ever added, this
-    // is the line that has to change and the meter would visibly be wrong.
-    return spec?.kind === 'wheel' ? { segments: spec.segments, trigger: 3 } : null;
+  const bonusSpec = useMemo((): { reward: BonusReward; trigger: number } | null => {
+    if (!paytable) return null;
+
+    // A wheel, if this machine has one. Checked first because a game can have
+    // both, and the wheel is the more striking of the two to advertise.
+    const spec = paytable.feature;
+    if (spec?.kind === 'wheel') {
+      // The paytable the app is served does not carry the trigger count, and
+      // three is the rule for every wheel in the catalogue. Hard-coded here
+      // rather than guessed per game: if a two-scatter wheel is ever added,
+      // this is the line that has to change, and the meter would visibly be
+      // wrong until it did.
+      return { reward: { kind: 'wheel', segments: spec.segments }, trigger: 3 };
+    }
+
+    /*
+     * Otherwise free spins, which is the bonus on most of the catalogue and
+     * was completely invisible until now — measured at one round in 95 to 187
+     * spins, a player could reasonably conclude the game had none. Games with
+     * neither (the three-reel classics, and the tumbler whose cascade IS the
+     * feature) return null and get no panel, which is honest: an empty meter
+     * would advertise something that is never coming.
+     */
+    const scatter = scatterTrigger(paytable);
+    if (scatter) {
+      return {
+        reward: {
+          kind: 'free-spins',
+          spins: scatter.spins,
+          multiplier: paytable.freeSpinMultiplier,
+        },
+        trigger: scatter.count,
+      };
+    }
+    return null;
   }, [paytable]);
 
   const glassHeight = useMemo(() => {
@@ -1003,6 +1032,9 @@ export function SlotsScreen() {
       // The balance from the server already includes every free spin, so it is
       // applied once, at the end — otherwise it would jump before the show did.
       setBalance(minor(result.balance));
+      // And to every other screen, so the lobby header is not still showing the
+      // figure it loaded when the player walked in. See publishBalance.
+      publishBalance(minor(result.balance));
       setPhase('idle');
       setReelPhase('idle');
     } catch (caught) {
@@ -1227,19 +1259,19 @@ export function SlotsScreen() {
           />
         ) : null}
         {/*
-          The wheel, visible from the first second on games that have one.
+          The bonus, named and visible from the first second.
           
-          Without it the bonus is invisible until it fires — about once in
-          fifty spins — and a player who has not seen it yet has no reason to
-          believe the wheel on the lobby tile is in the game at all. See
-          WheelMeter.
+          Without it the bonus is invisible until it fires — measured at once
+          in 53 spins on the wheel games and once in 95 to 187 on the rest — so
+          a player's first session contains no evidence that the game has one
+          at all. See BonusMeter.
         */}
-        {wheelSpec ? (
-          <WheelMeter
-            segments={wheelSpec.segments}
-            trigger={wheelSpec.trigger}
+        {bonusSpec ? (
+          <BonusMeter
+            reward={bonusSpec.reward}
+            trigger={bonusSpec.trigger}
             scatters={visibleScatters}
-            active={phase === 'feature' && feature?.kind === 'wheel'}
+            active={phase === 'feature' || phase === 'fs' || phase === 'fs-intro'}
           />
         ) : null}
         </View>

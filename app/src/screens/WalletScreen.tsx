@@ -5,6 +5,7 @@ import { format, minor } from '@juwa/money';
 import { Button, Card, Screen, SectionHeader, Txt } from '../components/primitives';
 import { usePlayer } from '../api/usePlayer';
 import { createPlayApi, type HistoryEntry } from '../api/client';
+import { LOBBY_BED, useAmbientBed } from '../ambience';
 
 /**
  * Wallet.
@@ -69,6 +70,7 @@ function ago(iso: string): string {
 
 export function WalletScreen() {
   const { balance } = usePlayer();
+  useAmbientBed(LOBBY_BED);
   const api = React.useRef(createPlayApi()).current;
 
   const [entries, setEntries] = useState<HistoryEntry[]>([]);

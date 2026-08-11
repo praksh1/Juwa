@@ -35,6 +35,34 @@ export function notifyBalanceChanged(): void {
   for (const listener of balanceListeners) listener();
 }
 
+/**
+ * The exact balance the server just reported, pushed to every screen.
+ *
+ * ## Why this exists alongside `notifyBalanceChanged`
+ *
+ * Every game screen keeps its own copy of the balance, updated from the round
+ * response, and told nobody. The lobby header sits mounted underneath the
+ * pushed game screen the whole time, so it kept whatever figure it had loaded
+ * when the player first arrived — and stayed wrong until the page was
+ * reloaded. A player who won 40,000 coins went back to the lobby and saw the
+ * number they started with, which reads as the win not having counted.
+ *
+ * The fix is not `notifyBalanceChanged`. That refetches, and a refetch per spin
+ * is a network round trip per spin from every mounted listener — for a number
+ * the server just handed us in the response we already have. So this carries
+ * the VALUE instead: no request, no delay, and every screen shows the same
+ * figure at the same moment.
+ *
+ * It is still only ever the server's number. Nothing here computes a balance;
+ * a caller passes on what it was told, which is why this cannot drift from the
+ * ledger.
+ */
+const valueListeners = new Set<(balance: Minor) => void>();
+
+export function publishBalance(balance: Minor): void {
+  for (const listener of valueListeners) listener(balance);
+}
+
 export function usePlayer() {
   const api = useRef<PlayApi>(createPlayApi()).current;
   const [state, setState] = useState<PlayerState>({
@@ -73,8 +101,17 @@ export function usePlayer() {
     void refresh();
     const listener = () => void refresh();
     balanceListeners.add(listener);
+
+    // The cheap path: a value the server already gave somebody else.
+    const onValue = (balance: Minor) =>
+      setState((current) =>
+        current.balance === balance ? current : { ...current, balance, loading: false },
+      );
+    valueListeners.add(onValue);
+
     return () => {
       balanceListeners.delete(listener);
+      valueListeners.delete(onValue);
     };
   }, [refresh]);
 

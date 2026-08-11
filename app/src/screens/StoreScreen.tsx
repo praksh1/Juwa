@@ -13,6 +13,7 @@ import { Badge, Button, Card, Screen, SectionHeader, Txt } from '../components/p
 import { LegalFooter } from '../components/LegalFooter';
 import { PlayApiError, createPlayApi } from '../api/client';
 import { notifyBalanceChanged, usePlayer } from '../api/usePlayer';
+import { LOBBY_BED, useAmbientBed } from '../ambience';
 
 /**
  * The coin store.
@@ -103,6 +104,7 @@ function PackTile({
 export function StoreScreen() {
   const api = React.useRef(createPlayApi()).current;
   const { balance } = usePlayer();
+  useAmbientBed(LOBBY_BED);
   const [isFirstPurchase, setIsFirstPurchase] = useState(false);
   const [busyPack, setBusyPack] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);

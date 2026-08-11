@@ -20,6 +20,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { format, minor, type Minor } from '@juwa/money';
+import { publishBalance } from '../../api/usePlayer';
 import { betOptions, suggestedBet } from '@juwa/economy';
 import { colors, radius, spacing } from '@juwa/ui';
 import { Screen, Txt } from '../../components/primitives';
@@ -87,6 +88,8 @@ export function useInstantGame(game: InstantGame): InstantState {
         const result = await run();
         setRound(result);
         setBalance(minor(result.balance));
+        // Keeps the lobby header honest without a refetch. See publishBalance.
+        publishBalance(minor(result.balance));
         return result;
       } catch (caught) {
         setError(
