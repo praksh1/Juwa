@@ -221,6 +221,22 @@ const OVERRIDES = {
   // gold lettering better than any plate would.
   'slot-aurora-borealis': { top: 0.04, height: 0.07 },
 
+  /*
+   * Two more of the same failure, measured off the artwork rather than a
+   * screenshot.
+   *
+   * Both tiles carry a genuinely blank sign across the very top — a deep red
+   * field on Sunset Strip, a dark olive panel on Royal Fortune — and in both
+   * cases the detector walked past it and locked onto a smooth region BELOW:
+   * the night sky between the searchlights, and the wall between the pillars.
+   * The result was a title sitting under its own banner, over a pair of
+   * crossing searchlights in one case and half on the frame in the other.
+   *
+   * Both signs are dark, so the light metal these get is the right one.
+   */
+  'slot-sunset-strip': { top: 0.023, height: 0.088 },
+  'slot-royal-flush': { top: 0.012, height: 0.133 },
+
   // ---- tiles with nowhere to write ----
   // On these four the top of the artwork is the subject: a carved frieze and a
   // panther's headdress, a Vegas skyline, a temple in full sun, a fireplace.

@@ -17,7 +17,7 @@ import { colors, radius, spacing, typography } from '@juwa/ui';
 import { Button, Card, Txt } from '../components/primitives';
 import { Logo } from '../components/Logo';
 import { LegalFooter } from '../components/LegalFooter';
-import { GameArt } from '../components/GameArt';
+import { GameCard } from '../components/GameCard';
 import { GAMES, PLAYABLE } from '../api/games';
 import { COIN_PACKS } from '@juwa/economy';
 import { format } from '@juwa/money';
@@ -124,14 +124,20 @@ export function LandingScreen({
           The games
         </Txt>
         <View style={styles.grid}>
+          {/*
+            The SAME GameCard the lobby uses, not a second rendering of the art.
+            
+            This used to draw the bare artwork with the name in plain text
+            underneath, which left every painted banner sitting empty — so the
+            logged-out page went on showing the old, uncorrected titles after
+            the lobby had been fixed. Two implementations of "a game tile" means
+            one of them is always behind; there is now one.
+            
+            Tapping goes to sign-in, because a stranger cannot play yet.
+          */}
           {featured.map((game) => (
             <View key={game.id} style={styles.tile}>
-              <View style={styles.tileArt}>
-                <GameArt gameId={game.id} accent={game.accent} />
-              </View>
-              <Txt variant="bodySmall" numberOfLines={1} style={styles.tileName}>
-                {game.name}
-              </Txt>
+              <GameCard game={game} playable onPress={onSignIn} />
             </View>
           ))}
         </View>
