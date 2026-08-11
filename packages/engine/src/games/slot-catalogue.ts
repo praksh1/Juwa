@@ -236,15 +236,19 @@ const THREE_REEL_SYMBOLS: SymbolSpec[] = [
 const THREE_REEL_BONUS_SYMBOLS: SymbolSpec[] = [
   ...THREE_REEL_SYMBOLS,
   /*
-   * Weight 4, not 2, and the difference is the whole feature.
+   * Weight 7, and this is the second time it has gone up.
    *
-   * At 2 the wheel fired on 0.13% of spins — one in seven hundred and seventy.
-   * Triple Bar and Fruit Stand have NO other bonus at all, so their single
-   * feature was, in practice, unreachable: a player spun six times, saw a
-   * three-reel machine, and asked where the wheel from the lobby tile had gone.
-   * They were right to.
+   * At 2 the wheel fired every 770 spins. At 4 it fired every 178, which is a
+   * perfectly normal bonus frequency for a slot — and still wrong for THIS one,
+   * because the founder played it again and asked, again, where the wheel was.
+   *
+   * The usual frequency assumes a game with other things going on. Triple Bar
+   * and Fruit Stand have NO free spins, no cascades, no expanding wilds:
+   * without the wheel they are three reels of fruit and nothing else, and their
+   * lobby tile is a picture of a wheel. A promise on the tile that takes three
+   * hundred spins to keep is a promise most players never see kept.
    */
-  { id: 'SCATTER', kind: 'scatter', weights: [4, 4, 4], pays: { 3: 0, 4: 0, 5: 0 } },
+  { id: 'SCATTER', kind: 'scatter', weights: [7, 7, 7], pays: { 3: 0, 4: 0, 5: 0 } },
 ];
 
 
@@ -376,7 +380,7 @@ export const SLOT_MODELS: Record<string, SlotModel> = {
     rtp: 0.9479,
     math: {
       reels: 3, rows: 3, paylines: LINES_5, symbols: THREE_REEL_BONUS_SYMBOLS,
-      payoutScale: 1.0068,
+      payoutScale: 1.0423,
       scatterPays: {},
       freeSpinsAwarded: {},
       freeSpinMultiplier: 1,
