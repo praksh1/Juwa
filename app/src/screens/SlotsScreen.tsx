@@ -28,6 +28,7 @@ import { hasTileArt } from '../components/GameArt';
 import { WinOverlay, useCabinetShake } from '../components/WinOverlay';
 import { HoldSpinRound } from '../components/HoldSpinRound';
 import { PrizeWheel } from '../components/PrizeWheel';
+import { WheelMeter } from '../components/WheelMeter';
 import {
   PlayApiError,
   createPlayApi,
@@ -286,6 +287,21 @@ export function SlotsScreen() {
   const spinning = reelPhase !== 'idle';
   const [round, setRound] = useState<RoundResponse | null>(null);
   const [grid, setGrid] = useState<string[][]>(() => IDLE_GRID);
+  /**
+   * Scatters on the grid the player is looking at.
+   *
+   * Zero while the reels are turning, because `grid` already holds the SETTLED
+   * result the moment the request returns — counting it during the spin would
+   * light all three lamps before the reels had landed and give the outcome away
+   * a second and a half early.
+   */
+  const visibleScatters = useMemo(
+    () =>
+      reelPhase !== 'idle'
+        ? 0
+        : grid.reduce((n, reel) => n + reel.filter((cell) => cell === 'SCATTER').length, 0),
+    [grid, reelPhase],
+  );
   const [error, setError] = useState<string | null>(null);
   const spinToken = useRef(0);
 
@@ -653,6 +669,21 @@ export function SlotsScreen() {
   const wheelSegments = useMemo(() => {
     const spec = paytable?.feature;
     return spec?.kind === 'wheel' ? spec.segments : [2, 5, 10, 3, 20, 5, 50, 3];
+  }, [paytable]);
+
+  /**
+   * The wheel's own spec, or nothing.
+   *
+   * Present only on games whose model actually has a wheel, so the meter beside
+   * the reels appears on Triple Bar and Fruit Stand and on no other machine.
+   */
+  const wheelSpec = useMemo(() => {
+    const spec = paytable?.feature;
+    // The paytable the app is served does not carry the trigger count, and
+    // three is the rule for every wheel in the catalogue. Hard-coding it here
+    // rather than guessing per game: if a two-scatter wheel is ever added, this
+    // is the line that has to change and the meter would visibly be wrong.
+    return spec?.kind === 'wheel' ? { segments: spec.segments, trigger: 3 } : null;
   }, [paytable]);
 
   const glassHeight = useMemo(() => {
@@ -1193,6 +1224,22 @@ export function SlotsScreen() {
             spinning={spinning}
             disabled={bet > balance}
             height={cellHeight * MAX_ROWS}
+          />
+        ) : null}
+        {/*
+          The wheel, visible from the first second on games that have one.
+          
+          Without it the bonus is invisible until it fires — about once in
+          fifty spins — and a player who has not seen it yet has no reason to
+          believe the wheel on the lobby tile is in the game at all. See
+          WheelMeter.
+        */}
+        {wheelSpec ? (
+          <WheelMeter
+            segments={wheelSpec.segments}
+            trigger={wheelSpec.trigger}
+            scatters={visibleScatters}
+            active={phase === 'feature' && feature?.kind === 'wheel'}
           />
         ) : null}
         </View>

@@ -19,7 +19,15 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, PanResponder, Pressable, StyleSheet, View } from 'react-native';
+import {
+  Animated,
+  Easing,
+  PanResponder,
+  Pressable,
+  StyleSheet,
+  View,
+  type ViewStyle,
+} from 'react-native';
 import Svg, {
   Circle,
   Defs,
@@ -85,6 +93,24 @@ export interface SlotControlsProps {
  * people who need a non-drag path keep one, and the tap that made this
  * confusing in the first place does nothing.
  */
+/**
+ * "This drag is mine, browser."
+ *
+ * `touchAction: 'none'` is what actually stops the page moving under the lever.
+ * On the web a PanResponder is built from touch events and never calls
+ * preventDefault, so the browser goes on treating the same drag as a scroll and
+ * drags the page down behind the handle. No amount of responder negotiation
+ * fixes that, because the browser is not a participant in it — the only way to
+ * tell it is the CSS property that exists for exactly this purpose, which React
+ * Native Web passes straight through.
+ *
+ * It is web-only and absent from ViewStyle, hence the cast.
+ *
+ * Scoped to the lever and never to the screen: a page that cannot be scrolled
+ * would be a worse bug than the one being fixed.
+ */
+const OWNS_THE_DRAG = { touchAction: 'none' } as unknown as ViewStyle;
+
 export function SpinLever({
   onSpin,
   spinning,
@@ -126,6 +152,21 @@ export function SpinLever({
     PanResponder.create({
       onStartShouldSetPanResponder: () => !locked.current,
       onMoveShouldSetPanResponder: () => !locked.current,
+      /*
+       * CAPTURE, so the lever wins the gesture before the ScrollView above it
+       * gets a chance to claim it.
+       *
+       * Without this the two compete: the responder tracks the drag AND the
+       * scroll view scrolls, so pulling the handle dragged the whole page down
+       * behind it. It worked "sometimes" because whichever view asked first won,
+       * and that depended on exactly where the thumb landed.
+       */
+      onStartShouldSetPanResponderCapture: () => !locked.current,
+      onMoveShouldSetPanResponderCapture: (_event, gesture) =>
+        // Only once the drag is clearly vertical and clearly a drag. Claiming
+        // on the first pixel would swallow a scroll that merely started on top
+        // of the lever.
+        !locked.current && Math.abs(gesture.dy) > 4 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
       onPanResponderMove: (_event, gesture) => {
         if (locked.current) return;
         // Downwards only, and never past the end of the rail.
@@ -502,7 +543,13 @@ const FRAMES = {
 
 const styles = StyleSheet.create({
   /* lever */
-  leverArea: { width: 38, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 4 },
+  leverArea: {
+    width: 38,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 4,
+    ...OWNS_THE_DRAG,
+  },
   leverDim: { opacity: 0.45 },
   leverSlot: {
     position: 'absolute',
@@ -518,6 +565,9 @@ const styles = StyleSheet.create({
     // A comfortable thumb target on the KNOB itself, which is the part that
     // looks draggable. The old version's target was the empty rail below it.
     padding: 6,
+    // The knob is where the thumb actually lands, so it needs the same claim
+    // on the gesture as the area around it.
+    ...OWNS_THE_DRAG,
   },
   leverHint: { position: 'absolute', bottom: 2, alignItems: 'center' },
   leverHintText: { fontWeight: '900', letterSpacing: 1.5 },

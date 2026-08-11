@@ -101,6 +101,22 @@ const theme: Theme = {
 /** Icon (24) + label line (16) + breathing room, before any safe-area inset. */
 const TAB_BAR_CONTENT_HEIGHT = 60;
 
+/**
+ * A floor under the bottom padding, for iOS Safari.
+ *
+ * `env(safe-area-inset-bottom)` — which is what `useSafeAreaInsets` reads — is
+ * about the HOME INDICATOR, not about Safari's own toolbar. In a browser tab it
+ * reports 0, so the tab labels sat flush against the bottom edge of the
+ * viewport, in the strip iOS reserves for its own swipe gestures. Taps there go
+ * to Safari rather than to the app, which is why the bar felt dead and had to
+ * be hit higher up to respond.
+ *
+ * Lifting the row clear of that strip costs a few points of height and makes
+ * every tab reachable at its first tap. Only ever ADDS to the real inset, so a
+ * device that reports a genuine one is unaffected.
+ */
+const MIN_BOTTOM_LIFT = 14;
+
 const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Lobby: 'game-controller',
   Store: 'cart',
@@ -149,7 +165,15 @@ function Tabs() {
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: colors.gold.default,
-        tabBarInactiveTintColor: colors.text.muted,
+        /*
+         * `secondary`, not `muted`.
+         *
+         * Muted is #7B7591 on a #13111C bar — about 3:1, which reads as
+         * "disabled" rather than "not selected". The founder described the bar
+         * as faded and assumed it was inactive. Secondary is a stop brighter
+         * and still clearly subordinate to the gold of the current tab.
+         */
+        tabBarInactiveTintColor: colors.text.secondary,
         // Hidden on a short screen. It costs about a sixth of the height a
         // phone has in landscape, and every screen it leads to is one tap away
         // through the back arrow anyway — whereas a spin button off the bottom
@@ -159,9 +183,9 @@ function Tabs() {
           : {
               backgroundColor: colors.surface.raised,
               borderTopColor: colors.surface.border,
-              height: TAB_BAR_CONTENT_HEIGHT + insets.bottom,
+              height: TAB_BAR_CONTENT_HEIGHT + Math.max(insets.bottom, MIN_BOTTOM_LIFT),
               paddingTop: spacing.xs,
-              paddingBottom: insets.bottom + spacing.xs,
+              paddingBottom: Math.max(insets.bottom, MIN_BOTTOM_LIFT),
             },
         tabBarLabelStyle: {
           fontSize: typography.caption.fontSize,
