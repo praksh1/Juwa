@@ -59,19 +59,49 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets are content-hashed by the bundler, so a cache hit is always
-  // the right file and can be served immediately.
+  /*
+   * ART AND AUDIO ARE NOT CONTENT-HASHED, AND THAT CHANGES THE RULE.
+   *
+   * The bundler fingerprints its own output — `entry-8fa31c.js` — so a cache
+   * hit on a bundle asset is always the right file and serving it from cache
+   * forever is correct.
+   *
+   * `art/` and `audio/` are copied verbatim by `finalize-web.mjs`, so their
+   * URLs never change. Under a plain cache-first rule that means a file cached
+   * once is served forever: the day a symbol is redrawn, a badge is cleaned off
+   * a dragon, or a bed is replaced, every returning player keeps the old one
+   * indefinitely and no redeploy can reach them. That is not hypothetical —
+   * `dragon-original-main.png` and `dragon-wing-near.png` were both edited in
+   * place after they had already been served once.
+   *
+   * Stale-while-revalidate is the right trade for these. The cached copy is
+   * served immediately, so the app stays fast and still works offline, and the
+   * network copy is fetched in the background and replaces it — so the change
+   * lands on the next visit rather than never.
+   */
+  const versioned = !/^\/(art|audio)\//.test(url.pathname);
+
   event.respondWith(
-    caches.match(request).then(
-      (hit) =>
-        hit ||
-        fetch(request).then((response) => {
+    caches.match(request).then((hit) => {
+      const fromNetwork = fetch(request)
+        .then((response) => {
           if (response.ok && response.type === 'basic') {
             const copy = response.clone();
             caches.open(VERSION).then((cache) => cache.put(request, copy));
           }
           return response;
-        }),
-    ),
+        })
+        // Offline with nothing cached is a genuine failure; offline WITH
+        // something cached has already been answered above.
+        .catch(() => hit || Response.error());
+
+      if (!hit) return fromNetwork;
+      if (versioned) return hit;
+
+      // Revalidate in the background; the player still gets the cached file
+      // now. `void` because nothing waits on it.
+      void fromNetwork;
+      return hit;
+    }),
   );
 });
