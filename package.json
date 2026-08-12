@@ -15,6 +15,7 @@
     "verify": "npm run test && npm run typecheck",
     "test:db": "npm run build && JUWA_TEST_DATABASE_URL=${JUWA_TEST_DATABASE_URL:-postgres://postgres@localhost:5432/juwa_play} node --test \"packages/server/dist/**/*.test.js\"",
     "test:cc": "npm run build && JUWA_CONVERSION_TEST_DATABASE_URL=${JUWA_CONVERSION_TEST_DATABASE_URL:-postgres://postgres@localhost:5432/juwa_cc} node --test \"packages/server/dist/conversions.test.js\"",
+    "test:cc-api": "npm run build && JUWA_CONVERSION_API_TEST_DATABASE_URL=${JUWA_CONVERSION_API_TEST_DATABASE_URL:-postgres://postgres@localhost:5432/juwa_conv_api} node --test \"packages/api/dist/conversion-routes.test.js\"",
     "test:api": "node scripts/test-api-db.mjs",
     "migration": "node scripts/build-migration.mjs",
     "check": "node scripts/check-deployment.mjs",

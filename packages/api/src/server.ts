@@ -15,6 +15,7 @@ import { randomUUID } from 'node:crypto';
 import {
   AgentsDb,
   ApiError,
+  ConversionsDb,
   PostgresDb,
   act,
   claimDailyBonus,
@@ -51,6 +52,7 @@ import {
 } from './admin.js';
 import { GameConfigCache, assertBetAllowed } from './game-config.js';
 import { agentRoutes, handleAdminAgents } from './agent-routes.js';
+import { conversionRoutes, handleAdminConversions } from './conversion-routes.js';
 import { SupabaseAdmin, type SupabaseAdminConfig } from './supabase-admin.js';
 import { ADMIN_CONSOLE_HTML } from './admin-console.js';
 import {
@@ -200,6 +202,7 @@ async function handleAdmin(
   config: ServerConfig,
   gameConfigs: GameConfigCache,
   agents: AgentsDb,
+  conversions: ConversionsDb,
   req: IncomingMessage,
   res: ServerResponse,
   url: URL,
@@ -284,6 +287,20 @@ async function handleAdmin(
       return;
     }
 
+    // Exchange rates, CC grants and manual adjustments. Null when the path is
+    // none of its business, for the same reason.
+    const conversionResult = await handleAdminConversions(
+      route,
+      url,
+      body as Record<string, unknown>,
+      operator,
+      conversions,
+    );
+    if (conversionResult !== null) {
+      send(res, 200, conversionResult);
+      return;
+    }
+
     send(res, 404, { message: 'Not found', code: 'no_route' });
   } catch (error) {
     const api = toApiError(error);
@@ -309,6 +326,12 @@ export function createServer(config: ServerConfig) {
    * behind each other, which they can only do inside one database.
    */
   const agents = new AgentsDb({ query: (text, values) => config.query(text, values) });
+  /*
+   * The conversion layer, over the SAME pool for the same reason: an approval
+   * moves a player's GC and an agent's inventory, and it has to be able to
+   * queue behind a bet on the same balance row.
+   */
+  const conversions = new ConversionsDb({ query: (text, values) => config.query(text, values) });
   const supabaseAdmin = config.supabaseAdmin ? new SupabaseAdmin(config.supabaseAdmin) : undefined;
 
   const sweeper = setInterval(() => {
@@ -780,6 +803,11 @@ export function createServer(config: ServerConfig) {
     // Agent-facing routes. Every one of them scopes itself to the caller's own
     // agent record, resolved from the verified token — see agent-routes.ts.
     ...agentRoutes(agents, supabaseAdmin),
+
+    // The wallet's second currency, and the request lifecycle around it. Player
+    // routes scope to the caller's own id; agent routes resolve the caller to
+    // an agent record first — see conversion-routes.ts.
+    ...conversionRoutes(conversions, agents),
   };
 
   const limiterFor = (route: string) => {
@@ -881,7 +909,7 @@ export function createServer(config: ServerConfig) {
      * flag on a player row.
      */
     if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
-      await handleAdmin(config, gameConfigs, agents, req, res, url);
+      await handleAdmin(config, gameConfigs, agents, conversions, req, res, url);
       return;
     }
 
