@@ -110,10 +110,30 @@ function lineCoins(model: SlotModelInfo, pays: number, bet: Minor): number {
 function PaytableRows({
   model,
   family,
+  gameId,
   bet,
 }: {
   model: SlotModelInfo;
   family?: string;
+  /**
+   * The game, and it is not optional in practice.
+   *
+   * `SlotSymbol` resolves a symbol in two steps: this game's own MOTIF first,
+   * and only if it has none does it fall through to the shared painted art of
+   * its `family`. The motif lookup is keyed on the game id, so passing `family`
+   * alone silently selects the second branch.
+   *
+   * The reels pass both. This sheet passed only `family`, so on the eight games
+   * that have motifs — Frost Peak, Ocean Drift, Carnival Row, Neon Alley,
+   * Supernova, Aurora, City Lights, Emerald Nights — the paytable was drawing a
+   * completely different set of symbols from the ones spinning two inches
+   * above it. Emerald Nights showed a tiger, a gorilla and a parrot in the
+   * sheet against motifs on the reels.
+   *
+   * A paytable that shows symbols the machine does not have is worse than no
+   * paytable: it is a promise about pictures the player will never see.
+   */
+  gameId: string;
   /** The player's current TOTAL bet, so every row is in coins they recognise. */
   bet: Minor;
 }) {
@@ -148,7 +168,12 @@ function PaytableRows({
       {symbols.map((symbol) => (
         <View key={symbol.id} style={styles.row}>
           <View style={styles.symbolCell}>
-            <SlotSymbol name={symbol.id} size={30} {...(family ? { family } : {})} />
+            <SlotSymbol
+              name={symbol.id}
+              size={30}
+              gameId={gameId}
+              {...(family ? { family } : {})}
+            />
           </View>
           <Txt variant="caption" color={colors.gold.default} style={styles.payCell}>
             {coins(symbol.pays['3'])}
@@ -173,7 +198,7 @@ function PaytableRows({
       {Object.keys(model.scatterPays).length ? (
         <View style={[styles.row, styles.scatterRow]}>
           <View style={styles.symbolCell}>
-            <SlotSymbol name="SCATTER" size={30} {...(family ? { family } : {})} />
+            <SlotSymbol name="SCATTER" size={30} gameId={gameId} {...(family ? { family } : {})} />
           </View>
           <Txt variant="caption" color={colors.gold.default} style={styles.payCell}>
             {scatterCoins(model, 3, bet)}
@@ -301,7 +326,12 @@ export function RulesIntro({
               {featureLine(model, trigger)}
             </Txt>
 
-            <PaytableRows model={model} bet={bet} {...(game.art ? { family: game.art } : {})} />
+            <PaytableRows
+              model={model}
+              bet={bet}
+              gameId={game.id}
+              {...(game.art ? { family: game.art } : {})}
+            />
           </ScrollView>
 
           {/*
@@ -382,7 +412,12 @@ export function PaytableButton({
               <Txt variant="h3" color={game.theme.accent}>
                 {game.name}
               </Txt>
-              <PaytableRows model={model} bet={bet} {...(game.art ? { family: game.art } : {})} />
+              <PaytableRows
+                model={model}
+                bet={bet}
+                gameId={game.id}
+                {...(game.art ? { family: game.art } : {})}
+              />
               <Pressable
                 onPress={() => setOpen(false)}
                 accessibilityRole="button"

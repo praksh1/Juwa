@@ -69,9 +69,16 @@ export interface BonusMeterProps {
   active: boolean;
   /** The art family, so the symbol drawn matches the one on these reels. */
   family?: string;
+  /**
+   * The game, for the same reason the paytable needs it: a symbol is resolved
+   * by MOTIF first and by art family second, and the motif lookup is keyed on
+   * the game id. Without it this panel can draw a different scatter from the
+   * one the player is being told to land.
+   */
+  gameId?: string;
 }
 
-export function BonusMeter({ reward, scatters, trigger, active, family }: BonusMeterProps) {
+export function BonusMeter({ reward, scatters, trigger, active, family, gameId }: BonusMeterProps) {
   const reduced = usePrefersReducedMotion();
   const spin = useRef(new Animated.Value(0)).current;
   const glow = useRef(new Animated.Value(0)).current;
@@ -145,7 +152,12 @@ export function BonusMeter({ reward, scatters, trigger, active, family }: BonusM
         LAND {trigger}
       </Txt>
       <Animated.View style={[styles.symbol, { transform: [{ scale }] }]}>
-        <SlotSymbol name="SCATTER" size={34} {...(family ? { family } : {})} />
+        <SlotSymbol
+          name="SCATTER"
+          size={34}
+          {...(gameId ? { gameId } : {})}
+          {...(family ? { family } : {})}
+        />
       </Animated.View>
 
       <Txt variant="caption" color={colors.text.muted} style={styles.rule}>

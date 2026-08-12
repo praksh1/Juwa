@@ -1295,6 +1295,7 @@ export function SlotsScreen() {
             reward={bonusSpec.reward}
             trigger={bonusSpec.trigger}
             scatters={visibleScatters}
+            gameId={gameId}
             active={phase === 'feature' || phase === 'fs' || phase === 'fs-intro'}
             {...(details?.art ? { family: details.art } : {})}
           />
