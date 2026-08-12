@@ -28,9 +28,30 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
+import { Image, StyleSheet, View } from 'react-native';
 import { usePrefersReducedMotion } from '../motion';
+
+/**
+ * The coin, at six rotations.
+ *
+ * Six is what makes a tumbling coin read as tumbling rather than as a card
+ * flipping: the sequence runs face-on, through three-quarters, to edge-on, and
+ * a particle picks its frame from its own spin so no two coins in a burst are
+ * at the same angle.
+ *
+ * Loaded by URL rather than bundled through `require`, because these live in
+ * `art/` which the web build copies verbatim — the same route every symbol and
+ * tile in the app already takes.
+ */
+const COINS = [
+  '/art/overlays/coin-00.png',
+  '/art/overlays/coin-01.png',
+  '/art/overlays/coin-02.png',
+  '/art/overlays/coin-03.png',
+  '/art/overlays/coin-04.png',
+  '/art/overlays/coin-05.png',
+];
+const CONFETTI = '/art/overlays/confetti-gold.png';
 
 export interface FireworksHandle {
   /** Throw a burst. `power` 0..1 scales count, speed and life. */
@@ -44,8 +65,14 @@ interface Particle {
   vy: number;
   life: number;
   ttl: number;
+  /** Half the sprite's drawn size, in points. */
   r: number;
-  hue: string;
+  /** Which sprite: a coin frame, or the confetti ribbon. */
+  art: string;
+  /** Degrees per second. Ribbons tumble faster than coins. */
+  spin: number;
+  /** Starting angle, so a burst is not a rank of identical objects. */
+  angle: number;
 }
 
 /** Gravity, in points per second squared. Tuned by eye against a 300pt board. */
@@ -54,12 +81,10 @@ const GRAVITY = 900;
 const DRAG = 0.86;
 
 export function Fireworks({
-  accent,
   width,
   height,
   controller,
 }: {
-  accent: string;
   width: number;
   height: number;
   /** Filled in by this component so a parent can fire it. */
@@ -89,6 +114,13 @@ export function Fireworks({
           // something falling off rather than something being celebrated.
           const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.15;
           const v = speed * (0.45 + Math.random() * 0.55);
+          /*
+           * Three coins to one ribbon. The ribbon is there to break the
+           * regularity — a fountain of nothing but identical discs reads as a
+           * texture, and one object of a different shape in every four is
+           * enough to stop that without turning it into a party popper.
+           */
+          const ribbon = Math.random() < 0.25;
           next.push({
             x: width / 2 + (Math.random() - 0.5) * 40,
             y: height * 0.62,
@@ -96,8 +128,13 @@ export function Fireworks({
             vy: Math.sin(angle) * v,
             life: 0,
             ttl: 0.9 + Math.random() * (0.5 + p * 0.6),
-            r: 2 + Math.random() * (2 + p * 2.5),
-            hue: pick(accent, Math.random()),
+            // Coins are drawn at 14-26 points: large enough to be recognisable
+            // as a coin, small enough that sixty of them are a fountain rather
+            // than a pile.
+            r: (ribbon ? 6 : 7) + Math.random() * (4 + p * 6),
+            art: ribbon ? CONFETTI : COINS[Math.floor(Math.random() * COINS.length)]!,
+            spin: (Math.random() - 0.5) * (ribbon ? 900 : 420),
+            angle: Math.random() * 360,
           });
         }
         live.current = [...live.current, ...next];
@@ -111,7 +148,7 @@ export function Fireworks({
       controller.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accent, width, height, reduced]);
+  }, [width, height, reduced]);
 
   const step = (now: number) => {
     const dt = Math.min(0.05, (now - last.current) / 1000);
@@ -146,55 +183,30 @@ export function Fireworks({
 
   return (
     <View style={[StyleSheet.absoluteFill, styles.layer]} pointerEvents="none">
-      <Svg width={width} height={height}>
-        <Defs>
-          <RadialGradient id="fw-spark" cx="50%" cy="50%" rx="50%" ry="50%">
-            <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0.95" />
-            <Stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
-          </RadialGradient>
-        </Defs>
-        {particles.map((particle, i) => {
-          // Fades out over its own lifetime, so the burst thins rather than
-          // vanishing all at once.
-          const t = particle.life / particle.ttl;
-          const opacity = t > 0.7 ? 1 - (t - 0.7) / 0.3 : 1;
-          return (
-            <React.Fragment key={i}>
-              {/* A soft halo under each spark: this is what makes it read as
-                  light rather than as confetti. */}
-              <Circle
-                cx={particle.x}
-                cy={particle.y}
-                r={particle.r * 2.6}
-                fill="url(#fw-spark)"
-                opacity={opacity * 0.5}
-              />
-              <Circle
-                cx={particle.x}
-                cy={particle.y}
-                r={particle.r}
-                fill={particle.hue}
-                opacity={opacity}
-              />
-            </React.Fragment>
-          );
-        })}
-      </Svg>
+      {particles.map((particle, i) => {
+        // Fades out over its own lifetime, so the burst thins rather than
+        // vanishing all at once.
+        const t = particle.life / particle.ttl;
+        const opacity = t > 0.7 ? 1 - (t - 0.7) / 0.3 : 1;
+        const size = particle.r * 2;
+        return (
+          <Image
+            key={i}
+            source={{ uri: particle.art }}
+            style={{
+              position: 'absolute',
+              left: particle.x - particle.r,
+              top: particle.y - particle.r,
+              width: size,
+              height: size,
+              opacity,
+              transform: [{ rotate: `${particle.angle + particle.spin * particle.life}deg` }],
+            }}
+          />
+        );
+      })}
     </View>
   );
-}
-
-/**
- * A spark's colour: mostly the game's accent, with gold and white mixed in.
- *
- * A single-colour burst reads as flat. Gold is in every palette in this app and
- * is what coins are, so it belongs in every celebration; white is what makes
- * the hottest sparks look hot.
- */
-function pick(accent: string, roll: number): string {
-  if (roll < 0.58) return accent;
-  if (roll < 0.86) return '#F5D06A';
-  return '#FFFFFF';
 }
 
 const styles = StyleSheet.create({

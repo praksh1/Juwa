@@ -10,7 +10,7 @@
  *   node app/scripts/finalize-web.mjs <dist-dir>
  */
 import { readFileSync, writeFileSync, existsSync, rmSync, cpSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, resolve, sep } from 'node:path';
 import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -177,7 +177,21 @@ const count = (dir) =>
 
 const artSource = resolve(appRoot, '..', 'art');
 if (existsSync(artSource)) {
-  cpSync(artSource, resolve(dist, 'art'), { recursive: true });
+  /*
+   * `incoming/` is excluded, and it is not a nicety.
+   *
+   * That folder holds raw generator output — originals kept at full size with
+   * the transparency checkerboard still baked in, so the repairs in
+   * `scripts/decheck-art.mjs` can be re-run or corrected later. It is 4.4MB of
+   * files that are, by definition, the BROKEN versions of art that ships from
+   * `overlays/` a few lines below. Copying the whole tree sent every one of
+   * them to the browser: megabytes of download for images nothing references,
+   * and the checkerboarded originals sitting one URL away from the fixed ones.
+   */
+  cpSync(artSource, resolve(dist, 'art'), {
+    recursive: true,
+    filter: (src) => !src.split(sep).includes('incoming'),
+  });
   console.log(`copied ${count(artSource)} art files into the build`);
 } else {
   console.log('no art/ directory — the build will use vector symbols');

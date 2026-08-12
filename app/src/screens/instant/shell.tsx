@@ -395,7 +395,6 @@ export function Board({
       <View style={styles.boardBody}>{children}</View>
       {celebrate ? (
         <Fireworks
-          accent={accent}
           width={size.width}
           height={size.height}
           controller={celebrate.sparks}
