@@ -11,7 +11,7 @@ import { Reel, SPIN_UP_SECONDS, type ReelPhase } from '../components/Reel';
 import { tintFromAccent } from '../components/SlotSymbol';
 import { materialFor } from '../components/symbols/materials';
 import { useCompactLayout } from '../layout';
-import { scatterTrigger, slotDetails, slotPaytable } from '../api/games';
+import { bonusTrigger, scatterTrigger, slotDetails, slotPaytable } from '../api/games';
 import { sounds, spinNow, stopBedIfPlaying, unlock, useSoundSet } from '../sound';
 import { soundSetFor } from '../api/sound-sets';
 import { winTier, rollUpDuration, type WinTier } from '../motion';
@@ -198,11 +198,20 @@ const AUTO_PAUSE_MS: Record<WinTier, number> = {
   none: 900,
   win: 1_800,
   burst: 2_600,
-  big: 4_000,
-  mega: 5_500,
+  /*
+   * The three loud tiers wait for their own banner.
+   *
+   * These are `rollUpDuration(tier) + HOLD_MS[tier]` from WinOverlay plus a
+   * short beat, and they have to be: the banner now holds long enough to cover
+   * its fanfare, and an auto-play that starts the next spin under it turns the
+   * celebration the founder asked to be made longer into a thing that gets
+   * interrupted instead. If either number moves, both move.
+   */
+  big: 5_600,
+  mega: 7_600,
   // The longest hold in the app: a jackpot is the one result a player wants
   // a moment with before the next spin starts.
-  jackpot: 6_000,
+  jackpot: 8_600,
 };
 
 /** What the drops after the first grid are worth, in stake multiples. */
@@ -251,8 +260,13 @@ export function SlotsScreen() {
   /**
    * How many scatters this game needs. Zero when it has no bonus round, which
    * switches anticipation off entirely rather than guessing a threshold.
+   *
+   * `bonusTrigger`, not `scatterTrigger`: the latter only knows about free
+   * spins, so on the wheel games — whose free-spin table is empty — it returned
+   * zero and switched the anticipation off on the two machines whose bonus is
+   * the most worth anticipating. See api/games.
    */
-  const scatterTriggerCount = paytable ? (scatterTrigger(paytable)?.count ?? 0) : 0;
+  const scatterTriggerCount = paytable ? bonusTrigger(paytable) : 0;
   /**
    * The rules card, shown once per game unless dismissed for good.
    *
@@ -585,7 +599,7 @@ export function SlotsScreen() {
    * together, or every spin is two gestures and a guess.
    */
   const compact = useCompactLayout();
-  const { height: viewportHeight } = useWindowDimensions();
+  const { height: viewportHeight, width: viewportWidth } = useWindowDimensions();
   const symbolSize = useMemo(() => {
     // Everything above and below the reels: header, readout, chips, button and
     // tab bar. Taken from the portrait layout rather than guessed.
@@ -1239,9 +1253,13 @@ export function SlotsScreen() {
         </View>
 
         {/*
-          The feature round, over the reels it was won on.
-          Covers the bay rather than replacing the screen, so the machine is
-          still visibly the machine you triggered it from.
+          Hold and spin, over the reels it was won on.
+
+          This one belongs in the bay and stays there: the round is PLAYED on
+          the grid — coins lock into the cells the scatters landed in and the
+          rest respin around them — so covering the machine would be covering
+          the thing the round is happening to. The prize wheel is the opposite
+          case and now renders at the screen root; see the note down there.
         */}
         {phase === 'feature' && feature?.kind === 'hold-spin' ? (
           <HoldSpinRound
@@ -1250,16 +1268,6 @@ export function SlotsScreen() {
             full={feature.full}
             rows={ROWS}
             stake={bet}
-            onDone={() => {
-              featureDone.current?.();
-              featureDone.current = null;
-            }}
-          />
-        ) : null}
-        {phase === 'feature' && feature?.kind === 'wheel' ? (
-          <PrizeWheel
-            segments={wheelSegments}
-            index={feature.index}
             onDone={() => {
               featureDone.current?.();
               featureDone.current = null;
@@ -1350,12 +1358,34 @@ export function SlotsScreen() {
               {error}
             </Txt>
           ) : settlement && settlement.payout > 0 ? (
-            // While the overlay is up it owns the figure. Two counters rolling
-            // to the same total at slightly different rates reads as a bug.
+            /*
+             * Hidden while something else owns the figure.
+             *
+             * Two reasons, and the second was found on a recording rather than
+             * reasoned about.
+             *
+             * 1. THE OVERLAY. While a banner is up it owns the number; two
+             *    counters rolling to the same total at slightly different rates
+             *    reads as a bug. Jackpot belongs in this list and was missing —
+             *    the tier was added and this condition was not.
+             *
+             * 2. THE FEATURE ROUND. `settlement.payout` is the WHOLE round,
+             *    wheel included, and it arrives with the server's response —
+             *    before the wheel has been spun. So the machine printed the
+             *    answer under the reels while the pointer was still moving.
+             *    That is the same fault as the win chime that fired ahead of
+             *    the win, and it is most of why the founder reported a number
+             *    with no visible cause: the 2,000 was on screen before the
+             *    wheel could say where it came from.
+             */
             <View
               style={[
                 styles.winRow,
-                (celebration.tier === 'big' || celebration.tier === 'mega') && styles.hidden,
+                (phase === 'feature' ||
+                  celebration.tier === 'big' ||
+                  celebration.tier === 'mega' ||
+                  celebration.tier === 'jackpot') &&
+                  styles.hidden,
               ]}
             >
               <Txt variant="caption" color={colors.text.muted}>
@@ -1443,6 +1473,34 @@ export function SlotsScreen() {
             ? `Fair: ${round.fairness.serverSeedHash.slice(0, 16)}… · nonce ${round.fairness.nonce}`
             : 'Every result is provably fair.'}
       </Txt>
+
+      {/*
+        The prize wheel, over the WHOLE SCREEN rather than over the reel bay.
+
+        It used to be mounted inside the bay, which on a three-reel machine is
+        about 300 points wide and shorter than it is wide. A 286-point wheel in
+        there lost its top edge — and the pointer lives at twelve o'clock, so
+        the one mark that says which segment won was the first casualty. The
+        founder's recording shows the wheel stopping with no pointer anywhere on
+        screen and "WIN 2,000 GC" printed underneath it, which is a result
+        arriving with no visible cause.
+
+        Sized from the viewport it is given, and last in the tree so it draws
+        over the console and the win overlay both.
+      */}
+      {phase === 'feature' && feature?.kind === 'wheel' ? (
+        <PrizeWheel
+          segments={wheelSegments}
+          index={feature.index}
+          stake={bet}
+          width={viewportWidth}
+          height={viewportHeight}
+          onDone={() => {
+            featureDone.current?.();
+            featureDone.current = null;
+          }}
+        />
+      ) : null}
     </View>
   );
 }

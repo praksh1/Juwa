@@ -160,6 +160,19 @@ export function BonusMeter({ reward, scatters, trigger, active, family, gameId }
         />
       </Animated.View>
 
+      {/*
+        "ON ONE SPIN", and it is the whole correction.
+
+        The rule has always been that the scatters must land TOGETHER — the
+        count is per spin and resets with the reels — but nothing on the panel
+        ever said so. With "ONE MORE!" underneath it, the founder read the panel
+        as a running total that one more scatter on the NEXT spin would
+        complete, which is a promise this machine does not keep. Stating the
+        rule costs one line and removes the only reading that was wrong.
+      */}
+      <Txt variant="caption" color={colors.text.muted} style={styles.rule}>
+        ON ONE SPIN
+      </Txt>
       <Txt variant="caption" color={colors.text.muted} style={styles.rule}>
         TO WIN
       </Txt>
@@ -198,8 +211,17 @@ export function BonusMeter({ reward, scatters, trigger, active, family, gameId }
               <View key={i} style={[styles.lamp, i < scatters && styles.lampLit]} />
             ))}
           </View>
+          {/*
+            A fraction of the TRIGGER, not a message about the future.
+
+            "ONE MORE!" was the fault: it is true only within the spin that is
+            already on the glass, and the panel gave no hint of that, so it read
+            as "land one more, whenever". Both states now say the same kind of
+            thing — how much of this spin's requirement is showing — and the
+            rule above supplies the "this spin" the words used to imply wrongly.
+          */}
           <Txt variant="caption" color={colors.gold.light} style={styles.state}>
-            {armed ? 'ONE MORE!' : `${scatters} ON REELS`}
+            {`${scatters} OF ${trigger}`}
           </Txt>
         </View>
       ) : null}

@@ -21,7 +21,15 @@ import { colors } from '@juwa/ui';
 import { usePrefersReducedMotion, type WinTier } from '../motion';
 
 const COUNT: Record<WinTier, number> = { none: 0, win: 0, burst: 18, big: 34, mega: 60, jackpot: 80 };
-const DURATION: Record<WinTier, number> = { none: 0, win: 0, burst: 1100, big: 1600, mega: 2200, jackpot: 2800 };
+/*
+ * Long enough to still be falling while the banner is up.
+ *
+ * The three loud tiers hold for five to eight seconds now — set against the
+ * length of their own fanfares, see WinOverlay — and coins that had finished
+ * landing after 1.6 of them left the banner sitting on a still screen for the
+ * rest. The burst tier is unchanged: it has no banner to keep company.
+ */
+const DURATION: Record<WinTier, number> = { none: 0, win: 0, burst: 1100, big: 2600, mega: 3400, jackpot: 4200 };
 
 const GRAVITY = 1400; // px per second squared
 const COIN_SIZE = 14;

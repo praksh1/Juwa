@@ -328,6 +328,28 @@ export function scatterTrigger(model: SlotModelInfo): { count: number; spins: nu
 }
 
 /**
+ * How many scatters buy this machine's bonus — ANY of its bonuses.
+ *
+ * `scatterTrigger` reads `freeSpinsAwarded` and nothing else, which is correct
+ * for what it is named after and wrong for what it was being used for. The reel
+ * anticipation asked it "is one more scatter worth holding my breath for", and
+ * on the two wheel games — whose `freeSpinsAwarded` is empty, because their
+ * bonus is a wheel — it answered zero. So the machines with the most striking
+ * bonus in the catalogue were the only ones that never slowed a reel down or
+ * played a riser, which is exactly what the founder reported after sixty spins
+ * of Triple Bar.
+ *
+ * Three for the wheel, for the same reason the meter hard-codes three: the
+ * paytable the app is served does not carry the feature's trigger count, and
+ * three is the rule for every feature in the catalogue. If a two-scatter bonus
+ * is ever added, this is the line that has to change with it.
+ */
+export function bonusTrigger(model: SlotModelInfo): number {
+  if (model.feature?.kind === 'wheel') return 3;
+  return scatterTrigger(model)?.count ?? 0;
+}
+
+/**
  * Games with a shipped renderer.
  *
  * Every slot in the catalogue is playable: they share one screen driven by the

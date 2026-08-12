@@ -242,11 +242,26 @@ export function WinLines({
   gameId,
 }: WinLinesProps) {
   const fade = useRef(new Animated.Value(0)).current;
+  /*
+   * `.filter(Boolean)`, not `!`.
+   *
+   * The walk's index belongs to the phase and the wins belong to the round, and
+   * they are updated by different effects — so there is a render in between
+   * where an index from the previous spin is applied to this spin's shorter
+   * list. `wins[index]` is then `undefined`, the assertion waves it through,
+   * and the map below throws on `win.cells`. Seen once in an automated play
+   * session as an uncaught "Cannot read properties of undefined (reading
+   * 'cells')", which on a phone is a blank machine until the page is reloaded.
+   *
+   * `litCells` computes the same list and has always filtered. This is the copy
+   * that did not; now they agree, and an out-of-range index draws nothing for
+   * the one frame it survives instead of taking the screen down.
+   */
   const shown =
     phase.kind === 'idle'
       ? []
       : phase.kind === 'line'
-        ? [wins[phase.index]!]
+        ? [wins[phase.index]].filter((win): win is LineWin => Boolean(win))
         : wins;
 
   // Re-pulse on every phase change so a walk between two lines that overlap is

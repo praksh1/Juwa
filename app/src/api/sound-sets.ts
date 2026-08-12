@@ -53,14 +53,32 @@ const WIN = [`${A}/win-2.mp3`, `${A}/win-3.mp3`, `${A}/win-4.mp3`, `${A}/win-5.m
 /**
  * Jackpot fanfares.
  *
- * Split by length rather than by number, because the two uses are different: a
- * "big win" lands under a rolling counter and has to be over before it ends,
- * while a "mega" is the moment itself and can run. Measured lengths are in
- * `audio/README.md` — 1 and 4 are the two-second renders, 2 and 3 are ~3.8s,
- * and 5 through 8 run to seven.
+ * Split by length, because the two uses are different: a "big win" lands under
+ * a rolling counter and has to be over before its banner is, while a "mega" is
+ * the moment itself and can run.
+ *
+ * ## The split was wrong, and it made the big win feel short
+ *
+ * The old note here claimed "1 and 4 are the two-second renders, 2 and 3 are
+ * ~3.8s, and 5 through 8 run to seven", and the lists were built from that.
+ * Decoded, the eight files are:
+ *
+ *     1: 7.03s   2: 3.79s   3: 7.03s   4: 3.79s
+ *     5: 7.03s   6: 2.04s   7: 3.79s   8: 7.03s
+ *
+ * So `BIG` held two of the four LONGEST recordings. Against a banner that used
+ * to hold for 3.4 seconds, the big-win fanfare outran the picture on all 23
+ * games and by nearly four seconds on twelve of them — the player hears a
+ * celebration for something that has already left the screen, which is exactly
+ * what "the big win banner was very brief" describes from the other side.
+ *
+ * Now: the four short recordings are the big-win pool and the four seven-second
+ * ones are the mega pool, and `WinOverlay.HOLD_MS` is set to outlast each. The
+ * indices in the table below are untouched — both lists are still four long, so
+ * every game keeps the slot it had and only the recording in it changes.
  */
-const BIG = [`${A}/megawin-1.mp3`, `${A}/megawin-4.mp3`, `${A}/megawin-2.mp3`, `${A}/megawin-3.mp3`];
-const MEGA = [`${A}/megawin-5.mp3`, `${A}/megawin-6.mp3`, `${A}/megawin-7.mp3`, `${A}/megawin-8.mp3`];
+const BIG = [`${A}/megawin-2.mp3`, `${A}/megawin-4.mp3`, `${A}/megawin-7.mp3`, `${A}/megawin-6.mp3`];
+const MEGA = [`${A}/megawin-1.mp3`, `${A}/megawin-3.mp3`, `${A}/megawin-5.mp3`, `${A}/megawin-8.mp3`];
 const SPIN = [
   `${A}/reel-spin-1.mp3`,
   `${A}/reel-spin-2.mp3`,
