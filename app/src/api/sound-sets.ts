@@ -255,6 +255,38 @@ export const INSTANT_SOUNDS: SoundSet = {
   tap: `${A}/ui-tap-1.mp3`,
 };
 
+/**
+ * Blackjack.
+ *
+ * ## What a card table needs and a reel does not
+ *
+ * There is no spin, no lever, no scatter and no near-miss — a hand of blackjack
+ * has exactly three sounds in it: a card arriving, a chip going down, and the
+ * result. So this is deliberately the smallest set in the file, and the fields
+ * it does fill are borrowed by meaning rather than by name:
+ *
+ *   `coinLock` is the chip. It is the sound of something small and hard being
+ *   set down on felt, which is what it was recorded for and what a chip is.
+ *   `tick`     is the card. Short, dry, and it fires once per card dealt.
+ *
+ * `bonus` carries the blackjack itself — a natural 21 pays three to two and
+ * deserves a sound the other wins do not have, in the same way a slot's bonus
+ * round does.
+ *
+ * No bed here: the table's music is chosen by the screen, because roulette and
+ * blackjack are two tables in the same room and they should not be playing the
+ * same track over each other when a player walks between them.
+ */
+export const BLACKJACK_SOUNDS: SoundSet = {
+  win: WIN[1]!,
+  big: BIG[0]!,
+  mega: MEGA[0]!,
+  bonus: `${A}/bonus-trigger-1.mp3`,
+  coinLock: `${A}/coin-lock-1.mp3`,
+  tick: `${A}/coin-tick-1.mp3`,
+  tap: `${A}/ui-tap-2.mp3`,
+};
+
 /** Every file, for the service worker and for a warm cache on the lobby. */
 export const ALL_SOUND_FILES: string[] = [
   ...new Set([
@@ -265,6 +297,7 @@ export const ALL_SOUND_FILES: string[] = [
     ...MEGA,
     ...Object.values(ROULETTE_SOUNDS),
     ...(Object.values(INSTANT_SOUNDS).filter((v) => typeof v === 'string') as string[]),
+    ...(Object.values(BLACKJACK_SOUNDS).filter((v) => typeof v === 'string') as string[]),
   ]),
 ];
 

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
 import { publishBalance } from '../api/usePlayer';
@@ -7,7 +8,11 @@ import { betOptions, suggestedBet } from '@juwa/economy';
 import { Button, Card, Txt } from '../components/primitives';
 import { SoundToggles } from '../components/SoundToggles';
 import { PlayingCard, type Suit } from '../components/PlayingCard';
-import { sounds, unlock } from '../sound';
+import { sounds, unlock, useSoundSet } from '../sound';
+import { BLACKJACK_SOUNDS } from '../api/sound-sets';
+import { BLACKJACK_BED, useAmbientBed } from '../ambience';
+import { HowToPlayButton, type HowToPlayContent } from '../components/HowToPlay';
+import { Fireworks, type FireworksHandle } from '../components/Fireworks';
 import {
   PlayApiError,
   USE_DEMO_API,
@@ -89,8 +94,70 @@ const OUTCOME_TEXT: Record<string, string> = {
   bust: 'Bust',
 };
 
+
+/**
+ * How to play, for the game that needs it most.
+ *
+ * Blackjack looks simple and is not. A casual player knows "get to 21" and does
+ * not know that the dealer must draw to 16 and stand on 17, that a soft hand
+ * cannot bust on the next card, that a natural pays three to two while every
+ * other win pays even money, or what doubling actually commits them to. Every
+ * one of those changes what the right move is, and none of them is discoverable
+ * from the buttons.
+ *
+ * The odds line is the honest one: 99.5% is the best return in this building,
+ * and only if you play well — which is a fact worth telling a player, because
+ * it is the reason to learn the game rather than a reason to distrust it.
+ */
+const BLACKJACK_RULES: HowToPlayContent = {
+  summary:
+    'Beat the dealer by getting closer to 21 than they do, without going over. ' +
+    'Cards are worth their number, picture cards are 10, and an ace is 1 or 11 — ' +
+    'whichever helps you.',
+  steps: [
+    'Choose your stake and press Deal. You get two cards face up; the dealer gets one face up and one face down.',
+    'Hit to take another card, or Stand to keep what you have. Go over 21 and you lose the hand immediately.',
+    'When you stand, the dealer turns over their card and draws until they reach 17 or more.',
+    'Closest to 21 without going over wins. Equal totals is a push and your stake comes back.',
+  ],
+  controls: [
+    { label: 'Hit', body: 'Take one more card. You can keep hitting until you stand or go over 21.' },
+    { label: 'Stand', body: 'Take no more cards and pass to the dealer.' },
+    {
+      label: 'Double',
+      body: 'Double your stake and take exactly one more card, then stand automatically. Offered only on your first two cards.',
+    },
+    {
+      label: 'Split',
+      body: 'Only when your first two cards are a pair. Splits them into two hands, each with its own stake, played one after the other.',
+    },
+  ],
+  edge:
+    'An ace with a ten or a picture card is a blackjack and pays 3:2 — a 1,000 ' +
+    'coin stake returns 2,500. Every other win pays even money. The dealer must ' +
+    'draw to 16 and must stand on 17, which is why their upcard tells you so ' +
+    'much. Played well this is the best return in the building at 99.5%, and ' +
+    '"soft" on your total means you hold an ace counting as 11 — you cannot go ' +
+    'over 21 on the next card.',
+};
+
 export function BlackjackScreen() {
   const api = useRef<PlayApi>(createPlayApi()).current;
+
+  /*
+   * The table's own room tone and its own three sounds — a card, a chip and a
+   * result. This screen had neither: it was the last game in the app with no
+   * music and no recorded win, playing the synthesised fallback that exists to
+   * cover a slow download. See BLACKJACK_SOUNDS.
+   */
+  useAmbientBed(BLACKJACK_BED);
+  useEffect(() => {
+    useSoundSet(BLACKJACK_SOUNDS);
+  }, []);
+
+  /** The coin fountain, thrown when a hand pays. */
+  const sparks = useRef<FireworksHandle | null>(null);
+  const [tableSize, setTableSize] = useState({ width: 340, height: 380 });
 
   const [balance, setBalance] = useState(minor(0));
   const [bet, setBet] = useState(minor(1_000));
@@ -119,7 +186,14 @@ export function BlackjackScreen() {
   const settled = round?.status === 'settled';
   const inHand = Boolean(round) && !settled;
 
-  /** Sound for however the hand ended, once the dealer is revealed. */
+  /**
+   * Sound and sparks for however the hand ended, once the dealer is revealed.
+   *
+   * Already delayed by the callers to land AFTER the cards have turned over —
+   * which is the property the instant games had to be rebuilt to get, and which
+   * this screen happened to have from the start. The fountain is added on the
+   * same call for the same reason: the celebration must not precede the reveal.
+   */
   const announce = useCallback((state: BlackjackPublic, payout: number, staked: number) => {
     const natural = state.hands.some((hand) => hand.outcome === 'blackjack');
     if (natural) {
@@ -132,6 +206,16 @@ export function BlackjackScreen() {
     } else {
       sounds.lose();
     }
+
+    /*
+     * A natural always gets the full burst — it is the best hand in the game
+     * and pays 3:2, so it is a moment regardless of the stake. Everything else
+     * scales with what was actually returned, and a push (payout equals stake)
+     * throws nothing: getting your own money back is not a win.
+     */
+    if (payout <= staked) return;
+    const power = natural ? 1 : Math.max(0, Math.min(1, (payout / Math.max(staked, 1) - 1) / 1.5));
+    sparks.current?.fire(power);
   }, []);
 
   const deal = useCallback(async () => {
@@ -224,16 +308,51 @@ export function BlackjackScreen() {
             {format(balance, 'GC')}
           </Txt>
         </View>
-        <View style={styles.rtpPill}>
-          <Txt variant="caption" color={colors.text.secondary}>
-            Pays 3:2
-          </Txt>
-        </View>
+        {/*
+          The rules, one tap away.
+
+          Blackjack is the least self-explanatory game in the app — soft totals,
+          when a double is offered, what the dealer is obliged to do — and none
+          of it is visible from the buttons. It replaces a "Pays 3:2" pill that
+          stated one rule out of six. See BLACKJACK_RULES.
+        */}
+        <HowToPlayButton title="Blackjack" content={BLACKJACK_RULES} accent={colors.gold.default} />
         {/* Sound, reachable without leaving the game. See SoundToggles. */}
         <SoundToggles compact />
       </View>
 
-      <Card style={styles.table}>
+      <View
+        style={styles.table}
+        onLayout={(event) =>
+          setTableSize({
+            width: event.nativeEvent.layout.width,
+            height: event.nativeEvent.layout.height,
+          })
+        }
+      >
+        {/*
+          Lit felt, not a flat green rectangle.
+
+          A real table is a bowl of light: brightest under the lamp in the
+          middle, falling off to the rail. One radial-ish gradient plus a darker
+          rim is the whole difference between "green background" and "table",
+          and it costs two views.
+        */}
+        <LinearGradient
+          colors={['#1B7A4B', '#0E5233', '#07331F']}
+          locations={[0, 0.55, 1]}
+          start={{ x: 0.3, y: 0 }}
+          end={{ x: 0.7, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.feltSheen} pointerEvents="none">
+          <LinearGradient
+            colors={['rgba(255,255,255,0.10)', 'rgba(255,255,255,0.02)', 'rgba(255,255,255,0)']}
+            locations={[0, 0.5, 1]}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
+
         {/* Dealer */}
         <View style={styles.seat}>
           <View style={styles.seatLabel}>
@@ -335,7 +454,10 @@ export function BlackjackScreen() {
             hole card all live on the server. Configure EXPO_PUBLIC_API_URL.
           </Txt>
         ) : null}
-      </Card>
+
+        {/* Over the felt, under nothing. See Fireworks. */}
+        <Fireworks width={tableSize.width} height={tableSize.height} controller={sparks} />
+      </View>
 
       {/* Bet selection is only meaningful between hands. */}
       {!inHand ? (
@@ -407,8 +529,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.surface.border,
   },
-  // Green felt, because a blackjack table is green felt.
-  table: { backgroundColor: colors.table.felt, borderColor: colors.table.feltLight, gap: spacing.lg },
+  // Green felt, because a blackjack table is green felt — but lit, and with a
+  // rail. See the gradients in the render.
+  table: {
+    borderRadius: radius.lg,
+    borderWidth: 2,
+    borderColor: '#2E1A0C',
+    overflow: 'hidden',
+    padding: spacing.lg,
+    gap: spacing.lg,
+    shadowColor: '#000',
+    shadowOpacity: 0.5,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 6 },
+  },
+  feltSheen: { position: 'absolute', left: 0, right: 0, top: 0, height: '30%' },
   seat: { gap: spacing.sm, minHeight: 96 },
   seatActive: {
     borderLeftWidth: 3,

@@ -86,3 +86,12 @@ export const ROULETTE_BED = '/audio/bed-classic-3.mp3';
  * anything with a tune fights the tension the number is building.
  */
 export const INSTANT_BED = '/audio/bed-deep-2.mp3';
+
+/**
+ * The blackjack table.
+ *
+ * The same `bed-classic` family as roulette — they are two tables in the same
+ * room and should sound like it — but a different track, so walking from one to
+ * the other is audibly moving rather than the music simply continuing.
+ */
+export const BLACKJACK_BED = '/audio/bed-classic-1.mp3';
