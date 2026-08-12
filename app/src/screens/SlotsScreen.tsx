@@ -27,6 +27,7 @@ import { CabinetGlass, ReelFrame, SlotConsole, SpinLever } from '../components/S
 import { cabinetFor, roomFor } from '../api/cabinets';
 import { hasTileArt } from '../components/GameArt';
 import { WinOverlay, useCabinetShake } from '../components/WinOverlay';
+import { DragonRoar, DRAGON_GAME_ID } from '../components/DragonRoar';
 import { HoldSpinRound } from '../components/HoldSpinRound';
 import { PrizeWheel } from '../components/PrizeWheel';
 import { BonusMeter, type BonusReward } from '../components/BonusMeter';
@@ -1369,6 +1370,20 @@ export function SlotsScreen() {
             </Txt>
           )}
         </View>
+        {/*
+          Dragon's Hoard, and only Dragon's Hoard.
+          
+          Every other machine celebrates with the shared coin fountain, on
+          purpose. This one has a creature on its lobby tile and now shows it
+          when it pays — the test of whether a per-game celebration earns the
+          art it costs. It sits UNDER the win overlay so the banner and the
+          rolling counter stay readable over it.
+        */}
+        <DragonRoar
+          round={celebration.round}
+          active={gameId === DRAGON_GAME_ID && (celebration.tier === 'big' || celebration.tier === 'mega')}
+          size={Math.min(300, cellHeight * 3)}
+        />
         <WinOverlay
           tier={celebration.tier}
           amount={celebration.amount}

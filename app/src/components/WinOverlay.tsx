@@ -12,12 +12,23 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, View } from 'react-native';
+import { Animated, Easing, StyleSheet, View, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, spacing, typography } from '@juwa/ui';
 import { Txt } from './primitives';
 import { CoinCounter } from './CoinCounter';
 import { usePrefersReducedMotion, rollUpDuration, type WinTier } from '../motion';
+
+/**
+ * The painted banners, by tier.
+ *
+ * Served from `art/`, which the web build copies verbatim — the same route the
+ * symbols and tiles take. There is a `banner-jackpot.png` alongside these two,
+ * held back until the game has a jackpot to announce: shipping it now would
+ * mean picking a threshold for a prize that does not exist yet.
+ */
+const BANNER_BIG = '/art/overlays/banner-big-win.png';
+const BANNER_MEGA = '/art/overlays/banner-mega-win.png';
 
 export function WinOverlay({
   tier,
@@ -76,9 +87,24 @@ export function WinOverlay({
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
-        <Txt variant="display" style={styles.title}>
-          {mega ? 'Mega Win' : 'Big Win'}
-        </Txt>
+        {/*
+          The painted banner, in place of the words.
+
+          "Big Win" set in the app's UI face is a label; the banner is a prop —
+          gold scrollwork, set gems, dimensional lettering — and it is the same
+          object a player has seen on the lobby tiles. It carries the tier by
+          being a different banner rather than by different text, so the two
+          moments are told apart at a glance rather than by reading.
+
+          The text stays as the accessible name: the image has no words as far
+          as a screen reader is concerned.
+        */}
+        <Image
+          source={{ uri: mega ? BANNER_MEGA : BANNER_BIG }}
+          style={styles.banner}
+          resizeMode="contain"
+          accessibilityLabel={mega ? 'Mega win' : 'Big win'}
+        />
         <CoinCounter
           amount={amount}
           tier={tier}
@@ -146,6 +172,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     overflow: 'hidden',
   },
+  banner: { width: '100%', height: 92, marginBottom: spacing.sm },
   title: {
     color: colors.text.primary,
     letterSpacing: 1.5,

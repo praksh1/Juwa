@@ -127,6 +127,29 @@ parts match)
 > upper left. 1024 by 1024, PNG, fully transparent background, no ground, no
 > cast shadow, no coins, no text.
 
+> ### ⚠ This is the step that failed in the first drop, and why
+>
+> Five layer files arrived and **none of them fit the master**. Measured: the
+> master and the "body with wings removed" have almost identical alpha bounding
+> boxes (13,37,500,491 against 16,44,494,491), and the area where the master has
+> paint and the body does not runs to 62,000 pixels spread across the whole
+> frame rather than forming two wing shapes. They are five separate DRAWINGS of
+> a dragon, not five parts of one — the generator regenerated where the prompt
+> said edit. Stacked, you get a dragon with another dragon's jaw across its
+> chest.
+>
+> **The missing instruction was about the CANVAS, not the content.** Every layer
+> prompt below now ends with the same sentence, and it is the whole fix:
+>
+> > *Keep the canvas exactly 1024 by 1024 and keep this part in exactly the same
+> > position and at exactly the same size as it is in the previous image. Do not
+> > re-centre it, do not crop to it, do not resize it. Everything else must be
+> > fully transparent.*
+>
+> Without that, "isolated on a transparent background" is read as "re-frame this
+> part to fill the canvas", which is what happened. The single-image celebration
+> in the app today works well; the layers are only needed for the wings to beat.
+
 **Step 2 — the layers.** Each of these is an EDIT of the image from step 1, so
 say so explicitly:
 
@@ -142,6 +165,9 @@ say so explicitly:
 > included**, not cropped at the body line. I rotate around the shoulder, and if
 > the joint is missing the wing detaches from the body when it moves. Say:
 > "include the base of the wing where it meets the shoulder."
+>
+> **And append the canvas sentence from the warning above to every one of these
+> five prompts.** It is the difference between five layers and five dragons.
 
 ---
 
