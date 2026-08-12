@@ -134,13 +134,22 @@ function renderLogin(message) {
 }
 
 async function renderPanel() {
-  let games, audit, operator, agents;
+  let games, audit, operator, agents, rates;
   try {
     const result = await api('/admin/games');
     games = result.games;
     operator = result.operator;
     audit = (await api('/admin/audit?limit=40')).entries;
     agents = (await api('/admin/agents')).agents;
+    /*
+     * Rates are fetched SEPARATELY and allowed to fail.
+     *
+     * Everything above is what the console is for; this is one more panel. An
+     * operator whose rate table is unreachable — an older server, a migration
+     * not yet run — must still be able to enable a game or suspend an agent,
+     * so a failure here leaves rates null and that section is simply absent.
+     */
+    rates = await api('/admin/rates').catch(() => null);
   } catch (error) {
     token = null;
     renderLogin(error.message);
@@ -233,6 +242,7 @@ async function renderPanel() {
   main.append(table);
 
   main.append(renderAgents(agents));
+  if (rates) main.append(renderRates(rates));
 
   const log = $(\`<section><h2>Audit log</h2><div class="wrap"><table>
     <thead><tr><th>When</th><th>Who</th><th>What</th><th>From</th><th>To</th></tr></thead>
@@ -499,6 +509,207 @@ function renderAgents(agents) {
   if (!agents.length) {
     tbody.append($('<tr><td colspan="6" class="hint">No agents yet.</td></tr>'));
   }
+  return section;
+}
+
+
+/**
+ * Exchange rates, agent CC balances, and manual adjustments.
+ *
+ * ## Setting a rate INSERTS; it never updates
+ *
+ * The exchange_rates table is append-only, enforced by a database trigger. So
+ * this panel has no edit control and no delete: changing a rate adds a row and
+ * the old one stays, which is what makes "what was the player rate last March"
+ * a
+ * question with an answer. The history table below is not a log OF the changes,
+ * it IS the rates.
+ *
+ * ## Why the difference between the two tiers is not labelled
+ *
+ * The operator rate is more generous than the player rate, and the gap is the
+ * agent's incentive to do the work of distribution. Naming it "profit" or
+ * "margin" in an operator console would be a commercial decision this file has
+ * no business making, so it shows both numbers and lets the operator draw the
+ * conclusion.
+ */
+function renderRates(data) {
+  const section = $(\`<section><h2>Exchange rates</h2>
+    <p class="hint">Casino Cash converts to Gold Coins and to nothing else. A rate is
+    a whole number of GC per 1 CC — never a fraction, so no conversion can ever produce
+    part of a coin. Setting a rate adds a new one; the old rate is kept, and every
+    conversion already settled keeps the rate it was priced at.</p>
+    <div class="row" data-do="current"></div>
+    <div class="row" data-do="set" style="margin-top:12px"></div>
+    <div class="err" data-do="err"></div>
+  </section>\`);
+
+  const current = section.querySelector('[data-do=current]');
+  current.append($(\`<div><div class="hint">Player &rarr; agent</div>
+    <strong>1 CC = \${num(data.current.playerAgent)} GC</strong></div>\`));
+  current.append($(\`<div style="margin-left:24px"><div class="hint">Agent &rarr; operator</div>
+    <strong>1 CC = \${num(data.current.agentOperator)} GC</strong></div>\`));
+
+  // The form. One tier picker, one number, one optional note explaining why —
+  // the note lands in the history and is the only place a future operator can
+  // read the reason for a change.
+  const form = section.querySelector('[data-do=set]');
+  const err = section.querySelector('[data-do=err]');
+  form.append($(\`<select name="tier">
+    <option value="player_agent">Player &rarr; agent</option>
+    <option value="agent_operator">Agent &rarr; operator</option>
+  </select>\`));
+  form.append($('<input type="number" min="1" step="1" name="gcPerCc" placeholder="GC per CC">'));
+  form.append($('<input name="note" placeholder="why (optional)" style="width:180px">'));
+  const setButton = $('<button>Set rate</button>');
+  form.append(setButton);
+
+  setButton.addEventListener('click', async () => {
+    const tier = form.querySelector('[name=tier]').value;
+    const gcPerCc = Number(form.querySelector('[name=gcPerCc]').value);
+    const note = form.querySelector('[name=note]').value.trim();
+    err.textContent = '';
+    if (!Number.isInteger(gcPerCc) || gcPerCc <= 0) {
+      err.textContent = 'A rate is a whole positive number of GC per CC.';
+      return;
+    }
+    setButton.disabled = true;
+    setButton.textContent = 'Setting…';
+    try {
+      await api('/admin/rates', {
+        method: 'POST',
+        body: JSON.stringify({ tier, gcPerCc, ...(note ? { note } : {}) }),
+      });
+      setTimeout(renderPanel, 400);
+    } catch (error) {
+      err.textContent = error.message;
+      setButton.disabled = false;
+      setButton.textContent = 'Set rate';
+    }
+  });
+
+  /* --------------------------------------------------- agent CC balances */
+
+  const balances = $(\`<div class="wrap" style="margin-top:16px"><table>
+    <thead><tr>
+      <th>Agent</th><th>Status</th>
+      <th class="num">GC inventory</th><th class="num">Casino Cash</th>
+      <th>Give CC</th><th>Adjust</th>
+    </tr></thead><tbody></tbody></table></div>\`);
+  const body = balances.querySelector('tbody');
+
+  for (const agent of data.agents) {
+    const row = $(\`<tr>
+      <td>\${agent.displayName}<div class="hint">\${agent.agentId}</div></td>
+      <td><span class="pill \${agent.status}">\${agent.status}</span></td>
+      <td class="num">\${num(agent.gc)}</td>
+      <td class="num">\${num(agent.cc)}</td>
+      <td><div class="row">
+        <input type="number" min="1" step="1" name="cc" placeholder="CC" style="width:90px">
+        <button class="ghost" data-do="grant">Give</button>
+      </div></td>
+      <td><div class="row">
+        <input type="number" step="1" name="delta" placeholder="+/- CC" style="width:90px">
+        <input name="reason" placeholder="reason" style="width:140px">
+        <button class="ghost" data-do="adjust">Adjust</button>
+      </div></td>
+    </tr>\`);
+
+    row.querySelector('[data-do=grant]').addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      const amount = Number(row.querySelector('[name=cc]').value);
+      if (!Number.isInteger(amount) || amount <= 0) {
+        button.textContent = 'Whole CC';
+        setTimeout(() => (button.textContent = 'Give'), 1500);
+        return;
+      }
+      button.disabled = true;
+      button.textContent = 'Giving…';
+      try {
+        await api('/admin/agents/cc', {
+          method: 'POST',
+          body: JSON.stringify({
+            agentId: agent.agentId,
+            amount,
+            // Per CLICK, so a double-tap on a slow connection cannot grant
+            // twice — the same protection the coin grant above uses.
+            idempotencyKey: 'cc-' + agent.agentId + '-' + Date.now(),
+          }),
+        });
+        setTimeout(renderPanel, 400);
+      } catch (error) {
+        button.textContent = error.message;
+        button.disabled = false;
+      }
+    });
+
+    /*
+     * A manual correction, and the reason is NOT optional.
+     *
+     * \`admin_adjust_balance\` refuses without one and writes an audit row with
+     * it. An adjustment is the one path in the product where a human moves
+     * coins by hand, and an unexplained one is indistinguishable from a
+     * mistake or from theft when it is read back six months later.
+     */
+    row.querySelector('[data-do=adjust]').addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      const delta = Number(row.querySelector('[name=delta]').value);
+      const reason = row.querySelector('[name=reason]').value.trim();
+      if (!Number.isInteger(delta) || delta === 0) {
+        button.textContent = 'Whole +/-';
+        setTimeout(() => (button.textContent = 'Adjust'), 1500);
+        return;
+      }
+      if (!reason) {
+        button.textContent = 'Needs a reason';
+        setTimeout(() => (button.textContent = 'Adjust'), 1500);
+        return;
+      }
+      button.disabled = true;
+      button.textContent = 'Adjusting…';
+      try {
+        await api('/admin/adjust', {
+          method: 'POST',
+          body: JSON.stringify({
+            ownerId: agent.agentId,
+            kind: 'agent',
+            currency: 'CC',
+            delta,
+            reason,
+          }),
+        });
+        setTimeout(renderPanel, 400);
+      } catch (error) {
+        button.textContent = error.message;
+        button.disabled = false;
+      }
+    });
+
+    body.append(row);
+  }
+  if (!data.agents.length) {
+    body.append($('<tr><td colspan="6" class="hint">No agents yet.</td></tr>'));
+  }
+  section.append(balances);
+
+  /* ----------------------------------------------------------- the history */
+
+  const history = $(\`<div class="wrap" style="margin-top:16px"><table>
+    <thead><tr><th>From</th><th>Tier</th><th>Scope</th><th class="num">GC per CC</th><th>Why</th></tr></thead>
+    <tbody></tbody></table></div>\`);
+  const historyBody = history.querySelector('tbody');
+  for (const rate of data.history) {
+    historyBody.append($(\`<tr>
+      <td>\${new Date(rate.effectiveFrom).toLocaleString()}</td>
+      <td>\${rate.tier === 'player_agent' ? 'Player &rarr; agent' : 'Agent &rarr; operator'}</td>
+      <td>\${rate.agentName ? rate.agentName : '<span class="hint">everyone</span>'}</td>
+      <td class="num">\${num(rate.gcPerCc)}</td>
+      <td class="hint">\${rate.note ? rate.note : '—'}</td>
+    </tr>\`));
+  }
+  section.append($('<p class="hint" style="margin-top:16px">Every rate ever set. Nothing here can be edited or deleted — a change is a new row, so a settled conversion can always be checked against the rate that was in force when it was priced.</p>'));
+  section.append(history);
+
   return section;
 }
 
