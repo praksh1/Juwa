@@ -34,9 +34,9 @@ import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet, View, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
-import { colors, radius, spacing, typography } from '@juwa/ui';
+import { colors, radius, spacing } from '@juwa/ui';
 import { ChaseLights } from './ChaseLights';
-import { CoinCounter } from './CoinCounter';
+import { WinMeter } from './WinMeter';
 import { usePrefersReducedMotion, rollUpDuration, type WinTier } from '../motion';
 
 /**
@@ -233,12 +233,15 @@ export function WinOverlay({
           resizeMode="contain"
           accessibilityLabel={jackpot ? 'Jackpot' : mega ? 'Mega win' : 'Big win'}
         />
-        <CoinCounter
-          amount={amount}
-          tier={tier}
-          color={colors.text.primary}
-          style={styles.amount}
-        />
+        {/*
+          The amount, on a plaque.
+
+          It used to be the same number set in the UI's own face, which is a
+          caption — and it lost every contest with the painted banner above it.
+          The banner says what KIND of win this was; the meter says HOW MUCH,
+          which is the part the player is waiting for.
+        */}
+        <WinMeter amount={amount} tier={tier} />
 
         {/*
           The bulbs set into the frame.
@@ -381,11 +384,5 @@ const styles = StyleSheet.create({
     width: 70,
     left: '50%',
     marginLeft: -35,
-  },
-  amount: {
-    fontSize: typography.moneyLarge.fontSize,
-    textShadowColor: 'rgba(0,0,0,0.6)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 6,
   },
 });
