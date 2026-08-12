@@ -36,6 +36,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import { colors, radius, spacing } from '@juwa/ui';
 import { ChaseLights } from './ChaseLights';
+import { ShellBurst } from './ShellBurst';
 import { WinMeter } from './WinMeter';
 import { usePrefersReducedMotion, rollUpDuration, type WinTier } from '../motion';
 
@@ -86,6 +87,14 @@ export function WinOverlay({
   const turn = useRef(new Animated.Value(0)).current;
   /** The shine crossing the banner. */
   const shine = useRef(new Animated.Value(0)).current;
+  /**
+   * The area the fireworks have to play in.
+   *
+   * Measured rather than taken from the window: this layer fills the CABINET,
+   * not the screen, and a shell that launches from the bottom of the phone
+   * would spend most of its rise behind the bet controls.
+   */
+  const [stage, setStage] = React.useState({ width: 0, height: 0 });
 
   useEffect(() => {
     if (!visible) return;
@@ -172,7 +181,36 @@ export function WinOverlay({
   const sweep = shine.interpolate({ inputRange: [0, 1], outputRange: [-260, 260] });
 
   return (
-    <View style={styles.layer} pointerEvents="none">
+    <View
+      style={styles.layer}
+      pointerEvents="none"
+      onLayout={(event) => {
+        const { width, height } = event.nativeEvent.layout;
+        setStage((current) =>
+          Math.abs(current.width - width) < 1 && Math.abs(current.height - height) < 1
+            ? current
+            : { width, height },
+        );
+      }}
+    >
+      {/*
+        Fireworks, behind everything.
+
+        The rays below read as "lit from behind", which is a static property of
+        the moment. These are EVENTS — six shells that rise, break and fall
+        across the banner's life — and an eye is caught by each one. That is the
+        difference between a held picture and a celebration.
+
+        Only on the two loudest tiers. A big win every ninety spins can afford
+        rays and a shine; fireworks belong to the ones worth interrupting for.
+      */}
+      <ShellBurst
+        width={stage.width}
+        height={stage.height}
+        round={round}
+        active={mega || jackpot}
+      />
+
       {/*
         The rays, BEHIND the card and larger than it.
 
