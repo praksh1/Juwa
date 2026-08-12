@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
   bezel: {
     borderRadius: radius.md,
     padding: 3,
-    minWidth: 230,
+    minWidth: 280,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.45)',
   },
@@ -110,15 +110,17 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(0,0,0,0.8)',
   },
-  label: { letterSpacing: 3, fontSize: 9, lineHeight: 11, fontWeight: '800' },
+  label: { letterSpacing: 3, fontSize: 11, lineHeight: 13, fontWeight: '800' },
   digits: {
-    fontSize: 34,
-    lineHeight: 40,
+    // 34 was smaller than the balance in the header, which is absurd for the
+    // one number the whole celebration exists to announce.
+    fontSize: 44,
+    lineHeight: 52,
     fontWeight: '900',
     letterSpacing: 0.5,
     textShadowColor: 'rgba(255, 214, 102, 0.55)',
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 12,
   },
-  digitsJackpot: { fontSize: 38, lineHeight: 44 },
+  digitsJackpot: { fontSize: 50, lineHeight: 58 },
 });

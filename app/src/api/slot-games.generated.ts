@@ -129,9 +129,9 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
     },
     "freeSpinMultiplier": 3,
     "tiers": {
-      "big": 11.6,
-      "mega": 36.3,
-      "jackpot": 71.6
+      "big": 3.3,
+      "mega": 15.6,
+      "jackpot": 55.9
     }
   },
   "lines-10": {
@@ -224,9 +224,9 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
     },
     "freeSpinMultiplier": 3,
     "tiers": {
-      "big": 14,
-      "mega": 44.2,
-      "jackpot": 91.6
+      "big": 4,
+      "mega": 19.1,
+      "jackpot": 60.7
     },
     "feature": {
       "kind": "expanding-wild",
@@ -325,9 +325,9 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
     },
     "freeSpinMultiplier": 3,
     "tiers": {
-      "big": 10.7,
-      "mega": 30.6,
-      "jackpot": 70.9
+      "big": 3.8,
+      "mega": 15.1,
+      "jackpot": 48.4
     }
   },
   "high-vol": {
@@ -420,9 +420,9 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
     },
     "freeSpinMultiplier": 5,
     "tiers": {
-      "big": 13.4,
-      "mega": 34.9,
-      "jackpot": 73.1
+      "big": 3.8,
+      "mega": 15.9,
+      "jackpot": 46.9
     },
     "feature": {
       "kind": "hold-spin",
@@ -502,9 +502,9 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
     "freeSpinsAwarded": {},
     "freeSpinMultiplier": 1,
     "tiers": {
-      "big": 12.5,
-      "mega": 41.7,
-      "jackpot": 83.4
+      "big": 4.2,
+      "mega": 12.5,
+      "jackpot": 44.2
     },
     "feature": {
       "kind": "wheel",
@@ -610,9 +610,9 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
     },
     "freeSpinMultiplier": 2,
     "tiers": {
-      "big": 7.3,
-      "mega": 22.8,
-      "jackpot": 38.1
+      "big": 3.1,
+      "mega": 11.6,
+      "jackpot": 27.9
     }
   },
   "tumble-20": {
@@ -697,9 +697,9 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
     "freeSpinsAwarded": {},
     "freeSpinMultiplier": 1,
     "tiers": {
-      "big": 14.3,
-      "mega": 36.6,
-      "jackpot": 86.9
+      "big": 4.4,
+      "mega": 18,
+      "jackpot": 52.9
     }
   },
   "classic-3": {
@@ -775,9 +775,9 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
     "freeSpinsAwarded": {},
     "freeSpinMultiplier": 1,
     "tiers": {
-      "big": 14.8,
-      "mega": 44.5,
-      "jackpot": 148.2
+      "big": 5.9,
+      "mega": 29.6,
+      "jackpot": 65.1
     }
   }
 };

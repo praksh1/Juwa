@@ -50,10 +50,19 @@ export type WinTier = 'none' | 'win' | 'burst' | 'big' | 'mega' | 'jackpot';
  * tiers are NOT global: they are measured per model and arrive with the game.
  * See `SlotModelInfo.tiers`.
  */
-export const BURST_THRESHOLD = 6;
+/*
+ * Two times the stake, not six.
+ *
+ * `burst` is the small celebration — a blast of coins, no banner — and at six
+ * times the stake it fired about once in forty spins. The founder asked for
+ * the coins and the meter to happen more often, and this is the tier that can
+ * absorb that without an overlay interrupting anything: a win that doubles the
+ * stake throws coins and nothing else.
+ */
+export const BURST_THRESHOLD = 2;
 
 /** The fallback, for a game that has no measured tiers of its own. */
-export const DEFAULT_TIERS = { big: 12, mega: 35, jackpot: 80 } as const;
+export const DEFAULT_TIERS = { big: 4, mega: 12, jackpot: 30 } as const;
 
 export interface WinTiers {
   big: number;

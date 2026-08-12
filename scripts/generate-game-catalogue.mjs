@@ -57,7 +57,30 @@ const { RngStream } = await import(resolve(root, 'packages/engine/dist/rng.js'))
  * The frequencies are the industry's rough shape and are stated as odds rather
  * than multiples because odds are what a player experiences.
  */
-const TIER_FREQUENCY = { big: 90, mega: 600, jackpot: 6000 };
+/*
+ * How often each tier should arrive, in spins.
+ *
+ * These were 90 / 600 / 6000, which put a big win at roughly 12x the stake on
+ * a typical model. The founder's note: the celebrations "can happen more
+ * frequently — doesn't have to be a Big Win or Mega or Jackpot ... let's say
+ * if the players win 3X or 4X their bet amounts". So the frequencies come
+ * down hard, and the floor below turns that into a promise rather than an
+ * average: a big win is at least three times the stake and at most six,
+ * whatever the model's own distribution says.
+ *
+ * The three tiers stay clearly apart — that was the point of measuring them
+ * per model in the first place — they simply all move closer to the player.
+ */
+const TIER_FREQUENCY = { big: 18, mega: 140, jackpot: 1400 };
+/**
+ * The band a big win must land in, as a multiple of the stake.
+ *
+ * A frequency alone cannot promise a multiple: a low-volatility model at one
+ * spin in eighteen might put its big win at 2.4x, which is not a big anything.
+ * Clamped, so every machine in the catalogue announces a BIG WIN somewhere
+ * between three and six times the stake and the wording means one thing.
+ */
+const BIG_WIN_BAND = { min: 3, max: 6 };
 /** Enough that the 1-in-6000 quantile is measured rather than extrapolated. */
 const TIER_SAMPLES = 60_000;
 
@@ -83,9 +106,11 @@ function measureTiers(model) {
     return Math.max(2, Math.round(value * 10) / 10);
   };
 
-  const big = at(TIER_FREQUENCY.big);
-  const mega = Math.max(big * 1.6, at(TIER_FREQUENCY.mega));
-  const jackpot = Math.max(mega * 1.5, at(TIER_FREQUENCY.jackpot));
+  const big = Math.min(BIG_WIN_BAND.max, Math.max(BIG_WIN_BAND.min, at(TIER_FREQUENCY.big)));
+  // Each tier stays a clear step above the one below, so a player who has seen
+  // all three can tell them apart by size as well as by banner.
+  const mega = Math.max(big * 2.4, at(TIER_FREQUENCY.mega));
+  const jackpot = Math.max(mega * 2.2, at(TIER_FREQUENCY.jackpot));
   return {
     big,
     mega: Math.round(mega * 10) / 10,

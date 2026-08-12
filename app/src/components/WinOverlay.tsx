@@ -62,7 +62,20 @@ const BANNER_JACKPOT = '/art/overlays/banner-jackpot.png';
  * `AUTO_PAUSE_MS` in SlotsScreen is derived from these. If one moves, both do.
  */
 const HOLD_MS: Record<'big' | 'mega' | 'jackpot', number> = {
-  big: 3_000,
+  /*
+   * Shorter than it was, because a big win is now COMMON.
+   *
+   * The threshold moved from about 12x to between 3x and 6x, which takes a big
+   * win from one spin in ninety to about one in eighteen. Five seconds of
+   * banner every eighteen spins is a quarter of an auto-play session spent
+   * watching an overlay, and the note this file already carries applies: an
+   * overlay a player sees every few spins is an interruption.
+   *
+   * Bigger is not the same as longer. The card and the meter grew; the hold
+   * came down. 4.0s still outlasts the big-win fanfares, which top out at
+   * 3.79s — that rule has not moved.
+   */
+  big: 1_800,
   mega: 4_000,
   jackpot: 4_000,
 };
@@ -404,8 +417,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   card: {
-    minWidth: 260,
-    paddingHorizontal: spacing.xl,
+    /*
+     * Much bigger than it was.
+     *
+     * It was 260 points minimum on a 390-point phone — two thirds of the width
+     * — and the founder's verdict on the result was "the fonts are just too
+     * tiny". A BIG WIN card that a player has to lean in to read is announcing
+     * the opposite of what it says. It now claims nearly the whole width and
+     * the banner and meter grow with it.
+     */
+    minWidth: 320,
+    maxWidth: '96%',
+    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xl,
     borderRadius: radius.lg,
     borderWidth: 2,
@@ -414,7 +437,9 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     overflow: 'hidden',
   },
-  banner: { width: '100%', height: 92, marginBottom: spacing.sm },
+  // Half again as tall. The banner is the thing that says which moment this
+  // is, and at 92 points it was smaller than the number underneath it.
+  banner: { width: '100%', height: 138, marginBottom: spacing.md },
   shine: {
     position: 'absolute',
     top: -60,

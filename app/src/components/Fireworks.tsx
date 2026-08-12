@@ -73,6 +73,15 @@ export interface FireworksHandle {
    * does while its win meter counts up. `power` scales the rate.
    */
   pour: (power: number, seconds: number) => void;
+  /**
+   * Erupt coins TOWARD THE PLAYER.
+   *
+   * The one the founder actually asked for: coins that fly out of the screen
+   * into your face, not a trickle that settles politely on the floor. Each
+   * coin starts small at the centre and rushes outward, growing as it comes,
+   * so the burst reads as depth rather than as sprites sliding around a plane.
+   */
+  blast: (power: number) => void;
   /** Sweep the board immediately — a new round starting, or a screen leaving. */
   clear: () => void;
 }
@@ -101,6 +110,14 @@ interface Particle {
   settled: boolean;
   /** Frozen at the moment of landing, so a resting coin does not keep spinning. */
   restAngle: number;
+  /**
+   * How fast this coin is coming at the camera, in radii per second.
+   *
+   * Zero for everything that lives in the plane — the fountain and the rain.
+   * Positive for a blast coin, which grows as it travels and never lands: it
+   * leaves through the front of the screen, which is the whole effect.
+   */
+  approach: number;
 }
 
 /** Gravity, in points per second squared. Tuned by eye against a 300pt board. */
@@ -187,14 +204,21 @@ export function Fireworks({
         vy,
         life: 0,
         ttl: 0.9 + Math.random() * (0.5 + p * 0.6),
-        // Coins are drawn at 14-26 points: large enough to be recognisable as
-        // a coin, small enough that sixty of them are a fountain.
-        r: (ribbon ? 6 : 7) + Math.random() * (4 + p * 6),
+        /*
+         * Bigger than they were.
+         *
+         * These were 14 to 26 points across, and on a 390-point phone that is
+         * confetti: the founder's word for the result was "tiny". At 20 to 52
+         * a coin is an object you can see the milling on, and the pile it
+         * makes has weight instead of looking like spilled glitter.
+         */
+        r: (ribbon ? 8 : 10) + Math.random() * (6 + p * 10),
         art: ribbon ? CONFETTI : COINS[Math.floor(Math.random() * COINS.length)]!,
         spin: (Math.random() - 0.5) * (ribbon ? 900 : 420),
         angle: Math.random() * 360,
         settled: false,
         restAngle: 0,
+        approach: 0,
       };
     };
 
@@ -241,6 +265,48 @@ export function Fireworks({
           );
         }
         pileAlpha.current = 1;
+        live.current = [...live.current, ...next];
+        start();
+      },
+
+      blast: (power: number) => {
+        if (reduced) return;
+        const p = Math.max(0, Math.min(1, power));
+        /*
+         * Fewer coins than the fountain, and each one an event.
+         *
+         * A blast at sixty particles is a swarm of specks; at twenty-six, each
+         * coin is large enough by the time it passes the edge to be a coin
+         * rather than a texture. The count is the one thing that must NOT
+         * scale up with the win — the SIZE does.
+         */
+        const count = Math.round(20 + p * 14);
+        const next: Particle[] = [];
+        for (let i = 0; i < count; i += 1) {
+          /*
+           * Radially outward, evenly spaced then jittered — the same reason
+           * the firework sparks are: random angles clump, and a burst with
+           * bald patches reads as a scatter rather than as something coming
+           * at you.
+           */
+          const step = (Math.PI * 2) / count;
+          const angle = step * i + (Math.random() - 0.5) * step * 0.9;
+          // Slow across the plane, fast toward the camera. A coin that mostly
+          // travels sideways is being thrown past the player, not at them.
+          const v = (70 + Math.random() * 90) * (0.6 + p * 0.7);
+          const coin = make(p, width / 2, height * 0.5, Math.cos(angle) * v, Math.sin(angle) * v);
+          next.push({
+            ...coin,
+            // Starts SMALL, because it is far away. The growth is the depth
+            // cue and it does not work if the coin begins at its final size.
+            r: coin.r * 0.34,
+            // Radii per second. At ~3.4 a coin roughly quadruples in the
+            // second it is alive, which is what a thing arriving looks like.
+            approach: 2.6 + Math.random() * 1.6 + p * 1.2,
+            ttl: 0.85 + Math.random() * 0.35,
+            spin: coin.spin * 0.6,
+          });
+        }
         live.current = [...live.current, ...next];
         start();
       },
@@ -320,12 +386,24 @@ export function Fireworks({
         }
 
         const life = particle.life + dt;
-        const vx = particle.vx * drag;
-        const vy = particle.vy * drag + GRAVITY * dt;
-        const x = particle.x + particle.vx * dt;
-        const y = particle.y + particle.vy * dt;
+        /*
+         * A coin coming at the camera GROWS, and its apparent speed across the
+         * screen grows with it — that is what perspective does, and leaving it
+         * out is what makes a scaling sprite look like a scaling sprite. One
+         * multiplier drives both.
+         */
+        const near = particle.approach > 0 ? 1 + particle.approach * life : 1;
+        const vx = particle.approach > 0 ? particle.vx : particle.vx * drag;
+        const vy =
+          particle.approach > 0
+            ? particle.vy
+            : particle.vy * drag + GRAVITY * dt;
+        const x = particle.x + vx * near * dt;
+        const y = particle.y + vy * near * dt;
 
-        if (pile && vy > 0) {
+        // A blast coin never lands. It leaves through the front of the screen,
+        // which is the entire point of it.
+        if (pile && particle.approach === 0 && vy > 0) {
           const column = Math.max(
             0,
             Math.min(COLUMNS - 1, Math.floor((x / Math.max(1, width)) * COLUMNS)),
@@ -454,7 +532,8 @@ export function Fireworks({
           : t > 0.7
             ? 1 - (t - 0.7) / 0.3
             : 1;
-        const size = particle.r * 2;
+        const near = particle.approach > 0 ? 1 + particle.approach * particle.life : 1;
+        const size = particle.r * 2 * near;
         const rotation = particle.settled
           ? particle.restAngle
           : particle.angle + particle.spin * particle.life;
@@ -464,8 +543,8 @@ export function Fireworks({
             source={{ uri: particle.art }}
             style={{
               position: 'absolute',
-              left: particle.x - particle.r,
-              top: particle.y - particle.r,
+              left: particle.x - size / 2,
+              top: particle.y - size / 2,
               width: size,
               height: size,
               opacity,

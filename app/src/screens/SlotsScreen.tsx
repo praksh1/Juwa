@@ -18,6 +18,7 @@ import { winTier, rollUpDuration, type WinTier } from '../motion';
 import { CoinCounter } from '../components/CoinCounter';
 import { Fireworks, type FireworksHandle } from '../components/Fireworks';
 import { NeonRail } from '../components/ChaseLights';
+import { FreeSpinsIntro } from '../components/FreeSpinsIntro';
 import {
   PaytableButton,
   RulesIntro,
@@ -42,8 +43,26 @@ import {
   USE_DEMO_API,
 } from '../api/client';
 
-/** Free spins run at this fraction of the base spin duration. */
-const FS_SPEED = 0.45;
+/**
+ * Free spins run at this fraction of the base spin duration.
+ *
+ * Still shortened — the tension that earns a slow base spin is already spent —
+ * but no longer BREATHLESS. See the pauses below, which are what actually makes
+ * the round readable.
+ */
+const FS_SPEED = 0.6;
+/**
+ * How long the "N FREE SPINS" card is held before the first reel moves.
+ *
+ * Four seconds, and it is the direct answer to a recording in which the
+ * founder landed the bonus and did not realise it had happened. The rarest
+ * event in the base game deserves longer than a page transition.
+ */
+const FS_INTRO_MS = 4_000;
+/** The beat after a free spin that paid nothing. */
+const FS_PAUSE_MS = 900;
+/** And after one that did. Long enough to read the line and the number. */
+const FS_WIN_PAUSE_MS = 2_100;
 
 /**
  * The landing schedule, in seconds. These are the numbers that decide whether
@@ -208,7 +227,7 @@ const AUTO_PAUSE_MS: Record<WinTier, number> = {
    * celebration the founder asked to be made longer into a thing that gets
    * interrupted instead. If either number moves, both move.
    */
-  big: 5_600,
+  big: 4_400,
   mega: 7_600,
   // The longest hold in the app: a jackpot is the one result a player wants
   // a moment with before the next spin starts.
@@ -536,9 +555,23 @@ export function SlotsScreen() {
      * does. Coins still falling after the total has settled is the same fault
      * as a fanfare outlasting its banner, in a different medium.
      */
-    if (tier === 'burst') coins.current?.fire(0.35);
+    /*
+     * The punch first, then the rain.
+     *
+     * `blast` throws coins OUT OF THE SCREEN at the player — they start small
+     * at the centre and grow as they come, and they never land. That is the
+     * moment of the win. `pour` is the sustained part underneath it: coins
+     * falling and heaping while the meter counts.
+     *
+     * Both, on the loud tiers, because they are doing different jobs. The
+     * founder's note was that coins which "come in like a robot and sit on the
+     * bottom" do not feel celebratory, and they were right — a fountain with
+     * no punch is a screensaver.
+     */
+    if (tier === 'burst') coins.current?.blast(0.45);
     else if (tier !== 'win') {
-      const power = tier === 'jackpot' ? 1 : tier === 'mega' ? 0.75 : 0.5;
+      const power = tier === 'jackpot' ? 1 : tier === 'mega' ? 0.78 : 0.55;
+      coins.current?.blast(power);
       coins.current?.pour(power, rollUpDuration(tier) / 1000);
     }
   }, []);
@@ -1064,7 +1097,23 @@ export function SlotsScreen() {
         setFreeSpinsTotal(state.freeSpinsAwarded);
         sounds.bonus();
         setPhase('fs-intro');
-        await wait(1_800);
+        /*
+         * A REAL pause before the round starts.
+         *
+         * This was 1.8 seconds with nothing in it but a caption, and the
+         * founder's recording shows why that fails: they landed three
+         * scatters, eight free spins ran, and the whole thing was over before
+         * they understood it had begun. The rarest event in the base game —
+         * measured at one round in 95 to 187 spins — went past like a dropped
+         * frame.
+         *
+         * So the trigger now gets a celebration of its own: coins thrown, the
+         * sting held, and four seconds to read "8 FREE SPINS" before a reel
+         * moves. It is the same argument as the win banner outlasting its own
+         * fanfare, applied to the moment BEFORE the show instead of after it.
+         */
+        coins.current?.fire(0.7);
+        await wait(FS_INTRO_MS);
         if (superseded()) return;
 
         setPhase('fs');
@@ -1094,7 +1143,20 @@ export function SlotsScreen() {
           runningWinRef.current += freeWin;
           setRunningWin(runningWinRef.current);
           celebrate(freeWin, bet);
-          await wait(500);
+          /*
+           * A beat between spins, LONGER when that spin paid.
+           *
+           * Half a second flat meant eight free spins took about eight
+           * seconds including the reels, and a spin that won looked exactly
+           * like one that did not — the win line was drawn and painted over
+           * by the next spin before it had finished being drawn.
+           *
+           * The pause is now the win's own presentation time: nothing much to
+           * see on a blank, and long enough to read the line and the figure on
+           * a spin that paid. That makes the round a sequence of events rather
+           * than a blur, which is the whole reason a player wants free spins.
+           */
+          await wait(freeWin > 0 ? FS_WIN_PAUSE_MS : FS_PAUSE_MS);
           if (superseded()) return;
         }
 
@@ -1369,8 +1431,11 @@ export function SlotsScreen() {
               </Txt>
             </View>
           ) : phase === 'fs-intro' ? (
-            <Txt variant="h3" color={colors.neon.magenta}>
-              {freeSpinsTotal} FREE SPINS
+            // The count is announced by the overlay over the machine now — see
+            // FreeSpinsIntro. Saying it twice, once large and once small, made
+            // the small one look like a caption on the large one.
+            <Txt variant="bodySmall" color={colors.neon.magenta}>
+              Get ready…
             </Txt>
           ) : phase === 'fs' ? (
             <View style={styles.fsRow}>
@@ -1531,6 +1596,19 @@ export function SlotsScreen() {
             />
           ) : null}
         </View>
+        {/*
+          The bonus announcement, over the machine.
+
+          Above the coin layer so the coins thrown at the trigger fall BEHIND
+          the card, and below nothing — for four seconds this is the only thing
+          on the screen worth looking at, which is the point.
+        */}
+        {phase === 'fs-intro' ? (
+          <FreeSpinsIntro
+            spins={freeSpinsTotal}
+            {...(paytable?.freeSpinMultiplier ? { multiplier: paytable.freeSpinMultiplier } : {})}
+          />
+        ) : null}
         <WinOverlay
           tier={celebration.tier}
           amount={celebration.amount}
