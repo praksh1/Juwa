@@ -102,6 +102,17 @@ export interface SlotModelInfo {
   /** Every win during the bonus round is multiplied by this. */
   freeSpinMultiplier: number;
   /**
+   * Stake multiples at which each celebration fires, MEASURED per model.
+   *
+   * Not a design choice per game — a frequency choice applied to each model's
+   * own distribution, so "a big win" means the same thing to a player on every
+   * machine even though the multiple behind it differs. See `measureTiers` in
+   * `scripts/generate-game-catalogue.mjs` for why a single global number could
+   * not work, and in particular for why a 60x MEGA WIN could never once fire on
+   * a model whose largest win in 60,000 spins was 49x.
+   */
+  tiers: { big: number; mega: number; jackpot: number };
+  /**
    * The bonus this model plays, in the detail the client needs to draw it.
    *
    * `segments` in particular is not decoration: the server sends the winning

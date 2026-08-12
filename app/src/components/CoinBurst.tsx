@@ -20,8 +20,8 @@ import { Animated, StyleSheet, View } from 'react-native';
 import { colors } from '@juwa/ui';
 import { usePrefersReducedMotion, type WinTier } from '../motion';
 
-const COUNT: Record<WinTier, number> = { none: 0, win: 0, burst: 18, big: 34, mega: 60 };
-const DURATION: Record<WinTier, number> = { none: 0, win: 0, burst: 1100, big: 1600, mega: 2200 };
+const COUNT: Record<WinTier, number> = { none: 0, win: 0, burst: 18, big: 34, mega: 60, jackpot: 80 };
+const DURATION: Record<WinTier, number> = { none: 0, win: 0, burst: 1100, big: 1600, mega: 2200, jackpot: 2800 };
 
 const GRAVITY = 1400; // px per second squared
 const COIN_SIZE = 14;

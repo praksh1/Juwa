@@ -28,6 +28,7 @@
 import React, { useCallback, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { colors, radius, spacing } from '@juwa/ui';
+import { format, minor, type Minor } from '@juwa/money';
 import { scatterTrigger, type SlotGame, type SlotModelInfo } from '../api/games';
 import { SlotSymbol } from './SlotSymbol';
 import { Txt } from './primitives';
@@ -69,13 +70,61 @@ function byValue(model: SlotModelInfo) {
 
 // ---------------------------------------------------------------- paytable
 
-function PaytableRows({ model, family }: { model: SlotModelInfo; family?: string }) {
+/**
+ * What one line of this symbol is worth, IN COINS, at the bet on screen.
+ *
+ * ## Why the paytable stopped quoting multipliers
+ *
+ * It printed the engine's raw numbers, and those are per-LINE multiples with
+ * the RTP calibration folded in — so the tumbling game's top symbol read
+ * "43.96" and the 720-ways game's read "0.36". The founder asked what the
+ * decimals meant, which is the only sane response: 43.96 of what, against a
+ * bet expressed in coins, on a machine whose twenty lines each get a twentieth
+ * of the stake.
+ *
+ * A player has one question — if this lands, what do I get — and a number in
+ * the same unit as their balance answers it. So the arithmetic is done here
+ * instead of in the player's head.
+ *
+ * ## It is the engine's own arithmetic, not a second opinion
+ *
+ * `slot-math.ts` computes `lineMultiplierSum / payDivisor + scatterMultiplier`,
+ * where the divisor is the payline count for a line game and 1 for a ways game
+ * — a ways player buys all 720 ways at once, so those pays are already stake
+ * multiples, which is exactly why they look like 0.36. Reproducing that here
+ * with a different divisor would print a paytable that disagrees with what
+ * lands in the balance, which is worse than no paytable at all.
+ */
+/** Scatters pay against the TOTAL bet, so there is nothing to divide by. */
+function scatterCoins(model: SlotModelInfo, count: number, bet: Minor): string {
+  const pays = model.scatterPays[String(count)];
+  if (!pays) return '—';
+  return format(minor(Math.round(pays * bet)), 'GC').replace(' GC', '');
+}
+
+function lineCoins(model: SlotModelInfo, pays: number, bet: Minor): number {
+  const divisor = model.pays === 'ways' ? 1 : Math.max(1, model.lines);
+  return Math.round((pays / divisor) * bet);
+}
+
+function PaytableRows({
+  model,
+  family,
+  bet,
+}: {
+  model: SlotModelInfo;
+  family?: string;
+  /** The player's current TOTAL bet, so every row is in coins they recognise. */
+  bet: Minor;
+}) {
   const symbols = byValue(model);
   // A three-reel classic pays only for three of a kind, so the 4 and 5 columns
   // would be a block of zeroes. Drop them rather than print them.
   const showFour = symbols.some((s) => s.pays['4'] > 0);
   const showFive = symbols.some((s) => s.pays['5'] > 0);
   const trigger = scatterTrigger(model);
+  const coins = (pays: number) =>
+    pays > 0 ? format(minor(lineCoins(model, pays, bet)), 'GC').replace(' GC', '') : '—';
 
   return (
     <View style={styles.table}>
@@ -102,29 +151,67 @@ function PaytableRows({ model, family }: { model: SlotModelInfo; family?: string
             <SlotSymbol name={symbol.id} size={30} {...(family ? { family } : {})} />
           </View>
           <Txt variant="caption" color={colors.gold.default} style={styles.payCell}>
-            {symbol.pays['3'] || '—'}
+            {coins(symbol.pays['3'])}
           </Txt>
           {showFour ? (
             <Txt variant="caption" color={colors.gold.default} style={styles.payCell}>
-              {symbol.pays['4'] || '—'}
+              {coins(symbol.pays['4'])}
             </Txt>
           ) : null}
           {showFive ? (
             <Txt variant="caption" color={colors.gold.default} style={styles.payCell}>
-              {symbol.pays['5'] || '—'}
+              {coins(symbol.pays['5'])}
             </Txt>
           ) : null}
         </View>
       ))}
 
+      {/* Scatters pay against the TOTAL bet rather than a line, so they get
+          their own row rather than being folded into the table above — the two
+          columns of numbers would otherwise be in two different units with
+          nothing on screen saying so. */}
+      {Object.keys(model.scatterPays).length ? (
+        <View style={[styles.row, styles.scatterRow]}>
+          <View style={styles.symbolCell}>
+            <SlotSymbol name="SCATTER" size={30} {...(family ? { family } : {})} />
+          </View>
+          <Txt variant="caption" color={colors.gold.default} style={styles.payCell}>
+            {scatterCoins(model, 3, bet)}
+          </Txt>
+          {showFour ? (
+            <Txt variant="caption" color={colors.gold.default} style={styles.payCell}>
+              {scatterCoins(model, 4, bet)}
+            </Txt>
+          ) : null}
+          {showFive ? (
+            <Txt variant="caption" color={colors.gold.default} style={styles.payCell}>
+              {scatterCoins(model, 5, bet)}
+            </Txt>
+          ) : null}
+        </View>
+      ) : null}
+
+      {/*
+        The bet these figures are for, stated plainly.
+
+        Without it the table is a set of coin amounts with no anchor, and a
+        player who changes their stake would reasonably assume the paytable was
+        wrong rather than that it had moved with them.
+      */}
+      <Txt variant="caption" color={colors.gold.light} style={styles.note}>
+        Coins won at your current bet of {format(bet, 'GC')}. Change your bet and these move with
+        it.
+      </Txt>
       <Txt variant="caption" color={colors.text.muted} style={styles.note}>
-        Pays are per line, on {model.lines} line{model.lines === 1 ? '' : 's'}, left to right from
-        reel one. WILD stands in for any symbol except SCATTER.
+        {model.pays === 'ways'
+          ? `Matching symbols pay from reel one, in any position — ${model.lines} ways. `
+          : `Pays left to right from reel one, on ${model.lines} line${model.lines === 1 ? '' : 's'}. `}
+        WILD stands in for any symbol except SCATTER. More than one win on a spin adds up.
       </Txt>
       {trigger ? (
         <Txt variant="caption" color={colors.text.muted} style={styles.note}>
           {trigger.count} or more SCATTER anywhere awards {trigger.spins} free spins, with every win
-          multiplied by {model.freeSpinMultiplier}. Scatters pay on the total bet.
+          multiplied by {model.freeSpinMultiplier}.
         </Txt>
       ) : null}
     </View>
@@ -174,10 +261,13 @@ function featureLine(
 export function RulesIntro({
   game,
   model,
+  bet,
   onPlay,
 }: {
   game: SlotGame;
   model: SlotModelInfo;
+  /** The bet the machine will open on, so the intro's figures are real. */
+  bet: Minor;
   onPlay: () => void;
 }) {
   const [dontShow, setDontShow] = useState(false);
@@ -211,7 +301,7 @@ export function RulesIntro({
               {featureLine(model, trigger)}
             </Txt>
 
-            <PaytableRows model={model} {...(game.art ? { family: game.art } : {})} />
+            <PaytableRows model={model} bet={bet} {...(game.art ? { family: game.art } : {})} />
           </ScrollView>
 
           {/*
@@ -260,7 +350,15 @@ export function RulesIntro({
 // ------------------------------------------------------------------- sheet
 
 /** The small button that lives beside the machine, and the sheet it opens. */
-export function PaytableButton({ game, model }: { game: SlotGame; model: SlotModelInfo }) {
+export function PaytableButton({
+  game,
+  model,
+  bet,
+}: {
+  game: SlotGame;
+  model: SlotModelInfo;
+  bet: Minor;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -284,7 +382,7 @@ export function PaytableButton({ game, model }: { game: SlotGame; model: SlotMod
               <Txt variant="h3" color={game.theme.accent}>
                 {game.name}
               </Txt>
-              <PaytableRows model={model} {...(game.art ? { family: game.art } : {})} />
+              <PaytableRows model={model} bet={bet} {...(game.art ? { family: game.art } : {})} />
               <Pressable
                 onPress={() => setOpen(false)}
                 accessibilityRole="button"
@@ -337,6 +435,7 @@ const styles = StyleSheet.create({
   },
   symbolCell: { width: 44, alignItems: 'center' },
   payCell: { flex: 1, textAlign: 'right', paddingRight: spacing.sm },
+  scatterRow: { borderTopWidth: 1, borderTopColor: colors.gold.dark, marginTop: spacing.xs },
   note: { marginTop: spacing.xs, lineHeight: 16 },
   checkRow: {
     flexDirection: 'row',

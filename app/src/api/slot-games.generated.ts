@@ -33,8 +33,8 @@ export const SLOT_GAMES: SlotGame[] = [
   { id: 'slot-pharaohs-vault', name: 'Pharaoh\'s Vault', category: 'slots', rtp: 0.95, volatility: 'very-high', reels: 5, rows: [3, 3, 3, 3, 3], lines: 20, pays: 'lines', feature: 'hold-spin', minBet: 100, maxBet: 200000, theme: { primary: '#422006', secondary: '#CA8A04', accent: '#FEF08A' }, model: 'high-vol', art: 'egypt' },
   { id: 'slot-storm-chaser', name: 'Storm Chaser', category: 'slots', rtp: 0.9408, volatility: 'high', reels: 5, rows: [3, 3, 3, 3, 3], lines: 20, pays: 'lines', cascades: true, minBet: 20, maxBet: 50000, theme: { primary: '#164E63', secondary: '#06B6D4', accent: '#CFFAFE' }, model: 'tumble-20', art: 'myth' },
   { id: 'slot-lucky-sevens', name: 'Lucky Sevens', category: 'slots', rtp: 0.943, volatility: 'high', reels: 3, rows: [1, 1, 1], lines: 1, pays: 'lines', minBet: 10, maxBet: 10000, theme: { primary: '#7F1D1D', secondary: '#EF4444', accent: '#FFC53D' }, model: 'classic-3', art: 'fruit' },
-  { id: 'slot-triple-bar', name: 'Triple Bar', category: 'slots', rtp: 0.9481, volatility: 'medium', reels: 3, rows: [3, 3, 3], lines: 5, pays: 'lines', feature: 'wheel', minBet: 10, maxBet: 10000, theme: { primary: '#1C1917', secondary: '#57534E', accent: '#E6CE8C' }, model: 'classic-3x3', art: 'fruit' },
-  { id: 'slot-fruit-stand', name: 'Fruit Stand', category: 'slots', rtp: 0.9481, volatility: 'medium', reels: 3, rows: [3, 3, 3], lines: 5, pays: 'lines', feature: 'wheel', minBet: 10, maxBet: 10000, theme: { primary: '#166534', secondary: '#22C55E', accent: '#FEF08A' }, model: 'classic-3x3', art: 'fruit' },
+  { id: 'slot-triple-bar', name: 'Triple Bar', category: 'slots', rtp: 0.9479, volatility: 'medium', reels: 3, rows: [3, 3, 3], lines: 5, pays: 'lines', feature: 'wheel', minBet: 10, maxBet: 10000, theme: { primary: '#1C1917', secondary: '#57534E', accent: '#E6CE8C' }, model: 'classic-3x3', art: 'fruit' },
+  { id: 'slot-fruit-stand', name: 'Fruit Stand', category: 'slots', rtp: 0.9479, volatility: 'medium', reels: 3, rows: [3, 3, 3], lines: 5, pays: 'lines', feature: 'wheel', minBet: 10, maxBet: 10000, theme: { primary: '#166534', secondary: '#22C55E', accent: '#FEF08A' }, model: 'classic-3x3', art: 'fruit' },
 ];
 
 /** Paytables by model id. See the note in the generator about the two units. */
@@ -127,7 +127,12 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
       "4": 12,
       "5": 20
     },
-    "freeSpinMultiplier": 3
+    "freeSpinMultiplier": 3,
+    "tiers": {
+      "big": 11.6,
+      "mega": 36.3,
+      "jackpot": 71.6
+    }
   },
   "lines-10": {
     "id": "lines-10",
@@ -218,6 +223,11 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
       "5": 25
     },
     "freeSpinMultiplier": 3,
+    "tiers": {
+      "big": 14,
+      "mega": 44.2,
+      "jackpot": 91.6
+    },
     "feature": {
       "kind": "expanding-wild",
       "reels": [
@@ -313,7 +323,12 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
       "4": 14,
       "5": 22
     },
-    "freeSpinMultiplier": 3
+    "freeSpinMultiplier": 3,
+    "tiers": {
+      "big": 10.7,
+      "mega": 30.6,
+      "jackpot": 70.9
+    }
   },
   "high-vol": {
     "id": "high-vol",
@@ -404,6 +419,11 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
       "5": 30
     },
     "freeSpinMultiplier": 5,
+    "tiers": {
+      "big": 13.4,
+      "mega": 34.9,
+      "jackpot": 73.1
+    },
     "feature": {
       "kind": "hold-spin",
       "respins": 3
@@ -418,7 +438,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
         "id": "WILD",
         "kind": "wild",
         "pays": {
-          "3": 402.72,
+          "3": 416.92,
           "4": 0,
           "5": 0
         }
@@ -427,7 +447,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
         "id": "SEVEN",
         "kind": "normal",
         "pays": {
-          "3": 201.36,
+          "3": 208.46,
           "4": 0,
           "5": 0
         }
@@ -436,7 +456,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
         "id": "BAR",
         "kind": "normal",
         "pays": {
-          "3": 60.41,
+          "3": 62.54,
           "4": 0,
           "5": 0
         }
@@ -445,7 +465,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
         "id": "BELL",
         "kind": "normal",
         "pays": {
-          "3": 40.27,
+          "3": 41.69,
           "4": 0,
           "5": 0
         }
@@ -454,7 +474,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
         "id": "CHERRY",
         "kind": "normal",
         "pays": {
-          "3": 20.14,
+          "3": 20.85,
           "4": 0,
           "5": 0
         }
@@ -463,7 +483,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
         "id": "PLUM",
         "kind": "normal",
         "pays": {
-          "3": 12.08,
+          "3": 12.51,
           "4": 0,
           "5": 0
         }
@@ -472,7 +492,7 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
         "id": "LEMON",
         "kind": "normal",
         "pays": {
-          "3": 8.05,
+          "3": 8.34,
           "4": 0,
           "5": 0
         }
@@ -481,6 +501,11 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
     "scatterPays": {},
     "freeSpinsAwarded": {},
     "freeSpinMultiplier": 1,
+    "tiers": {
+      "big": 12.5,
+      "mega": 41.7,
+      "jackpot": 83.4
+    },
     "feature": {
       "kind": "wheel",
       "segments": [
@@ -583,7 +608,12 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
       "4": 12,
       "5": 20
     },
-    "freeSpinMultiplier": 2
+    "freeSpinMultiplier": 2,
+    "tiers": {
+      "big": 7.3,
+      "mega": 22.8,
+      "jackpot": 38.1
+    }
   },
   "tumble-20": {
     "id": "tumble-20",
@@ -665,7 +695,12 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
     ],
     "scatterPays": {},
     "freeSpinsAwarded": {},
-    "freeSpinMultiplier": 1
+    "freeSpinMultiplier": 1,
+    "tiers": {
+      "big": 14.3,
+      "mega": 36.6,
+      "jackpot": 86.9
+    }
   },
   "classic-3": {
     "id": "classic-3",
@@ -738,6 +773,11 @@ export const SLOT_MODEL_INFO: Record<string, SlotModelInfo> = {
     ],
     "scatterPays": {},
     "freeSpinsAwarded": {},
-    "freeSpinMultiplier": 1
+    "freeSpinMultiplier": 1,
+    "tiers": {
+      "big": 14.8,
+      "mega": 44.5,
+      "jackpot": 148.2
+    }
   }
 };

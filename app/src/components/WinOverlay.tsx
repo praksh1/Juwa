@@ -29,6 +29,7 @@ import { usePrefersReducedMotion, rollUpDuration, type WinTier } from '../motion
  */
 const BANNER_BIG = '/art/overlays/banner-big-win.png';
 const BANNER_MEGA = '/art/overlays/banner-mega-win.png';
+const BANNER_JACKPOT = '/art/overlays/banner-jackpot.png';
 
 export function WinOverlay({
   tier,
@@ -41,7 +42,7 @@ export function WinOverlay({
   round: number;
   onDone?: () => void;
 }) {
-  const visible = tier === 'big' || tier === 'mega';
+  const visible = tier === 'big' || tier === 'mega' || tier === 'jackpot';
   const reducedMotion = usePrefersReducedMotion();
   const enter = useRef(new Animated.Value(0)).current;
 
@@ -72,16 +73,22 @@ export function WinOverlay({
   if (!visible) return null;
 
   const scale = enter.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] });
+  const jackpot = tier === 'jackpot';
   const mega = tier === 'mega';
+  const banner = jackpot ? BANNER_JACKPOT : mega ? BANNER_MEGA : BANNER_BIG;
 
   return (
     <View style={styles.layer} pointerEvents="none">
       <Animated.View style={[styles.card, { opacity: enter, transform: [{ scale }] }]}>
         <LinearGradient
           colors={
-            mega
-              ? ['#FF3D8A', '#7C3AED', '#08070E']
-              : [colors.gold.default, '#7A6425', '#08070E']
+            jackpot
+              ? // White-gold, so the top tier is not simply "the pink one
+                // again" — a jackpot has to be visibly its own event.
+                ['#FFF3CE', '#E8BC4E', '#3A2A05']
+              : mega
+                ? ['#FF3D8A', '#7C3AED', '#08070E']
+                : [colors.gold.default, '#7A6425', '#08070E']
           }
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -100,10 +107,10 @@ export function WinOverlay({
           as a screen reader is concerned.
         */}
         <Image
-          source={{ uri: mega ? BANNER_MEGA : BANNER_BIG }}
+          source={{ uri: banner }}
           style={styles.banner}
           resizeMode="contain"
-          accessibilityLabel={mega ? 'Mega win' : 'Big win'}
+          accessibilityLabel={jackpot ? 'Jackpot' : mega ? 'Mega win' : 'Big win'}
         />
         <CoinCounter
           amount={amount}

@@ -21,6 +21,77 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const { SLOT_CATALOGUE, SLOT_MODELS } = await import(
   resolve(root, 'packages/engine/dist/games/slot-catalogue.js')
 );
+const { buildStrips } = await import(resolve(root, 'packages/engine/dist/games/slot-math.js'));
+const { resolveRound } = await import(
+  resolve(root, 'packages/engine/dist/games/slot-features.js')
+);
+const { RngStream } = await import(resolve(root, 'packages/engine/dist/rng.js'));
+
+/**
+ * What counts as a big win ON THIS MACHINE.
+ *
+ * ## Why one global threshold could not work
+ *
+ * The celebration tiers were fixed for the whole app: 25x the stake for a BIG
+ * WIN and 60x for a MEGA WIN. Measured over 60,000 spins per model, that meant:
+ *
+ *   - a BIG WIN arrives about once in 280 spins, so the founder played 100
+ *     spins in auto mode and correctly reported never seeing one;
+ *   - a MEGA WIN is once in 1,600 to 5,000 spins on most models;
+ *   - and on `ways-diamond` a MEGA WIN IS IMPOSSIBLE. Its largest win in
+ *     60,000 spins was 49x against a 60x threshold, so the banner could never
+ *     fire however long anybody played.
+ *
+ * The models are not interchangeable — their maximum wins run from 49x to 296x
+ * — so a single number is either unreachable on the low-variance games or
+ * constant on the high-variance ones.
+ *
+ * ## So the thresholds are measured, not chosen
+ *
+ * Each model's distribution is sampled and the thresholds are the payouts at a
+ * target FREQUENCY. That makes the promise the same everywhere — a big win is
+ * something you see in a session, a jackpot is something you remember — while
+ * the multiple behind it differs per machine, which is exactly the fact the
+ * player does not need to know.
+ *
+ * The frequencies are the industry's rough shape and are stated as odds rather
+ * than multiples because odds are what a player experiences.
+ */
+const TIER_FREQUENCY = { big: 90, mega: 600, jackpot: 6000 };
+/** Enough that the 1-in-6000 quantile is measured rather than extrapolated. */
+const TIER_SAMPLES = 60_000;
+
+function measureTiers(model) {
+  const strips = buildStrips(model.math);
+  const wins = [];
+  for (let i = 0; i < TIER_SAMPLES; i += 1) {
+    const rng = new RngStream(`tiers-${model.id}`, 'calibration', i);
+    const m = resolveRound(strips, model.math, rng).totalMultiplier;
+    if (m > 0) wins.push(m);
+  }
+  wins.sort((a, b) => b - a);
+
+  /*
+   * The payout at "one spin in N". Taken from the sorted wins by index, so it
+   * is a real observed payout rather than a curve fitted to one — and clamped
+   * to the largest win actually seen, so a threshold can never be set beyond
+   * what the machine can pay.
+   */
+  const at = (n) => {
+    const index = Math.floor(TIER_SAMPLES / n);
+    const value = wins[Math.min(index, wins.length - 1)] ?? 0;
+    return Math.max(2, Math.round(value * 10) / 10);
+  };
+
+  const big = at(TIER_FREQUENCY.big);
+  const mega = Math.max(big * 1.6, at(TIER_FREQUENCY.mega));
+  const jackpot = Math.max(mega * 1.5, at(TIER_FREQUENCY.jackpot));
+  return {
+    big,
+    mega: Math.round(mega * 10) / 10,
+    jackpot: Math.round(jackpot * 10) / 10,
+  };
+}
 
 /** Rows per reel, whether the model declared one number or a shape. */
 const heights = (math) =>
@@ -108,6 +179,9 @@ for (const [id, model] of Object.entries(SLOT_MODELS)) {
     ),
     freeSpinsAwarded: { ...model.math.freeSpinsAwarded },
     freeSpinMultiplier: model.math.freeSpinMultiplier,
+    // Stake multiples at which each celebration fires, measured per model.
+    // See measureTiers.
+    tiers: measureTiers(model),
     /*
      * The feature, in the detail the CLIENT needs to draw it.
      *

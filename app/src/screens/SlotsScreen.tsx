@@ -200,6 +200,9 @@ const AUTO_PAUSE_MS: Record<WinTier, number> = {
   burst: 2_600,
   big: 4_000,
   mega: 5_500,
+  // The longest hold in the app: a jackpot is the one result a player wants
+  // a moment with before the next spin starts.
+  jackpot: 6_000,
 };
 
 /** What the drops after the first grid are worth, in stake multiples. */
@@ -475,13 +478,21 @@ export function SlotsScreen() {
   }, [auto]);
 
   const celebrate = useCallback((payout: number, stake: number) => {
-    const tier = winTier(payout, stake);
+    /*
+     * This machine's own thresholds, not the app's.
+     *
+     * They used to be constants — 25x big, 60x mega — and a hundred spins in
+     * auto mode produced neither, correctly: a 25x win is once in 280 spins,
+     * and on the 720-ways model a 60x win never occurred in 60,000 because its
+     * largest was 49x. See `SlotModelInfo.tiers`.
+     */
+    const tier = winTier(payout, stake, paytable?.tiers);
     if (tier === 'none') return;
 
     celebrationRound.current += 1;
     setCelebration({ tier, amount: payout, round: celebrationRound.current });
 
-    if (tier === 'mega') sounds.megaWin();
+    if (tier === 'jackpot' || tier === 'mega') sounds.megaWin();
     else if (tier === 'big') sounds.bigWin();
     else if (tier === 'burst') sounds.coins(8);
     else sounds.win();
@@ -1087,7 +1098,7 @@ export function SlotsScreen() {
   return (
     <View style={styles.screen}>
       {showRules && details && paytable ? (
-        <RulesIntro game={details} model={paytable} onPlay={() => setShowRules(false)} />
+        <RulesIntro game={details} model={paytable} bet={bet} onPlay={() => setShowRules(false)} />
       ) : null}
       <View style={styles.header}>
         <View>
@@ -1112,7 +1123,9 @@ export function SlotsScreen() {
           wanting to know what a bell pays wants it without leaving the game;
           a player who does not should barely notice it is there.
         */}
-        {details && paytable ? <PaytableButton game={details} model={paytable} /> : null}
+        {details && paytable ? (
+          <PaytableButton game={details} model={paytable} bet={bet} />
+        ) : null}
         {/*
           Music and effects, right here in the header.
           
@@ -1381,7 +1394,12 @@ export function SlotsScreen() {
         */}
         <DragonRoar
           round={celebration.round}
-          active={gameId === DRAGON_GAME_ID && (celebration.tier === 'big' || celebration.tier === 'mega')}
+          active={
+            gameId === DRAGON_GAME_ID &&
+            (celebration.tier === 'big' ||
+              celebration.tier === 'mega' ||
+              celebration.tier === 'jackpot')
+          }
           size={Math.min(300, cellHeight * 3)}
         />
         <WinOverlay

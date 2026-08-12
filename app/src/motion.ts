@@ -40,23 +40,57 @@ export function usePrefersReducedMotion(): boolean {
  * to ignore the whole vocabulary, and the one moment a slot machine exists to
  * deliver lands flat.
  */
-export type WinTier = 'none' | 'win' | 'burst' | 'big' | 'mega';
+export type WinTier = 'none' | 'win' | 'burst' | 'big' | 'mega' | 'jackpot';
 
-/** Multiples of the stake at which each tier begins. */
-export const TIER_THRESHOLDS = { burst: 6, big: 25, mega: 60 } as const;
+/**
+ * Where each tier begins, as a multiple of the stake.
+ *
+ * `burst` is global because it is the small confetti moment and 6x is common on
+ * every model — measured between 1 in 24 and 1 in 66 spins. The three loud
+ * tiers are NOT global: they are measured per model and arrive with the game.
+ * See `SlotModelInfo.tiers`.
+ */
+export const BURST_THRESHOLD = 6;
 
-export function winTier(payout: number, stake: number): WinTier {
+/** The fallback, for a game that has no measured tiers of its own. */
+export const DEFAULT_TIERS = { big: 12, mega: 35, jackpot: 80 } as const;
+
+export interface WinTiers {
+  big: number;
+  mega: number;
+  jackpot: number;
+}
+
+/**
+ * How big a win is, on THIS machine.
+ *
+ * The thresholds used to be constants — 25x for big, 60x for mega — and the
+ * founder played over a hundred spins in auto mode and never saw either. They
+ * were right to report it: measured over 60,000 spins per model, a 25x win
+ * arrives about once in 280 spins, and on the 720-ways model a 60x win never
+ * arrived at all because its largest win in the whole sample was 49x.
+ *
+ * Passing the model's own thresholds makes the tiers mean a FREQUENCY rather
+ * than a multiple: a big win is roughly once in ninety spins on every machine,
+ * a mega once in six hundred, a jackpot once in six thousand. Which multiple
+ * that corresponds to is a property of the machine and not something a player
+ * needs to hold in their head.
+ */
+export function winTier(payout: number, stake: number, tiers: WinTiers = DEFAULT_TIERS): WinTier {
   if (payout <= 0 || stake <= 0) return 'none';
   const multiple = payout / stake;
-  if (multiple >= TIER_THRESHOLDS.mega) return 'mega';
-  if (multiple >= TIER_THRESHOLDS.big) return 'big';
-  if (multiple >= TIER_THRESHOLDS.burst) return 'burst';
+  if (multiple >= tiers.jackpot) return 'jackpot';
+  if (multiple >= tiers.mega) return 'mega';
+  if (multiple >= tiers.big) return 'big';
+  if (multiple >= BURST_THRESHOLD) return 'burst';
   return 'win';
 }
 
 /** How long the coin counter takes to roll up, in milliseconds. */
 export function rollUpDuration(tier: WinTier): number {
   switch (tier) {
+    case 'jackpot':
+      return 4200;
     case 'mega':
       return 3200;
     case 'big':
