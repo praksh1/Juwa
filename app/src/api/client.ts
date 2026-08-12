@@ -231,6 +231,66 @@ export interface AgentInvite {
   redeemedBy: string | null;
 }
 
+
+/* --------------------------------------------------------- casino cash */
+
+/**
+ * The second currency.
+ *
+ * Not a replacement for anything: GC is still what the games are played with,
+ * and CC is a conversion balance that buys GC back. Held in its own account so
+ * the two can never be added together by accident — see migration 0014.
+ */
+export interface WalletBalances {
+  gc: number;
+  cc: number;
+}
+
+export type ConversionDirection = 'gc_to_cc' | 'cc_to_gc';
+export type ConversionStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+export interface ConversionRequest {
+  id: string;
+  playerId: string;
+  /** Present when an AGENT is reading the row; null on a player's own list. */
+  username: string | null;
+  agentId: string;
+  direction: ConversionDirection;
+  gcAmount: number;
+  ccAmount: number;
+  /**
+   * The rate this request was priced at, copied when it was raised.
+   *
+   * Never re-read from the rate table, so a settled conversion cannot be
+   * re-priced by a later rate change.
+   */
+  gcPerCc: number;
+  status: ConversionStatus;
+  requestedAt: string;
+  decidedAt: string | null;
+  reason: string | null;
+}
+
+export interface WalletResponse {
+  wallet: WalletBalances;
+  /**
+   * GC per CC, for THIS player.
+   *
+   * Only the player-facing rate. The operator rate an agent gets is their own
+   * commercial term and is deliberately not sent here.
+   */
+  rate: number;
+  agent: { agentId: string; displayName: string } | null;
+  requests: ConversionRequest[];
+}
+
+export interface AgentConversions {
+  wallet: WalletBalances;
+  rates: { playerAgent: number; agentOperator: number };
+  requests: ConversionRequest[];
+  redemptions: { id: string; ccAmount: number; gcAmount: number; gcPerCc: number; createdAt: string }[];
+}
+
 export interface PlayApi {
   getBalance(): Promise<{
     balance: number;
@@ -334,6 +394,40 @@ export interface PlayApi {
   applyToBeAgent(displayName: string, notes?: string): Promise<{ status: string }>;
   /** Record that the player has replaced their temporary password. */
   confirmPasswordSet(): Promise<{ ok: boolean }>;
+
+  /* --------------------------------------------------------- casino cash */
+
+  /**
+   * Both balances, the player's rate and their conversion requests.
+   *
+   * One call rather than three, because the wallet screen shows all of it at
+   * once and three round trips means three chances for the numbers on screen to
+   * disagree with each other for a second.
+   */
+  getWallet(): Promise<WalletResponse>;
+  /**
+   * Ask to convert. MOVES NOTHING — it creates a request an agent has to
+   * approve, and the balances are unchanged until they do.
+   *
+   * `amount` is GC for `gc_to_cc` and CC for `cc_to_gc`: the side the player
+   * names is exact and the other is derived, so they are never surprised by
+   * rounding.
+   */
+  requestConversion(request: {
+    direction: ConversionDirection;
+    amount: number;
+  }): Promise<{ request: ConversionRequest }>;
+  cancelConversion(requestId: string): Promise<{ ok: boolean }>;
+
+  /** The agent side: the queue addressed to them, their balances, both rates. */
+  getAgentConversions(status?: 'pending' | 'approved' | 'rejected' | 'all'): Promise<AgentConversions>;
+  approveConversion(requestId: string): Promise<{ player: WalletBalances }>;
+  rejectConversion(requestId: string, reason?: string): Promise<{ ok: boolean }>;
+  /** Spend CC with the operator on GC inventory. */
+  redeemAgentCc(request: {
+    ccAmount: number;
+    idempotencyKey: string;
+  }): Promise<{ gcAmount: number; gcPerCc: number; wallet: WalletBalances }>;
 
   /* ------------------------------------------------- responsible gaming */
 
@@ -754,6 +848,42 @@ export class HttpPlayApi implements PlayApi {
   resetPlayerPassword(request: { playerId: string; password: string }) {
     return this.request<{ ok: boolean; mustSetPassword: boolean }>(
       '/agent/players/reset-password',
+      request,
+    );
+  }
+
+  /* --------------------------------------------------------- casino cash */
+
+  getWallet() {
+    return this.request<WalletResponse>('/wallet');
+  }
+
+  requestConversion(request: { direction: ConversionDirection; amount: number }) {
+    return this.request<{ request: ConversionRequest }>('/wallet/convert', request);
+  }
+
+  cancelConversion(requestId: string) {
+    return this.request<{ ok: boolean }>('/wallet/convert/cancel', { requestId });
+  }
+
+  getAgentConversions(status: 'pending' | 'approved' | 'rejected' | 'all' = 'pending') {
+    return this.request<AgentConversions>(`/agent/conversions?status=${status}`);
+  }
+
+  approveConversion(requestId: string) {
+    return this.request<{ player: WalletBalances }>('/agent/conversions/approve', { requestId });
+  }
+
+  rejectConversion(requestId: string, reason?: string) {
+    return this.request<{ ok: boolean }>('/agent/conversions/reject', {
+      requestId,
+      ...(reason ? { reason } : {}),
+    });
+  }
+
+  redeemAgentCc(request: { ccAmount: number; idempotencyKey: string }) {
+    return this.request<{ gcAmount: number; gcPerCc: number; wallet: WalletBalances }>(
+      '/agent/conversions/redeem',
       request,
     );
   }
@@ -1301,6 +1431,48 @@ export class DemoPlayApi implements PlayApi {
     this.noAgentInDemo();
   }
   async resetPlayerPassword(): Promise<never> {
+    this.noAgentInDemo();
+  }
+
+  /* --------------------------------------------------------- casino cash */
+
+  /**
+   * The wallet still LOADS in demo mode, and shows an empty CC balance.
+   *
+   * Deliberately not `noAgentInDemo()`. The wallet screen is the one place a
+   * player sees both balances, and a screen that throws in the demo build is a
+   * screen nobody looks at during development — which is how it ships with the
+   * layout wrong. A demo player has no agent, so `agent: null` puts the screen
+   * into exactly the state a real unaffiliated player would see, which is the
+   * state most likely to be got wrong.
+   *
+   * Everything that MOVES coins still refuses, below.
+   */
+  async getWallet(): Promise<WalletResponse> {
+    return {
+      wallet: { gc: this.balance, cc: 0 },
+      rate: 0,
+      agent: null,
+      requests: [],
+    };
+  }
+
+  async requestConversion(): Promise<never> {
+    this.noAgentInDemo();
+  }
+  async cancelConversion(): Promise<never> {
+    this.noAgentInDemo();
+  }
+  async getAgentConversions(): Promise<never> {
+    this.noAgentInDemo();
+  }
+  async approveConversion(): Promise<never> {
+    this.noAgentInDemo();
+  }
+  async rejectConversion(): Promise<never> {
+    this.noAgentInDemo();
+  }
+  async redeemAgentCc(): Promise<never> {
     this.noAgentInDemo();
   }
   async applyToBeAgent(): Promise<never> {

@@ -19,21 +19,35 @@ export type Minor = number & { readonly __brand: 'Minor' };
  * Juwa runs the SOCIAL CASINO model (decided 2026-08; see
  * docs/03-payments-and-legal.md).
  *
- * Two currencies, and only two:
+ * Three currencies:
  *
  *   GC  — Gold Coins. What players wager. Bought with real money or earned
- *         free, and NEVER convertible back. They are entertainment, like arcade
- *         tokens, not a balance.
+ *         free, and NEVER convertible back to money. They are entertainment,
+ *         like arcade tokens, not a balance.
+ *   CC  — Casino Cash. A conversion balance held between a player and their
+ *         agent. It buys GC and it buys NOTHING ELSE — there is no path from CC
+ *         to money, to a card, or to another player.
  *   USD — real money, used solely to price coin packs in the store. Players
  *         never hold a USD balance in the app.
  *
- * There is deliberately no third, redeemable currency. Adding one turns the
- * product into a sweepstakes casino, which is a different legal animal
- * requiring counsel, state-by-state analysis, KYC and a redemption processor.
- * Leaving it out means the store is ordinary digital-goods commerce that Stripe,
- * Apple and Google will all happily process.
+ * ## What this file used to say, and what changed
+ *
+ * It said "two currencies, and only two", and that there was deliberately no
+ * third because a redeemable one turns the product into a sweepstakes casino.
+ * The first half is now out of date; the second half is not, and is the reason
+ * `CC.redeemable` is FALSE.
+ *
+ * `redeemable` here means exactly one thing: whether `assertRedeemable` will
+ * let a cash-out path proceed. CC converts to GC, which is a movement inside a
+ * closed loop between two virtual balances; it does not convert to money, and
+ * nothing in this codebase can pay it out. That gate is unchanged and still
+ * throws for every currency in the table.
+ *
+ * Whether the SURROUNDING business — agents settling with players off-platform
+ * — makes this a sweepstakes model is a question for counsel and not one this
+ * type can answer. See docs/03-payments-and-legal.md.
  */
-export type CurrencyCode = 'USD' | 'GC';
+export type CurrencyCode = 'USD' | 'GC' | 'CC';
 
 export interface Currency {
   code: CurrencyCode;
@@ -53,6 +67,18 @@ export const CURRENCIES: Record<CurrencyCode, Currency> = {
   USD: { code: 'USD', decimals: 2, symbol: '$', redeemable: false },
   /** Gold Coins — pure play money. Purchasable, never redeemable. */
   GC: { code: 'GC', decimals: 0, symbol: 'GC', redeemable: false },
+  /**
+   * Casino Cash — converts to GC and to nothing else.
+   *
+   * Whole numbers, like GC: a rate is expressed as an integer number of GC per
+   * CC precisely so that no conversion ever produces a fraction of either.
+   *
+   * The symbol is the letters. NOT a currency sign, and never `$` — CC is not
+   * dollars, is not redeemable for dollars, and drawing it as though it were is
+   * the single fastest way to make every claim this product makes about being a
+   * social casino untrue.
+   */
+  CC: { code: 'CC', decimals: 0, symbol: 'CC', redeemable: false },
 };
 
 /** The currency players actually wager. */

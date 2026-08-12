@@ -4,17 +4,26 @@ import { colors, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
 import { Button, Card, Screen, SectionHeader, Txt } from '../components/primitives';
 import { usePlayer } from '../api/usePlayer';
-import { createPlayApi, type HistoryEntry } from '../api/client';
+import { createPlayApi, type HistoryEntry, type WalletResponse } from '../api/client';
+import { ConversionPanel, ConversionPanelSkeleton } from '../components/ConversionPanel';
 import { LOBBY_BED, useAmbientBed } from '../ambience';
 
 /**
  * Wallet.
  *
- * There is no "Redeem" button, and that is the product decision made visible.
- * Juwa runs the social casino model: coins are bought or earned and spent on
- * play, and never convert back to money. The second action is "Free Coins" —
- * the daily bonus — because in a social casino the free economy is what keeps
- * players present for the paid one.
+ * ## Two balances, and what the second one is not
+ *
+ * Gold Coins are what the games are played with. Casino Cash is a conversion
+ * balance held between a player and their agent: it buys GC, and it buys
+ * nothing else. There is still no path from either to money — no withdrawal, no
+ * cash-out, no player-to-player transfer — which is what the footer says and
+ * what the absence of any such control means.
+ *
+ * This file used to open by explaining that there was no "Redeem" button at
+ * all. There is one now, and it does not redeem for money: it asks an agent to
+ * exchange GC for CC at a published rate, and it moves nothing until they
+ * agree. The distinction is the whole product, so the panel states it in every
+ * state it can be in.
  *
  * The activity list is the player-facing view of the double-entry ledger. Each
  * row is one side of a balanced transaction, so a support question — "where did
@@ -73,11 +82,60 @@ export function WalletScreen() {
   useAmbientBed(LOBBY_BED);
   const api = React.useRef(createPlayApi()).current;
 
+  const [wallet, setWallet] = useState<WalletResponse | null>(null);
+  const [converting, setConverting] = useState(false);
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * The two balances and the conversion queue.
+   *
+   * Refetched whenever the GC balance changes, alongside the activity list, so
+   * a spin or an approval shows up without a pull to refresh. A failure is
+   * SWALLOWED rather than shown: the CC panel is additive, and a player whose
+   * agent's rate lookup hiccuped should still see their coins and their
+   * history.
+   */
+  const loadWallet = useCallback(async () => {
+    try {
+      setWallet(await api.getWallet());
+    } catch {
+      /* leave whatever was there; the panel is not the point of this screen */
+    }
+  }, [api]);
+
+  useEffect(() => {
+    void loadWallet();
+  }, [loadWallet, balance]);
+
+  const requestConversion = useCallback(
+    async (direction: 'gc_to_cc' | 'cc_to_gc', amount: number) => {
+      setConverting(true);
+      try {
+        await api.requestConversion({ direction, amount });
+        await loadWallet();
+      } finally {
+        setConverting(false);
+      }
+    },
+    [api, loadWallet],
+  );
+
+  const cancelConversion = useCallback(
+    async (requestId: string) => {
+      setConverting(true);
+      try {
+        await api.cancelConversion(requestId);
+        await loadWallet();
+      } finally {
+        setConverting(false);
+      }
+    },
+    [api, loadWallet],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -128,6 +186,25 @@ export function WalletScreen() {
           Gold Coins have no cash value and cannot be withdrawn.
         </Txt>
       </Card>
+
+      {/*
+        Casino Cash, under the GC card and above the history.
+
+        Under, because GC is the balance a player checks before they play and
+        this must not push it off the top of the screen. Above the history,
+        because a pending request is a thing they are waiting on and belongs
+        with the balances rather than at the end of a list of past events.
+      */}
+      {wallet ? (
+        <ConversionPanel
+          data={wallet}
+          busy={converting}
+          onRequest={requestConversion}
+          onCancel={cancelConversion}
+        />
+      ) : (
+        <ConversionPanelSkeleton />
+      )}
 
       <View>
         <SectionHeader title="Activity" />
