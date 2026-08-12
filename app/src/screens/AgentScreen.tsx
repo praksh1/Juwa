@@ -6,15 +6,21 @@
  * that job and nothing else — inventory at the top, the player list under it,
  * invitations, and a ledger.
  *
- * ## What is deliberately not on this screen
+ * ## Casino Cash, and the line that moved
  *
- * There is no way to take coins BACK from a player, no cash-out, no transfer to
- * another agent, and no way to change which agent a player belongs to. None of
- * those are unbuilt features waiting for a later release: a balance that can
- * flow back out to a person is a balance that can be paid cash for, and that is
- * the line between a social casino and something that needs a gambling licence.
- * The server has no route for any of them either, so nothing here is enforced
- * by the absence of a button.
+ * This file used to say there was no way to take coins BACK from a player,
+ * full stop, because a balance that can flow back to a person is one that can
+ * be paid cash for. There is now exactly one way, and it is narrow on purpose:
+ * a player RAISES A REQUEST, the agent approves it, it is priced at a published
+ * rate, and both legs land on the ledger. The agent cannot initiate it, cannot
+ * set the rate, and cannot take coins from a player who has not asked.
+ *
+ * ## What is still deliberately not on this screen
+ *
+ * No cash-out. No transfer to another agent. No way to change which agent a
+ * player belongs to. No way to move coins from a player without a request they
+ * made themselves. The server has no route for any of them either, so none of
+ * this is enforced by the absence of a button.
  *
  * ## Why the amount is typed rather than picked from chips
  *
@@ -30,6 +36,7 @@ import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react
 import { colors, radius, spacing } from '@juwa/ui';
 import { Badge, Button, Card, Screen, SectionHeader, Txt } from '../components/primitives';
 import { useAgentDesk } from '../api/useAgent';
+import { AgentConversions } from '../components/AgentConversions';
 import type { AgentPlayer } from '../api/client';
 import { StatePicker } from '../components/StatePicker';
 import { PasswordInput } from '../components/PasswordInput';
@@ -168,6 +175,26 @@ export function AgentScreen() {
             {notice.text}
           </Txt>
         </Card>
+      ) : null}
+
+      {/*
+        The conversion queue, ABOVE the allocation form.
+
+        A pending request is somebody waiting on this agent; the allocation form
+        is work the agent chose to start. Rendered only when the queue actually
+        loaded — see `useAgentDesk`, where this one read is allSettled so that a
+        failure cannot take the rest of the desk down with it.
+      */}
+      {desk.conversions ? (
+        <View>
+          <SectionHeader title="Casino Cash" />
+          <AgentConversions
+            data={desk.conversions}
+            canAct={summary.status === 'active'}
+            onDecide={desk.decideConversion}
+            onRedeem={desk.redeemCc}
+          />
+        </View>
       ) : null}
 
       {/* ------------------------------------------------------- allocation */}

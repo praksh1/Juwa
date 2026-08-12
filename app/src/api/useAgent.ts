@@ -23,6 +23,7 @@ import {
   type AgentInvite,
   type AgentPlayer,
   type AgentSummary,
+  type AgentConversions,
   type AgentTxn,
   type PlayApi,
 } from './client';
@@ -68,6 +69,16 @@ export interface AgentDesk {
   players: AgentPlayer[];
   transactions: AgentTxn[];
   invites: AgentInvite[];
+  /**
+   * The conversion queue, both balances and both rates.
+   *
+   * Null while it is loading and after a failure, and the panel renders
+   * nothing in either case. That is deliberate rather than lazy: the rest of
+   * this desk is how an agent funds the player standing in front of them, and
+   * a conversion queue that fails to load must not take the allocation form
+   * down with it.
+   */
+  conversions: AgentConversions | null;
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
@@ -83,6 +94,14 @@ export interface AgentDesk {
     playerId: string,
     password: string,
   ) => Promise<{ ok: boolean; message?: string }>;
+  /** Settle a player's conversion request. */
+  decideConversion: (
+    requestId: string,
+    decision: 'approve' | 'reject',
+    reason?: string,
+  ) => Promise<{ ok: boolean; message?: string }>;
+  /** Spend CC with the operator on GC inventory. */
+  redeemCc: (ccAmount: number) => Promise<{ ok: boolean; gcAmount?: number; message?: string }>;
 }
 
 export function useAgentDesk(): AgentDesk {
@@ -91,23 +110,37 @@ export function useAgentDesk(): AgentDesk {
   const [players, setPlayers] = useState<AgentPlayer[]>([]);
   const [transactions, setTransactions] = useState<AgentTxn[]>([]);
   const [invites, setInvites] = useState<AgentInvite[]>([]);
+  const [conversions, setConversions] = useState<AgentConversions | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      // In parallel: four independent reads, and doing them in sequence on a
-      // phone connection is four round trips of blank screen.
-      const [next, playerList, txns, inviteList] = await Promise.all([
+      /*
+       * In parallel, and the conversions read is allSettled rather than part of
+       * the `all`.
+       *
+       * Four of these five are what the desk IS. The fifth is a queue that may
+       * be empty, may 404 on an older server, and must never be the reason an
+       * agent cannot see their inventory or fund a player who is standing in
+       * front of them. A rejection here leaves `conversions` null and the panel
+       * simply absent.
+       */
+      const [next, playerList, txns, inviteList, queue] = await Promise.all([
         api.getAgentSummary(),
         api.getAgentPlayers(),
         api.getAgentTransactions(),
         api.getAgentInvites(),
+        api.getAgentConversions('all').then(
+          (value) => value,
+          () => null,
+        ),
       ]);
       setSummary(next);
       setPlayers(playerList.players);
       setTransactions(txns.transactions);
       setInvites(inviteList.invites);
+      setConversions(queue);
       setError(null);
     } catch (caught) {
       setError(caught instanceof PlayApiError ? caught.message : 'Could not load your agent desk');
@@ -154,6 +187,55 @@ export function useAgentDesk(): AgentDesk {
         return {
           ok: false,
           message: caught instanceof PlayApiError ? caught.message : 'Could not send those coins',
+        };
+      }
+    },
+    [api, refresh],
+  );
+
+  /**
+   * Approve or reject one request.
+   *
+   * No optimistic update, for the same reason `allocate` has none: the numbers
+   * on this screen ARE the transaction, and an inventory that briefly shows
+   * coins it does not have is how an agent over-commits to somebody in the
+   * room. The refresh that follows is awaited, so the queue the agent looks at
+   * next is the queue the server has.
+   */
+  const decideConversion = useCallback(
+    async (requestId: string, decision: 'approve' | 'reject', reason?: string) => {
+      try {
+        if (decision === 'approve') await api.approveConversion(requestId);
+        else await api.rejectConversion(requestId, reason);
+        // An agent is a player too, and an approval moves their own inventory.
+        notifyBalanceChanged();
+        await refresh();
+        return { ok: true };
+      } catch (caught) {
+        return {
+          ok: false,
+          message:
+            caught instanceof PlayApiError ? caught.message : 'Could not settle that request',
+        };
+      }
+    },
+    [api, refresh],
+  );
+
+  /** Buy GC inventory with CC, at the operator rate. */
+  const redeemCc = useCallback(
+    async (ccAmount: number) => {
+      // Generated once per attempt and reused on retry, exactly as `allocate`
+      // does — a key made inside the retry would be no protection at all.
+      const idempotencyKey = `cc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      try {
+        const result = await api.redeemAgentCc({ ccAmount, idempotencyKey });
+        await refresh();
+        return { ok: true, gcAmount: result.gcAmount };
+      } catch (caught) {
+        return {
+          ok: false,
+          message: caught instanceof PlayApiError ? caught.message : 'Could not redeem that',
         };
       }
     },
@@ -236,6 +318,7 @@ export function useAgentDesk(): AgentDesk {
       players,
       transactions,
       invites,
+      conversions,
       loading,
       error,
       refresh,
@@ -243,12 +326,15 @@ export function useAgentDesk(): AgentDesk {
       createInvite,
       createPlayer,
       resetPassword,
+      decideConversion,
+      redeemCc,
     }),
     [
       summary,
       players,
       transactions,
       invites,
+      conversions,
       loading,
       error,
       refresh,
@@ -256,6 +342,8 @@ export function useAgentDesk(): AgentDesk {
       createInvite,
       createPlayer,
       resetPassword,
+      decideConversion,
+      redeemCc,
     ],
   );
 }
