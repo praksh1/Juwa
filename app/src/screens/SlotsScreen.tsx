@@ -16,7 +16,8 @@ import { sounds, spinNow, stopBedIfPlaying, unlock, useSoundSet } from '../sound
 import { soundSetFor } from '../api/sound-sets';
 import { winTier, rollUpDuration, type WinTier } from '../motion';
 import { CoinCounter } from '../components/CoinCounter';
-import { CoinBurst } from '../components/CoinBurst';
+import { Fireworks, type FireworksHandle } from '../components/Fireworks';
+import { NeonRail } from '../components/ChaseLights';
 import {
   PaytableButton,
   RulesIntro,
@@ -323,6 +324,16 @@ export function SlotsScreen() {
   );
   const [error, setError] = useState<string | null>(null);
   const spinToken = useRef(0);
+  /**
+   * The coin rain, and the box it falls in.
+   *
+   * Measured rather than assumed because the pile has to know where the floor
+   * is: coins settle at the bottom of THIS cabinet, and a hard-coded height
+   * would bury the controls on a short phone and float above the felt on a
+   * tall one.
+   */
+  const coins = useRef<FireworksHandle | null>(null);
+  const [cabinetSize, setCabinetSize] = useState({ width: 0, height: 0 });
 
   /**
    * Free-spins state.
@@ -510,6 +521,26 @@ export function SlotsScreen() {
     else if (tier === 'big') sounds.bigWin();
     else if (tier === 'burst') sounds.coins(8);
     else sounds.win();
+
+    /*
+     * The coins.
+     *
+     * A BURST is thrown up from the middle, which is what a modest win has
+     * always done. The three loud tiers POUR from above for as long as the
+     * counter is rolling, and the coins land and heap at the bottom of the
+     * cabinet — which is the thing the founder's reference video does and this
+     * did not. A fountain that empties reads as an effect; a pile that
+     * accumulates reads as money arriving.
+     *
+     * The pour is timed to `rollUpDuration` so the rain stops when the number
+     * does. Coins still falling after the total has settled is the same fault
+     * as a fanfare outlasting its banner, in a different medium.
+     */
+    if (tier === 'burst') coins.current?.fire(0.35);
+    else if (tier !== 'win') {
+      const power = tier === 'jackpot' ? 1 : tier === 'mega' ? 0.75 : 0.5;
+      coins.current?.pour(power, rollUpDuration(tier) / 1000);
+    }
   }, []);
 
   /**
@@ -810,6 +841,14 @@ export function SlotsScreen() {
     const token = ++spinToken.current;
     setError(null);
     setRound(null);
+    /*
+     * Sweep the last win's coins.
+     *
+     * The heap fades on its own after a beat, but a player who spins again
+     * straight away would otherwise watch the new reels through the previous
+     * round's pile. A celebration belongs to the spin that earned it.
+     */
+    coins.current?.clear();
     // On the same clock the reels and the stop sounds use, so the floor below
     // is measured against the moment the reels actually started turning.
     const startedTurningAt = spinNow();
@@ -1275,9 +1314,6 @@ export function SlotsScreen() {
           />
         ) : null}
 
-        {/* Coins are thrown from the centre of the reels, above the symbols
-            but below anything a player can press. */}
-        <CoinBurst tier={celebration.tier} round={celebration.round} />
         </Animated.View>
         </ReelFrame>
         {/* The handle sits beside the reels, at their height, so pulling it
@@ -1433,6 +1469,68 @@ export function SlotsScreen() {
           }
           size={Math.min(300, cellHeight * 3)}
         />
+        {/*
+          Neon down both sides of the machine.
+
+          The other thing the reference video has that costs nothing: a lit
+          tube running the height of the cabinet with a highlight travelling
+          along it. Two of them, in the game's own accent, so a machine is lit
+          in its own colour rather than every machine being lit the same.
+
+          Outside the reel frame and inside the card, which is where the strip
+          sits on a real cabinet — on the surround, not on the glass.
+        */}
+        {cabinetSize.height > 0 ? (
+          <>
+            <View style={[styles.rail, styles.railLeft]} pointerEvents="none">
+              <NeonRail height={cabinetSize.height * 0.82} colour={details?.theme.accent ?? '#5FD8FF'} />
+            </View>
+            <View style={[styles.rail, styles.railRight]} pointerEvents="none">
+              <NeonRail
+                height={cabinetSize.height * 0.82}
+                colour={details?.theme.accent ?? '#5FD8FF'}
+                // Offset so the two sides are not in lockstep, which reads as
+                // one light behind a mirror rather than two tubes.
+                duration={3_100}
+              />
+            </View>
+          </>
+        ) : null}
+
+        {/*
+          The coin rain, over the WHOLE cabinet.
+
+          Not inside the reel frame, where the old vector burst lived. Coins
+          have to fall past the reels and heap on the floor of the machine, and
+          a layer clipped to the bay would have them landing in mid-air halfway
+          up. It sits UNDER the win overlay so the banner and the rolling
+          counter stay readable through the rain.
+
+          `onLayout` on the wrapper rather than a constant: the pile settles at
+          the bottom of this box, and the box is a different height on every
+          phone.
+        */}
+        <View
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+          onLayout={(event) => {
+            const { width, height } = event.nativeEvent.layout;
+            setCabinetSize((current) =>
+              Math.abs(current.width - width) < 1 && Math.abs(current.height - height) < 1
+                ? current
+                : { width, height },
+            );
+          }}
+        >
+          {cabinetSize.width > 0 ? (
+            <Fireworks
+              width={cabinetSize.width}
+              height={cabinetSize.height}
+              controller={coins}
+              pile
+            />
+          ) : null}
+        </View>
         <WinOverlay
           tier={celebration.tier}
           amount={celebration.amount}
@@ -1577,6 +1675,22 @@ const styles = StyleSheet.create({
   fsRow: { alignItems: 'center', gap: 2 },
   winRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   hidden: { opacity: 0 },
+  /**
+   * The cabinet's side lighting.
+   *
+   * Absolutely positioned and centred vertically, so the rail is the same
+   * length whatever the machine's height works out to on this phone.
+   */
+  rail: { position: 'absolute', top: '9%', bottom: '9%', justifyContent: 'center' },
+  /*
+   * Six points in, not two.
+   *
+   * At two the rail lands on the cabinet's own gold border and disappears into
+   * it on the gold-themed games. Six puts it over the dark bay behind, where a
+   * lit tube reads as a lit tube.
+   */
+  railLeft: { left: 6 },
+  railRight: { right: 6 },
   /**
    * `center` rather than the default stretch, so a ragged machine reads as a
    * diamond rather than as five columns hanging from a shelf. On a rectangular

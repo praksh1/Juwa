@@ -35,6 +35,7 @@ import { Animated, Easing, StyleSheet, View, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import { colors, radius, spacing, typography } from '@juwa/ui';
+import { ChaseLights } from './ChaseLights';
 import { CoinCounter } from './CoinCounter';
 import { usePrefersReducedMotion, rollUpDuration, type WinTier } from '../motion';
 
@@ -237,6 +238,25 @@ export function WinOverlay({
           tier={tier}
           color={colors.text.primary}
           style={styles.amount}
+        />
+
+        {/*
+          The bulbs set into the frame.
+
+          Inside the card rather than around its edge, because the card clips
+          its own overflow for the shine below — lamps hung outside would be cut
+          in half. Set just in from the border, which is where a cabinet puts
+          them anyway.
+
+          This is the cheapest thing in the founder's reference video and one of
+          the loudest: a rainbow of bulbs running around the win frame. No
+          artwork, one animated value, twenty-eight interpolations of it.
+        */}
+        <ChaseLights
+          count={jackpot ? 36 : 28}
+          size={jackpot ? 8 : 7}
+          duration={jackpot ? 1_300 : mega ? 1_500 : 1_800}
+          inset={6}
         />
 
         {/*
