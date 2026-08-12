@@ -25,9 +25,48 @@ background, no shadow cast onto anything.**
 | Cropping | Nothing touching the canvas edge | Clipped edges show when it scales up |
 | Style | Painted, high-detail casino art, warm gold key light from upper-left | Matches the existing lobby tiles |
 
-> **If Gemini refuses transparency** — some versions flatten to white — ask for
-> the subject on **pure magenta `#FF00FF`**. That colour appears nowhere in the
-> subject matter here, so it keys out cleanly and I can do that in one pass.
+### Where to put them
+
+**`art/incoming/`**, raw, exactly as the generator returns them — see that
+folder's README. Do not rename, resize or crop first: both of the faults below
+are repairable in a raw file and permanently baked in once an image has been
+rescaled or re-encoded.
+
+Then either commit them, or send them to me in chat if that is easier. Run
+`npm run check:art art/incoming` if you want the faults listed before you do.
+
+### Two faults this repo has hit on every previous drop
+
+Documented in `art/README.md`, from three drops of generated art of which **not
+one was usable as delivered**. Both are worth heading off in the prompt.
+
+**1. The transparency checkerboard gets painted into the pixels.** The file
+looks right in a preview on a white page and shows a grey checked box on a dark
+reel. It hit 11 of 30 files in drop 1, 4 of 9 in drop 2, and 5 of 5 Gemini files
+in drop 3.
+
+Hard-edged subjects can be rescued by flood-filling from the frame edge. **Soft
+glows cannot** — a glow is semi-transparent, so the checker shows through it
+tinted, and what was behind is gone. That is why every glow asset in this brief
+(`coin-burst-glow`, `dragon-glow`, and all four sparkles in Set 4) should be
+requested on **solid black, not transparency**, and saved as JPEG:
+
+> …on a solid pure black background, not transparent. Nothing else in frame.
+
+Black contributes nothing under an additive blend, so I composite those with a
+screen blend and the glow arrives clean. This is the one place where asking for
+transparency makes the asset *worse*.
+
+**2. Gemini stamps a small four-pointed badge into the corner**, at a constant
+90.5% across and 85.8% down. It is removable — a feathered disc filled with the
+median colour of the surrounding ring — but only if the file has not been
+resized, because the position is a constant rather than something detectable.
+Adding "no watermark, no logo, no signature" to the prompt sometimes prevents
+it; assume it will be there anyway.
+
+> **If Gemini refuses transparency altogether** — some versions flatten to white
+> — ask for the subject on **pure magenta `#FF00FF`**. That colour appears
+> nowhere in the subject matter here, so it keys out cleanly in one pass.
 
 ### One more thing that matters more than it sounds
 
@@ -64,9 +103,10 @@ makes a spinning coin read as spinning rather than as a flipping card. Name them
 > the frame and is centred. No background, no ground, no cast shadow, no text,
 > no other objects.
 
-**Also useful, same set:** `coin-burst-glow.png` — a soft radial gold flare,
-512×512, transparent, no hard edge. We put one behind each coin so the fountain
-reads as lit rather than as stickers.
+**Also useful, same set:** `coin-burst-glow.jpg` — a soft radial gold flare,
+512×512, **on solid pure black** (it is a soft glow, so transparency is the one
+thing that would ruin it — see the faults section). We put one behind each coin
+so the fountain reads as lit rather than as stickers.
 
 ---
 
@@ -96,7 +136,7 @@ say so explicitly:
 | `dragon-wing-near.png` | "Only the near wing from that image, isolated on a fully transparent background. Keep it in the same spread position. Nothing else in frame." | Rotates about its shoulder, ±18°, ~700ms |
 | `dragon-wing-far.png` | "Only the far wing from that image, isolated on a fully transparent background. Nothing else in frame." | Same, in antiphase, slightly smaller |
 | `dragon-jaw.png` | "Only the lower jaw and lower teeth from that image, isolated on a fully transparent background." | Rotates about the hinge, opens on the roar |
-| `dragon-glow.png` | "A soft amber glow shaped like that dragon's silhouette, blurred, no detail, on a fully transparent background." | Pulses behind everything |
+| `dragon-glow.jpg` | "A soft amber glow shaped like that dragon's silhouette, blurred, no detail, on a solid pure black background." **Black, not transparent** — soft glows are the case that cannot be repaired. | Pulses behind everything |
 
 > **Critical for the wings:** ask for each wing **with its shoulder joint
 > included**, not cropped at the body line. I rotate around the shoulder, and if
@@ -123,16 +163,23 @@ phone and edge-to-edge text becomes unreadable.
 
 ## Set 4 — Reusable sparkle atlas (small, high value)
 
-Four tiny transparent files that make everything else look expensive:
+Four tiny files that make everything else look expensive. Three are glows on
+black; only the confetti ribbon is a transparent PNG:
 
-- `spark-star.png` — a four-pointed white-gold star flare, 256×256, soft
-- `spark-round.png` — a soft round white bloom, 256×256, no hard edge
-- `spark-streak.png` — a thin vertical light streak, 128×512, fading at both ends
-- `confetti-gold.png` — a single curled gold foil ribbon, 256×256
+- `spark-star.jpg` — a four-pointed white-gold star flare, 256×256, soft
+- `spark-round.jpg` — a soft round white bloom, 256×256, no hard edge
+- `spark-streak.jpg` — a thin vertical light streak, 128×512, fading at both ends
+- `confetti-gold.png` — a single curled gold foil ribbon, 256×256 (this one is a
+  hard-edged object, so it IS a transparent PNG)
 
-> **Prompt shape for all four:** "[the subject], on a fully transparent
-> background, PNG, [size]. Soft glowing edges, no hard outline, no background,
-> no cast shadow, nothing else in frame. Painted game VFX art."
+> **Prompt shape for all four:** "[the subject], on a solid pure black
+> background, [size]. Soft glowing edges, no hard outline, no cast shadow,
+> nothing else in frame. Painted game VFX art. No watermark, no logo, no
+> signature."
+>
+> **Black, not transparent** — these are the soft-glow case that cannot be
+> repaired if the checkerboard bakes in. Save as JPEG; there is no alpha worth
+> preserving and I composite them additively.
 
 ---
 
