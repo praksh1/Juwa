@@ -14,8 +14,15 @@ import { useCompactLayout } from '../layout';
 import { bonusTrigger, scatterTrigger, slotDetails, slotPaytable } from '../api/games';
 import { sounds, spinNow, stopBedIfPlaying, unlock, useSoundSet } from '../sound';
 import { soundSetFor } from '../api/sound-sets';
-import { winTier, rollUpDuration, type WinTier } from '../motion';
+import {
+  winTier,
+  rollUpDuration,
+  celebrationDuration,
+  celebrationHold,
+  type WinTier,
+} from '../motion';
 import { CoinCounter } from '../components/CoinCounter';
+import { CoinStream, type Point } from '../components/CoinStream';
 import { Fireworks, type FireworksHandle } from '../components/Fireworks';
 import { NeonRail } from '../components/ChaseLights';
 import { FreeSpinsIntro } from '../components/FreeSpinsIntro';
@@ -215,24 +222,54 @@ const AUTO_GRACE_MS = 2_600;
  * have nothing between them worth waiting for.
  */
 const AUTO_PAUSE_MS: Record<WinTier, number> = {
-  none: 900,
-  win: 1_800,
-  burst: 2_600,
   /*
-   * The three loud tiers wait for their own banner.
+   * MUCH shorter than they were, because the waiting moved INSIDE the round.
    *
-   * These are `rollUpDuration(tier) + HOLD_MS[tier]` from WinOverlay plus a
-   * short beat, and they have to be: the banner now holds long enough to cover
-   * its fanfare, and an auto-play that starts the next spin under it turns the
-   * celebration the founder asked to be made longer into a thing that gets
-   * interrupted instead. If either number moves, both move.
+   * These used to be `rollUpDuration + HOLD_MS` per tier — up to 8.6 seconds —
+   * because the round finished the instant the reels stopped and the banner
+   * was left playing to an audience of a timer. Now the round itself waits out
+   * the banner and then carries the win into the balance before it returns, so
+   * `spin()` does not resolve until the celebration is genuinely over.
+   *
+   * Everything below this line is therefore the gap AFTER the show: a beat to
+   * see the new balance, and nothing more. Duplicating the celebration length
+   * here would double it.
    */
-  big: 4_400,
-  mega: 7_600,
-  // The longest hold in the app: a jackpot is the one result a player wants
+  none: 900,
+  win: 900,
+  burst: 1_000,
+  big: 1_200,
+  mega: 1_600,
+  // The longest gap in the app: a jackpot is the one result a player wants
   // a moment with before the next spin starts.
-  jackpot: 8_600,
+  jackpot: 2_200,
 };
+
+/**
+ * How long the coins take to carry the win into the balance.
+ *
+ * "Take a few seconds" was the brief, and this is the few seconds. Long enough
+ * that the stream is a journey with a start and an end; short enough that a
+ * player on auto-spin is not watching a courier service.
+ */
+const TRANSFER_MS = 2_000;
+/**
+ * The beat between the celebration ending and the money moving.
+ *
+ * The two must not overlap. A balance climbing under a BIG WIN banner is the
+ * same fault the banner was fixed for — two things telling the player about
+ * one event, at different times, in different places.
+ */
+const COLLECT_LEAD_MS = 420;
+
+/**
+ * The tiers in order of loudness, for comparing two of them.
+ *
+ * A round can celebrate a dozen times — every free spin that pays calls
+ * `celebrate` — and what the tail has to wait for is the LOUDEST of them, not
+ * the last. Comparing by index is the only ordering a string union has.
+ */
+const TIER_RANK: readonly WinTier[] = ['none', 'win', 'burst', 'big', 'mega', 'jackpot'];
 
 /** What the drops after the first grid are worth, in stake multiples. */
 function dropSum(steps: readonly { totalMultiplier: number }[]): number {
@@ -321,6 +358,81 @@ export function SlotsScreen() {
   const IDLE_GRID = useMemo(() => idleGrid(ROWS), [ROWS]);
 
   const [balance, setBalance] = useState(minor(0));
+  /**
+   * What the header PRINTS, which is not always what the player has.
+   *
+   * For a couple of seconds at the end of a winning round the two disagree on
+   * purpose: `balance` is already the server's settled figure, and this is the
+   * number climbing toward it while the coins arrive. Splitting them is what
+   * lets the balance be animated without ever animating the truth — every
+   * decision in this screen that spends money reads `balance`, and the ramp
+   * cannot reach it.
+   */
+  const [balanceShown, setBalanceShown] = useState(minor(0));
+  const balanceShownRef = useRef(0);
+  balanceShownRef.current = balanceShown;
+  const rampFrame = useRef(0);
+
+  /**
+   * The anchors the coin stream flies between, measured rather than assumed.
+   *
+   * Both ends move: the balance sits under a header whose height depends on
+   * the safe area, and the win readout is at a different offset on every
+   * cabinet because the reel bay is sized from the viewport. Hard-coding
+   * either produces a stream that flies to a corner of the screen on the one
+   * phone nobody tested on.
+   */
+  const screenRef = useRef<View | null>(null);
+  const balanceRef = useRef<View | null>(null);
+  const winRef = useRef<View | null>(null);
+  /**
+   * The strip the WIN row lives in, and the fallback when it does not.
+   *
+   * The readout is one slot showing one of six things: the win, a cascade rung,
+   * "FREE SPIN 3 of 8", "BONUS TOTAL", an error, or a hint. So on exactly the
+   * rounds worth the most — a free-spin total, a feature payout — the WIN row
+   * is not mounted and `winRef` is null, which is how the first version of this
+   * skipped the transfer on every bonus round while working perfectly on
+   * ordinary spins. Measured, not reasoned about: the collect logged
+   * `from: null` on the free-spin total and flew properly on the base win
+   * before it.
+   *
+   * The strip is always there and is in the same place, so it is the right
+   * thing to launch from when the row inside it is showing something else.
+   */
+  const readoutRef = useRef<View | null>(null);
+  const [transfer, setTransfer] = useState<{ from: Point; to: Point; round: number } | null>(null);
+  const transferRound = useRef(0);
+  const transferDone = useRef<(() => void) | null>(null);
+  /** The figure the ramp is climbing to. Set just before the stream launches. */
+  const transferTarget = useRef(0);
+  /**
+   * The server's settled balance, held until the celebration has shown it.
+   *
+   * A player can cut a celebration short by spinning again — that is deliberate
+   * and predates all of this — which means the sequence that was going to pay
+   * them can be abandoned halfway. This is the receipt: whatever happens to the
+   * presentation, the next tap applies this first, so an interrupted round is
+   * never an unpaid one on screen.
+   */
+  const pendingBalance = useRef<number | null>(null);
+  /**
+   * True from the tap until the money has finished arriving.
+   *
+   * NOT the same as `spinning`, and the difference is the bug this fixed.
+   * `spinning` follows the REELS, and the reels stop long before the round
+   * does — the banner, the roll-up and the collect all happen after. Auto-spin
+   * was keyed on `spinning`, so with the celebration lengthened it began the
+   * next round in the middle of the previous one's collect: measured, the next
+   * spin's stake was debited 250ms after the win counter settled and the coins
+   * never flew at all.
+   *
+   * Auto waits on this. A HUMAN still does not: tapping SPIN during a
+   * celebration skips it, which is a rule this screen has always had and which
+   * a longer celebration makes more important rather than less.
+   */
+  const [roundActive, setRoundActive] = useState(false);
+
   const [bet, setBet] = useState(minor(2_000));
   const [reelPhase, setReelPhase] = useState<ReelPhase>('idle');
   const spinning = reelPhase !== 'idle';
@@ -346,10 +458,10 @@ export function SlotsScreen() {
   /**
    * The coin rain, and the box it falls in.
    *
-   * Measured rather than assumed because the pile has to know where the floor
-   * is: coins settle at the bottom of THIS cabinet, and a hard-coded height
-   * would bury the controls on a short phone and float above the felt on a
-   * tall one.
+   * Measured rather than assumed: the rain has to fall the height of THIS
+   * cabinet, and the blast has to erupt from its centre. A hard-coded box
+   * would throw coins from the wrong place on every phone that is not the one
+   * the number was written on.
    */
   const coins = useRef<FireworksHandle | null>(null);
   const [cabinetSize, setCabinetSize] = useState({ width: 0, height: 0 });
@@ -521,6 +633,141 @@ export function SlotsScreen() {
     return () => clearTimeout(timer);
   }, [auto]);
 
+  /*
+   * Outside a transfer, the printed balance IS the balance.
+   *
+   * Guarded on the ramp rather than unconditional: the ramp's own final
+   * `setBalance` would otherwise land here and snap the number to its
+   * destination one frame before the animation got there. The guard is safe
+   * because the ramp clears `rampFrame` before it resolves, so the sync that
+   * follows is a no-op rather than a fight.
+   */
+  useEffect(() => {
+    if (rampFrame.current) return;
+    setBalanceShown(balance);
+  }, [balance]);
+
+  useEffect(() => () => cancelAnimationFrame(rampFrame.current), []);
+
+  /**
+   * Climb the printed balance to `to` over `ms`, and resolve when it lands.
+   *
+   * Eased out rather than linear for the same reason the win counter is: a
+   * number that sprints away and settles reads as a machine finishing its
+   * count, where a linear ramp reads as a progress bar.
+   */
+  const rampBalance = useCallback(
+    (to: number, ms: number) =>
+      new Promise<void>((resolve) => {
+        cancelAnimationFrame(rampFrame.current);
+        const from = balanceShownRef.current;
+        if (from === to || ms <= 0) {
+          setBalanceShown(minor(to));
+          rampFrame.current = 0;
+          resolve();
+          return;
+        }
+        const started = performance.now();
+        const step = () => {
+          const u = Math.min(1, (performance.now() - started) / ms);
+          const eased = 1 - Math.pow(1 - u, 2);
+          setBalanceShown(minor(Math.round(from + (to - from) * eased)));
+          if (u < 1) {
+            rampFrame.current = requestAnimationFrame(step);
+          } else {
+            rampFrame.current = 0;
+            setBalanceShown(minor(to));
+            resolve();
+          }
+        };
+        rampFrame.current = requestAnimationFrame(step);
+      }),
+    [],
+  );
+
+  /**
+   * Where the coins fly from and to, in this screen's own coordinates.
+   *
+   * `measureInWindow` reports viewport coordinates, and the overlay the stream
+   * draws into is positioned against the screen root — so the root's own origin
+   * is subtracted from both. Returns null when anything is unmeasurable, which
+   * is the honest answer during the first frames and after an unmount; the
+   * caller pays the balance instantly in that case rather than animating to a
+   * guess.
+   */
+  const measureAnchors = useCallback(async (): Promise<{ from: Point; to: Point } | null> => {
+    const box = (ref: React.MutableRefObject<View | null>) =>
+      new Promise<{ x: number; y: number; width: number; height: number } | null>((resolve) => {
+        const node = ref.current;
+        if (!node || typeof node.measureInWindow !== 'function') {
+          resolve(null);
+          return;
+        }
+        // A node that has never laid out reports zeros rather than failing, so
+        // the size is checked as well as the call.
+        node.measureInWindow((x, y, width, height) =>
+          resolve(width > 0 && height > 0 ? { x, y, width, height } : null),
+        );
+      });
+
+    const [root, row, strip, to] = await Promise.all([
+      box(screenRef),
+      box(winRef),
+      box(readoutRef),
+      box(balanceRef),
+    ]);
+    const from = row ?? strip;
+    if (!root || !from || !to) return null;
+    return {
+      from: {
+        x: from.x - root.x + from.width / 2,
+        y: from.y - root.y + from.height / 2,
+      },
+      to: {
+        x: to.x - root.x + to.width / 2,
+        y: to.y - root.y + to.height / 2,
+      },
+    };
+  }, []);
+
+  /**
+   * The collect: coins out of the win readout, into the balance, number climbs.
+   *
+   * Resolves when the last coin has landed, so the round does not end — and
+   * auto-spin does not start the next one — until the money has visibly
+   * arrived. That is the whole difference between this and a balance that
+   * simply became a bigger number while the player was looking elsewhere.
+   */
+  const collect = useCallback(
+    async (to: number) => {
+      const anchors = await measureAnchors();
+      if (!anchors) {
+        // Nothing to fly between. The player is still paid, immediately.
+        setBalance(minor(to));
+        return;
+      }
+      transferTarget.current = to;
+      transferRound.current += 1;
+      setTransfer({ from: anchors.from, to: anchors.to, round: transferRound.current });
+      await new Promise<void>((resolve) => {
+        transferDone.current = resolve;
+      });
+      setTransfer(null);
+      // The truth catches up with the picture. Both are now `to`.
+      setBalance(minor(to));
+    },
+    [measureAnchors],
+  );
+
+  /**
+   * The loudest tier this round reached, readable from inside the spin closure.
+   *
+   * `celebration.tier` is state and is captured stale by the async sequence,
+   * which is the same trap `runningWinRef` exists for. The round waits on this
+   * to know how long its own celebration owns the screen.
+   */
+  const lastTier = useRef<WinTier>('none');
+
   const celebrate = useCallback((payout: number, stake: number) => {
     /*
      * This machine's own thresholds, not the app's.
@@ -533,6 +780,10 @@ export function SlotsScreen() {
     const tier = winTier(payout, stake, paytable?.tiers);
     if (tier === 'none') return;
 
+    // The round's own record of how loud it got. A free-spin round calls this
+    // a dozen times and the tail has to wait for the biggest of them.
+    if (TIER_RANK.indexOf(tier) > TIER_RANK.indexOf(lastTier.current)) lastTier.current = tier;
+
     celebrationRound.current += 1;
     setCelebration({ tier, amount: payout, round: celebrationRound.current });
 
@@ -544,35 +795,39 @@ export function SlotsScreen() {
     /*
      * The coins.
      *
-     * A BURST is thrown up from the middle, which is what a modest win has
-     * always done. The three loud tiers POUR from above for as long as the
-     * counter is rolling, and the coins land and heap at the bottom of the
-     * cabinet — which is the thing the founder's reference video does and this
-     * did not. A fountain that empties reads as an effect; a pile that
-     * accumulates reads as money arriving.
-     *
-     * The pour is timed to `rollUpDuration` so the rain stops when the number
-     * does. Coins still falling after the total has settled is the same fault
-     * as a fanfare outlasting its banner, in a different medium.
-     */
-    /*
      * The punch first, then the rain.
      *
      * `blast` throws coins OUT OF THE SCREEN at the player — they start small
-     * at the centre and grow as they come, and they never land. That is the
-     * moment of the win. `pour` is the sustained part underneath it: coins
-     * falling and heaping while the meter counts.
+     * at the centre and grow as they come, and they leave through the front.
+     * That is the moment of the win, and it is the part the founder singled
+     * out as "really good"; it is now launched over half a second rather than
+     * on one frame, and each coin lives twice as long, because the rest of
+     * their note was to "slow it down so that the player can see".
      *
-     * Both, on the loud tiers, because they are doing different jobs. The
-     * founder's note was that coins which "come in like a robot and sit on the
-     * bottom" do not feel celebratory, and they were right — a fountain with
-     * no punch is a screensaver.
+     * `pour` is the sustained part underneath it: coins drifting down past the
+     * reels for as long as the card is up. Both, on the loud tiers, because
+     * they are doing different jobs — a fountain with no punch is a
+     * screensaver, and a punch with nothing under it is over in a second.
      */
     if (tier === 'burst') coins.current?.blast(0.45);
     else if (tier !== 'win') {
       const power = tier === 'jackpot' ? 1 : tier === 'mega' ? 0.78 : 0.55;
       coins.current?.blast(power);
-      coins.current?.pour(power, rollUpDuration(tier) / 1000);
+      /*
+       * The rain runs for the whole banner, not just the roll-up.
+       *
+       * It used to stop when the counter did, on the argument that coins still
+       * falling after the total had settled was a fanfare outlasting its own
+       * banner in a different medium. That argument was right about the OLD
+       * banner, which left almost as soon as the number landed. The banner is
+       * now held for three to five seconds beyond its roll-up, and a card
+       * sitting over a completely still screen for four of those is the "still
+       * picture held for five seconds" this file's overlay warns about.
+       *
+       * So the rain covers the celebration rather than the count. It stops
+       * with the card.
+       */
+      coins.current?.pour(power, celebrationDuration(tier) / 1000);
     }
   }, []);
 
@@ -874,12 +1129,36 @@ export function SlotsScreen() {
     const token = ++spinToken.current;
     setError(null);
     setRound(null);
+    setRoundActive(true);
+
+    /*
+     * Settle the last round before starting this one.
+     *
+     * The player has just interrupted a celebration — that is allowed, and it
+     * leaves a collect half-flown and a balance mid-climb. Both are snapped to
+     * their destination here, BEFORE the optimistic debit below, so the money
+     * is never lost between two rounds and the debit is taken off the right
+     * number. The awaiting tail is released too, or it would sit on a promise
+     * nobody is ever going to resolve.
+     */
+    transferDone.current?.();
+    transferDone.current = null;
+    cancelAnimationFrame(rampFrame.current);
+    rampFrame.current = 0;
+    setTransfer(null);
+    if (pendingBalance.current !== null) {
+      const owed = minor(pendingBalance.current);
+      pendingBalance.current = null;
+      transferTarget.current = 0;
+      setBalance(owed);
+      setBalanceShown(owed);
+    }
     /*
      * Sweep the last win's coins.
      *
-     * The heap fades on its own after a beat, but a player who spins again
-     * straight away would otherwise watch the new reels through the previous
-     * round's pile. A celebration belongs to the spin that earned it.
+     * Coins age out on their own, but a player who spins again straight away
+     * would otherwise watch the new reels through the last round's rain. A
+     * celebration belongs to the spin that earned it.
      */
     coins.current?.clear();
     // On the same clock the reels and the stop sounds use, so the floor below
@@ -889,6 +1168,7 @@ export function SlotsScreen() {
     setPhase('base');
     setRunningWin(0);
     runningWinRef.current = 0;
+    lastTier.current = 'none';
     setFreeSpinsTotal(0);
     setCascadeStep(0);
     setCelebration({ tier: 'none', amount: 0, round: celebrationRound.current });
@@ -1162,16 +1442,53 @@ export function SlotsScreen() {
 
         setPhase('fs-total');
         celebrate(runningWinRef.current, bet);
-        await wait(2_600);
+        // Just a beat to let the total appear. The wait that matters is the
+        // shared tail below, which is sized off the tier this round reached.
+        await wait(400);
         if (superseded()) return;
       }
 
-      // The balance from the server already includes every free spin, so it is
-      // applied once, at the end — otherwise it would jump before the show did.
-      setBalance(minor(result.balance));
+      const settled = minor(result.balance);
+      // Owed from this moment on, whatever becomes of the presentation below.
+      pendingBalance.current = settled;
+
+      /*
+       * THE TAIL: let the celebration finish, then carry the money across.
+       *
+       * The balance used to be assigned here, on the frame after the reels
+       * stopped — under a banner that had another five seconds to run. So the
+       * player was told "800 GC" by a card in the middle of the screen while a
+       * different number quietly changed in the corner, and nothing connected
+       * the two. A cabinet connects them by making you watch the coins travel.
+       *
+       * Two waits, and they are different things. The first is the celebration
+       * owning the screen — its roll-up plus its hold, straight out of
+       * ../motion so the banner and this cannot disagree about when it ends.
+       * The second is the transfer itself. Only then does the round resolve,
+       * which is why `AUTO_PAUSE_MS` above is now a short gap rather than a
+       * duplicate of the same timings.
+       */
+      if (runningWinRef.current > 0) {
+        const tier = lastTier.current;
+        const shown = celebrationHold(tier) > 0
+          ? celebrationDuration(tier)
+          : rollUpDuration(tier);
+        await wait(shown + COLLECT_LEAD_MS);
+        if (superseded()) return;
+
+        await collect(settled);
+        if (superseded()) return;
+      } else {
+        // Nothing was won, so there is nothing to carry. The balance is
+        // already short by the stake from the optimistic debit; this is the
+        // server confirming it.
+        setBalance(settled);
+      }
+      pendingBalance.current = null;
+
       // And to every other screen, so the lobby header is not still showing the
       // figure it loaded when the player walked in. See publishBalance.
-      publishBalance(minor(result.balance));
+      publishBalance(settled);
       setPhase('idle');
       setReelPhase('idle');
     } catch (caught) {
@@ -1179,49 +1496,80 @@ export function SlotsScreen() {
       setReelPhase('idle');
       setPhase('idle');
       sounds.error();
+      pendingBalance.current = null;
       // The optimistic debit never happened as far as the server is concerned.
       setBalance((current) => minor(current + bet));
       setError(
         caught instanceof PlayApiError ? caught.message : 'Something went wrong. Try again.',
       );
+    } finally {
+      /*
+       * Only THIS round may declare itself over.
+       *
+       * Every `superseded()` bail-out lands here too, and by then a newer round
+       * has already claimed the flag — clearing it unconditionally would tell
+       * auto-spin that a round which had just started was finished, and it
+       * would start a third on top of it.
+       */
+      if (!superseded()) setRoundActive(false);
     }
-  }, [api, balance, bet, spinning, celebrate]);
+  }, [api, balance, bet, spinning, celebrate, collect]);
 
   /**
    * Auto-spin: keep going until the player stops it or the money does.
    *
-   * Driven from an effect keyed on `spinning` rather than by chaining the next
-   * spin onto the end of the last one, so pressing STOP takes effect at the
-   * end of the round in flight instead of being swallowed by a promise that
-   * was already going to fire. A short beat between rounds keeps it readable
-   * as a sequence of spins rather than one continuous blur.
+   * Driven from an effect keyed on the round's own state rather than by
+   * chaining the next spin onto the end of the last one, so pressing STOP takes
+   * effect at the end of the round in flight instead of being swallowed by a
+   * promise that was already going to fire. A short beat between rounds keeps
+   * it readable as a sequence of spins rather than one continuous blur.
+   *
+   * `roundActive` AND `spinning`, and the first one is the one that matters.
+   * This effect used to watch only the reels, which stop while the banner, the
+   * roll-up and the collect all still have seconds to run — so once the
+   * celebration was lengthened, auto-spin began the next round in the middle of
+   * the previous one's payout. Measured on a 1,700 GC win: the next stake was
+   * debited 250ms after the counter settled, the coins never flew, and the
+   * money appeared as a jump three seconds later during an unrelated spin.
    *
    * It stops itself when the next bet is no longer affordable. An auto-spin
    * that silently does nothing while the player watches is worse than one that
    * visibly ends.
    */
   useEffect(() => {
-    if (!auto || spinning) return;
+    if (!auto || spinning || roundActive) return;
     if (bet > balance) {
       setAuto(false);
       return;
     }
     const timer = setTimeout(() => { void spin(); }, autoDelay);
     return () => clearTimeout(timer);
-  }, [auto, spinning, bet, balance, spin, autoDelay]);
+  }, [auto, spinning, roundActive, bet, balance, spin, autoDelay]);
 
   return (
-    <View style={styles.screen}>
+    <View style={styles.screen} ref={screenRef}>
       {showRules && details && paytable ? (
         <RulesIntro game={details} model={paytable} bet={bet} onPlay={() => setShowRules(false)} />
       ) : null}
       <View style={styles.header}>
-        <View>
+        {/*
+          The destination of every coin the machine pays out.
+
+          Measured rather than positioned: see `measureAnchors`. The ref is on
+          the wrapper and not the text, so the stream aims at the middle of the
+          whole readout — a coin landing exactly on the baseline of a digit
+          looks like a misfire.
+        */}
+        <View ref={balanceRef}>
           <Txt variant="caption" color={colors.text.muted}>
             BALANCE
           </Txt>
+          {/*
+            `balanceShown`, not `balance`. For the two seconds a collect takes
+            these are different numbers on purpose — this is the one climbing.
+          */}
           <Txt variant="money" color={colors.gold.default}>
-            {format(balance, 'GC')}
+            {format(balanceShown, 'GC')}
           </Txt>
         </View>
         {/*
@@ -1410,6 +1758,7 @@ export function SlotsScreen() {
         </Animated.View>
 
         <View
+          ref={readoutRef}
           style={[styles.readout, compact && styles.readoutCompact]}
           accessibilityLiveRegion="polite"
         >
@@ -1480,6 +1829,7 @@ export function SlotsScreen() {
              *    wheel could say where it came from.
              */
             <View
+              ref={winRef}
               style={[
                 styles.winRow,
                 (phase === 'feature' ||
@@ -1566,14 +1916,13 @@ export function SlotsScreen() {
           The coin rain, over the WHOLE cabinet.
 
           Not inside the reel frame, where the old vector burst lived. Coins
-          have to fall past the reels and heap on the floor of the machine, and
-          a layer clipped to the bay would have them landing in mid-air halfway
-          up. It sits UNDER the win overlay so the banner and the rolling
-          counter stay readable through the rain.
+          have to fall the whole height of the machine and erupt from the
+          middle of it, and a layer clipped to the bay would cut both off at
+          the glass. It sits UNDER the win overlay so the banner and the
+          rolling counter stay readable through the rain.
 
-          `onLayout` on the wrapper rather than a constant: the pile settles at
-          the bottom of this box, and the box is a different height on every
-          phone.
+          `onLayout` on the wrapper rather than a constant: this box is a
+          different size on every phone.
         */}
         <View
           style={StyleSheet.absoluteFill}
@@ -1587,12 +1936,17 @@ export function SlotsScreen() {
             );
           }}
         >
+          {/*
+            Everything falls THROUGH. There used to be a heap along the bottom
+            here and the founder's word for it was that the coins were "just
+            laying down" — see the note at the top of Fireworks for why it went
+            and what replaced it.
+          */}
           {cabinetSize.width > 0 ? (
             <Fireworks
               width={cabinetSize.width}
               height={cabinetSize.height}
               controller={coins}
-              pile
             />
           ) : null}
         </View>
@@ -1649,6 +2003,36 @@ export function SlotsScreen() {
             ? `Fair: ${round.fairness.serverSeedHash.slice(0, 16)}… · nonce ${round.fairness.nonce}`
             : 'Every result is provably fair.'}
       </Txt>
+
+      {/*
+        The collect: the win, carried into the balance as coins.
+
+        At the SCREEN root rather than inside the cabinet, because that is the
+        one layer that contains both ends of the journey — the win readout
+        under the reels and the balance in the header are in different
+        subtrees, and a stream clipped to either one would fly into a wall.
+
+        `onFirstArrival` starts the balance climbing, not `onDone`: the number
+        has to move BECAUSE coins are landing. A counter that waits for the
+        animation to finish and then jumps is the two-disconnected-events fault
+        all over again, just later.
+      */}
+      {transfer ? (
+        <CoinStream
+          from={transfer.from}
+          to={transfer.to}
+          round={transfer.round}
+          duration={TRANSFER_MS}
+          onFirstArrival={() => {
+            sounds.coins(6);
+            void rampBalance(transferTarget.current, TRANSFER_MS * 0.72);
+          }}
+          onDone={() => {
+            transferDone.current?.();
+            transferDone.current = null;
+          }}
+        />
+      ) : null}
 
       {/*
         The prize wheel, over the WHOLE SCREEN rather than over the reel bay.

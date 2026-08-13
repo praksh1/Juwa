@@ -95,7 +95,15 @@ const styles = StyleSheet.create({
   bezel: {
     borderRadius: radius.md,
     padding: 3,
-    minWidth: 280,
+    /*
+     * The plate is as wide as the banner above it.
+     *
+     * It used to shrink-wrap its digits with a 280-point floor, so on a card
+     * that had grown to 358 points the meter sat narrower than the art and the
+     * two read as unrelated objects. A cabinet's meter is set into the same
+     * fascia as its banner and is exactly as wide.
+     */
+    alignSelf: 'stretch',
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.45)',
   },
@@ -110,17 +118,19 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(0,0,0,0.8)',
   },
-  label: { letterSpacing: 3, fontSize: 11, lineHeight: 13, fontWeight: '800' },
+  label: { letterSpacing: 3, fontSize: 12, lineHeight: 14, fontWeight: '800' },
   digits: {
     // 34 was smaller than the balance in the header, which is absurd for the
-    // one number the whole celebration exists to announce.
-    fontSize: 44,
-    lineHeight: 52,
+    // one number the whole celebration exists to announce. 52 fits "1,234,567"
+    // inside a 358-point plate with room either side, which is the largest
+    // total this game can pay at the maximum stake.
+    fontSize: 52,
+    lineHeight: 60,
     fontWeight: '900',
     letterSpacing: 0.5,
     textShadowColor: 'rgba(255, 214, 102, 0.55)',
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 12,
   },
-  digitsJackpot: { fontSize: 50, lineHeight: 58 },
+  digitsJackpot: { fontSize: 58, lineHeight: 66 },
 });

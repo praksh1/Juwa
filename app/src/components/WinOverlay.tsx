@@ -38,7 +38,7 @@ import { colors, radius, spacing } from '@juwa/ui';
 import { ChaseLights } from './ChaseLights';
 import { ShellBurst } from './ShellBurst';
 import { WinMeter } from './WinMeter';
-import { usePrefersReducedMotion, rollUpDuration, type WinTier } from '../motion';
+import { usePrefersReducedMotion, celebrationDuration, type WinTier } from '../motion';
 
 /**
  * The painted banners, by tier.
@@ -51,34 +51,24 @@ const BANNER_MEGA = '/art/overlays/banner-mega-win.png';
 const BANNER_JACKPOT = '/art/overlays/banner-jackpot.png';
 
 /**
- * How long each tier stays up, ON TOP of its roll-up.
+ * The banners' own shape, measured off the files: 512 × 253 on all three.
  *
- * Set against the fanfares rather than by feel. Roll-ups are 2.2s, 3.2s and
- * 4.2s, so the totals are 5.2s, 7.2s and 8.2s against recordings of at most
- * 3.79s (big) and 7.03s (mega and jackpot). Each tier is longer than the one
- * below, which is also part of how the three tell themselves apart once a
- * player has seen all three.
+ * THIS NUMBER IS THE FIX for "the banner became elongated".
  *
- * `AUTO_PAUSE_MS` in SlotsScreen is derived from these. If one moves, both do.
+ * The style was `{ width: '100%', height: 138 }` with `resizeMode="contain"`,
+ * and contain fits the art INSIDE that box without distorting it. A 2.02:1
+ * picture in a 138-point-tall box is 279 points wide — no matter how wide the
+ * box is. So widening the card from 260 points to 96% of the screen did not
+ * enlarge the banner by a single pixel; it added empty gold gradient around a
+ * banner that stayed exactly where it was, which is precisely what "elongated"
+ * describes. The lettering inside the art stayed the size it had always been,
+ * which is "so so tiny".
+ *
+ * An aspect ratio has no such ceiling: the banner is now as wide as the card
+ * and as tall as that width requires, so making the card bigger makes the
+ * words bigger, which was the intention all along.
  */
-const HOLD_MS: Record<'big' | 'mega' | 'jackpot', number> = {
-  /*
-   * Shorter than it was, because a big win is now COMMON.
-   *
-   * The threshold moved from about 12x to between 3x and 6x, which takes a big
-   * win from one spin in ninety to about one in eighteen. Five seconds of
-   * banner every eighteen spins is a quarter of an auto-play session spent
-   * watching an overlay, and the note this file already carries applies: an
-   * overlay a player sees every few spins is an interruption.
-   *
-   * Bigger is not the same as longer. The card and the meter grew; the hold
-   * came down. 4.0s still outlasts the big-win fanfares, which top out at
-   * 3.79s — that rule has not moved.
-   */
-  big: 1_800,
-  mega: 4_000,
-  jackpot: 4_000,
-};
+const BANNER_ASPECT = 512 / 253;
 
 export function WinOverlay({
   tier,
@@ -168,9 +158,10 @@ export function WinOverlay({
     for (const loop of loops) loop.start();
 
     // Long enough for the roll-up to finish, then long enough to read the
-    // number and hear the fanfare out. See HOLD_MS.
-    const hold = rollUpDuration(tier) + HOLD_MS[tier];
-    const timer = setTimeout(() => onDone?.(), hold);
+    // number and hear the fanfare out. See `celebrationHold` in ../motion —
+    // the round and the auto-spin gap read the same function, so none of the
+    // three can drift out from under the other two.
+    const timer = setTimeout(() => onDone?.(), celebrationDuration(tier));
     return () => {
       arrive.stop();
       for (const loop of loops) loop.stop();
@@ -418,18 +409,22 @@ const styles = StyleSheet.create({
   },
   card: {
     /*
-     * Much bigger than it was.
+     * Nearly the whole screen, and the padding is now small on purpose.
      *
-     * It was 260 points minimum on a 390-point phone — two thirds of the width
-     * — and the founder's verdict on the result was "the fonts are just too
-     * tiny". A BIG WIN card that a player has to lean in to read is announcing
-     * the opposite of what it says. It now claims nearly the whole width and
-     * the banner and meter grow with it.
+     * `alignSelf: stretch` plus a percentage width, rather than a minimum: a
+     * minWidth only sets a floor, so the card was free to shrink-wrap its
+     * contents — and its widest content was a banner that could not grow. The
+     * card ended up sized by the thing it was supposed to be sizing.
+     *
+     * The horizontal padding came down from 16 to 8 because every point of it
+     * is a point the banner does not get, and the gradient inside the frame is
+     * a backing for the art rather than a mount for it.
      */
-    minWidth: 320,
-    maxWidth: '96%',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xl,
+    width: '96%',
+    maxWidth: 560,
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
     borderRadius: radius.lg,
     borderWidth: 2,
     borderColor: colors.gold.light,
@@ -437,9 +432,14 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     overflow: 'hidden',
   },
-  // Half again as tall. The banner is the thing that says which moment this
-  // is, and at 92 points it was smaller than the number underneath it.
-  banner: { width: '100%', height: 138, marginBottom: spacing.md },
+  /*
+   * As wide as the card, as tall as that makes it.
+   *
+   * On a 390-point phone this is a 358-point banner against the 279 points a
+   * fixed 138-point height allowed — a third larger, and every word inside the
+   * art grows with it. See BANNER_ASPECT for why the old rule could not.
+   */
+  banner: { width: '100%', aspectRatio: BANNER_ASPECT, marginBottom: spacing.sm },
   shine: {
     position: 'absolute',
     top: -60,

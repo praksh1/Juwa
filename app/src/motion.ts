@@ -112,3 +112,50 @@ export function rollUpDuration(tier: WinTier): number {
       return 0;
   }
 }
+
+/**
+ * How long a banner is held AFTER its roll-up has finished.
+ *
+ * Lives here rather than in `WinOverlay` because two other things are derived
+ * from it — the round's own pause before it moves the money, and the gap
+ * between automatic spins — and when those three disagree the celebration gets
+ * interrupted by the thing that is supposed to be waiting for it. One number,
+ * three readers.
+ *
+ * The floor under all of these is the fanfare: measured, the big-win
+ * recordings run to 3.79s and the mega/jackpot ones to 7.03s, and a banner
+ * that leaves before its own music is the fault this file exists to prevent.
+ */
+export function celebrationHold(tier: WinTier): number {
+  switch (tier) {
+    case 'jackpot':
+      return 5_200;
+    case 'mega':
+      return 4_400;
+    case 'big':
+      /*
+       * Back up from 1.8s.
+       *
+       * It was cut when the big-win threshold moved to about 4x — one spin in
+       * eighteen — on the theory that a frequent banner should be a short one.
+       * The founder's verdict on the result was to "just relax a little bit,
+       * don't need to make it so rushed", which settles it: the celebration is
+       * the product, and 5.2s total is still under the 3.79s fanfare plus its
+       * own roll-up.
+       */
+      return 3_000;
+    default:
+      return 0;
+  }
+}
+
+/**
+ * Everything a tier owns of the screen: the roll-up, then the hold.
+ *
+ * A round waits this long before it moves the money into the balance, so the
+ * banner is never talking over the transfer and the transfer is never starting
+ * under the banner.
+ */
+export function celebrationDuration(tier: WinTier): number {
+  return rollUpDuration(tier) + celebrationHold(tier);
+}

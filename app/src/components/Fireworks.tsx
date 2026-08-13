@@ -15,17 +15,22 @@
  * happens, and because five bespoke ones would be five things to maintain and
  * four of them would rot.
  *
- * ## The coins now LAND
+ * ## There was a heap here, and it is gone
  *
- * Added after the founder sent a reference video of a physical cabinet. The
- * single biggest difference between that and this was not the artwork: it was
- * that their coins fall onto a heap that grows under the win meter, and ours
- * fell off the bottom of the screen. A fountain that empties reads as an
- * effect; a pile that accumulates reads as money arriving.
+ * A previous version let the coins LAND: they came to rest on a height map along the
+ * bottom of the cabinet and built a mound, copied from the founder's reference
+ * video of a physical machine whose coins fall into a tray. On a phone it read
+ * as, in their words, the coins "just laying down" — two hundred motionless
+ * sprites resting on the floor for several seconds after the celebration ended,
+ * still there behind the next spin's reels. A real tray has depth and specular
+ * highlights and coins that shift; a stack of static PNGs has none of that and
+ * reads as debris.
  *
- * Opt in with `pile`. Without it the behaviour is exactly what it was, because
- * the instant games are played on a small board where a heap would cover the
- * controls.
+ * The thing the heap was FOR — showing that money arrived rather than merely
+ * fell — is done properly now by `CoinStream`, which carries the win out of the
+ * readout and into the balance where it actually goes. So everything here falls
+ * through and leaves, which is what it did before the heap and what it does
+ * again.
  *
  * ## Why it is drawn rather than animated per particle
  *
@@ -55,7 +60,7 @@ import { usePrefersReducedMotion } from '../motion';
  * `art/` which the web build copies verbatim — the same route every symbol and
  * tile in the app already takes.
  */
-const COINS = [
+export const COIN_FRAMES = [
   '/art/overlays/coin-00.png',
   '/art/overlays/coin-01.png',
   '/art/overlays/coin-02.png',
@@ -102,15 +107,6 @@ interface Particle {
   /** Starting angle, so a burst is not a rank of identical objects. */
   angle: number;
   /**
-   * Landed, and now part of the heap.
-   *
-   * A settled particle stops moving, stops turning, and stops ageing — its
-   * `ttl` no longer applies. It leaves only when the pile is swept.
-   */
-  settled: boolean;
-  /** Frozen at the moment of landing, so a resting coin does not keep spinning. */
-  restAngle: number;
-  /**
    * How fast this coin is coming at the camera, in radii per second.
    *
    * Zero for everything that lives in the plane — the fountain and the rain.
@@ -118,69 +114,62 @@ interface Particle {
    * leaves through the front of the screen, which is the whole effect.
    */
   approach: number;
+  /**
+   * Seconds still to wait before this particle exists.
+   *
+   * A blast used to launch every coin on one frame, which is a single pop —
+   * whatever it does afterwards, the eye has already taken it in as one event.
+   * Staggering the launches over half a second turns the same coins into a
+   * stream coming at you, and it is the difference the founder asked for when
+   * they said the burst was "really good" but to "slow it down so that the
+   * player can see".
+   *
+   * A delayed particle is not stepped and not drawn. It costs a comparison.
+   */
+  delay: number;
+  /**
+   * Points per second squared pulling this particle down.
+   *
+   * Per particle rather than global because the two effects want different
+   * worlds: a fountain thrown upward needs real weight or the arc reads as a
+   * balloon, while coins raining from above the top edge want to DRIFT — at
+   * full gravity they cross a 500-point cabinet in under a second, which is
+   * the "come in like a robot" complaint in physics form.
+   */
+  gravity: number;
 }
 
 /** Gravity, in points per second squared. Tuned by eye against a 300pt board. */
 const GRAVITY = 900;
+/** The rain's own, low enough that a coin takes over a second to cross. */
+const RAIN_GRAVITY = 320;
 /** Air drag per second. Without it the arcs are parabolas and read as cheap. */
 const DRAG = 0.86;
 
 /**
- * The heap, as a height map.
- *
- * Twenty-four columns across the width, each holding how deep the pile is
- * there. A coin lands on the top of its own column and raises it — and raises
- * its NEIGHBOURS by a third as much, which is the whole trick: without the
- * spill, coins landing in the same place build a tower, and a tower is the one
- * shape a pile of coins never makes.
- */
-const COLUMNS = 24;
-/** How much of its own diameter a landed coin adds. Under 1, so they overlap. */
-const STACK_FACTOR = 0.5;
-/** And to each side, so the heap slopes instead of stepping. */
-const SPILL_FACTOR = 0.18;
-/** The pile stops growing here, as a fraction of the board. */
-const MAX_PILE = 0.34;
-/**
  * The ceiling on live particles.
  *
  * React Native Web draws each of these as a positioned <img>, and a phone
- * running a game underneath has a budget. Past this the oldest settled coins
- * are dropped from the bottom of the heap, where nothing is looking.
+ * running a game underneath has a budget. Past this the OLDEST are dropped,
+ * which is the change nobody can see: everything here fades out over its own
+ * lifetime, so the oldest particles are also the faintest.
  */
 const MAX_PARTICLES = 240;
-/** How long the heap is held after the last coin lands, before it fades. */
-const PILE_HOLD_MS = 2_600;
-const PILE_FADE_MS = 700;
 
 export function Fireworks({
   width,
   height,
   controller,
-  pile = false,
 }: {
   width: number;
   height: number;
   /** Filled in by this component so a parent can fire it. */
   controller: React.MutableRefObject<FireworksHandle | null>;
-  /**
-   * Let coins land and accumulate instead of falling through.
-   *
-   * Off by default: the instant games play on a board barely taller than their
-   * controls, and a heap there covers the thing the player is watching.
-   */
-  pile?: boolean;
 }) {
   const [particles, setParticles] = useState<Particle[]>([]);
   const frame = useRef(0);
   const last = useRef(0);
   const live = useRef<Particle[]>([]);
-  /** Pile depth per column, in points. Empty when nothing has landed. */
-  const heights = useRef<number[]>(new Array(COLUMNS).fill(0));
-  /** When the most recent coin landed, so the heap knows when to leave. */
-  const lastLanding = useRef(0);
-  /** 1 while the heap is held, ramping to 0 as it fades. */
-  const pileAlpha = useRef(1);
   /** Remaining pour, in seconds, and the rate to pour at. */
   const pouring = useRef({ left: 0, rate: 0, power: 0 });
   const reduced = usePrefersReducedMotion();
@@ -209,16 +198,16 @@ export function Fireworks({
          *
          * These were 14 to 26 points across, and on a 390-point phone that is
          * confetti: the founder's word for the result was "tiny". At 20 to 52
-         * a coin is an object you can see the milling on, and the pile it
-         * makes has weight instead of looking like spilled glitter.
+         * a coin is an object you can see the milling on rather than a fleck
+         * of spilled glitter.
          */
         r: (ribbon ? 8 : 10) + Math.random() * (6 + p * 10),
-        art: ribbon ? CONFETTI : COINS[Math.floor(Math.random() * COINS.length)]!,
+        art: ribbon ? CONFETTI : COIN_FRAMES[Math.floor(Math.random() * COIN_FRAMES.length)]!,
         spin: (Math.random() - 0.5) * (ribbon ? 900 : 420),
         angle: Math.random() * 360,
-        settled: false,
-        restAngle: 0,
         approach: 0,
+        delay: 0,
+        gravity: GRAVITY,
       };
     };
 
@@ -231,8 +220,6 @@ export function Fireworks({
 
     const reset = () => {
       live.current = [];
-      heights.current = new Array(COLUMNS).fill(0);
-      pileAlpha.current = 1;
       pouring.current = { left: 0, rate: 0, power: 0 };
       setParticles([]);
     };
@@ -264,7 +251,6 @@ export function Fireworks({
             ),
           );
         }
-        pileAlpha.current = 1;
         live.current = [...live.current, ...next];
         start();
       },
@@ -293,18 +279,33 @@ export function Fireworks({
           const angle = step * i + (Math.random() - 0.5) * step * 0.9;
           // Slow across the plane, fast toward the camera. A coin that mostly
           // travels sideways is being thrown past the player, not at them.
-          const v = (70 + Math.random() * 90) * (0.6 + p * 0.7);
+          const v = (44 + Math.random() * 56) * (0.6 + p * 0.7);
           const coin = make(p, width / 2, height * 0.5, Math.cos(angle) * v, Math.sin(angle) * v);
           next.push({
             ...coin,
             // Starts SMALL, because it is far away. The growth is the depth
             // cue and it does not work if the coin begins at its final size.
             r: coin.r * 0.34,
-            // Radii per second. At ~3.4 a coin roughly quadruples in the
-            // second it is alive, which is what a thing arriving looks like.
-            approach: 2.6 + Math.random() * 1.6 + p * 1.2,
-            ttl: 0.85 + Math.random() * 0.35,
-            spin: coin.spin * 0.6,
+            /*
+             * HALF THE SPEED, THE SAME FINAL SIZE.
+             *
+             * Approach and lifetime multiply: a coin ends up (1 + approach ×
+             * ttl) times its starting size, so 3.4 radii/second for one second
+             * and 1.7 for two seconds both finish at roughly 4.4×. The founder
+             * liked where these coins got to and asked only that they take
+             * long enough to be seen getting there, so the product is held and
+             * the rate is halved.
+             */
+            approach: 1.3 + Math.random() * 0.8 + p * 0.6,
+            ttl: 1.7 + Math.random() * 0.7,
+            spin: coin.spin * 0.45,
+            /*
+             * Launched over half a second rather than all on one frame.
+             *
+             * Evenly spaced, then jittered, so it is a stream rather than
+             * three ranks of coins arriving in step.
+             */
+            delay: (i / count) * 0.5 + Math.random() * 0.06,
           });
         }
         live.current = [...live.current, ...next];
@@ -316,13 +317,18 @@ export function Fireworks({
         const p = Math.max(0, Math.min(1, power));
         pouring.current = {
           left: seconds,
-          // 14 coins a second at the bottom of the scale, 46 at the top. Fast
-          // enough to be a stream rather than a drip, slow enough that the
-          // individual coins stay readable as coins.
-          rate: 14 + p * 32,
+          /*
+           * 10 coins a second at the bottom of the scale, 32 at the top.
+           *
+           * Down from 14–46. Each coin now falls for over a second instead of
+           * under one, so the same rate leaves three times as many on screen —
+           * and a screen packed edge to edge with coins is a texture, which is
+           * the state the founder described as "just laying down". Fewer,
+           * slower, individually visible.
+           */
+          rate: 10 + p * 22,
           power: p,
         };
-        pileAlpha.current = 1;
         start();
       },
 
@@ -348,8 +354,7 @@ export function Fireworks({
         owed -= spawn;
         const p = pouring.current.power;
         for (let i = 0; i < spawn; i += 1) {
-          live.current.push(
-            make(
+          const drop = make(
               p,
               /*
                * Biased toward the middle, so the heap is a MOUND.
@@ -363,25 +368,31 @@ export function Fireworks({
               width * 0.1 + ((Math.random() + Math.random()) / 2) * width * 0.8,
               // Above the top edge, so they enter already moving.
               -20 - Math.random() * 60,
-              (Math.random() - 0.5) * 90,
-              120 + Math.random() * 120,
-            ),
-          );
+              (Math.random() - 0.5) * 60,
+              // Down from 120–240. A coin entering at walking pace under a
+              // third of gravity drifts through the cabinet over about a
+              // second and a half; at the old numbers it was gone in half of
+              // that and read as a dropped object rather than as falling money.
+              70 + Math.random() * 70,
+            );
+          drop.gravity = RAIN_GRAVITY;
+          // Long enough to cross the whole cabinet and leave through the
+          // bottom, rather than ageing out somewhere over the reels.
+          drop.ttl = 2.4 + Math.random() * 0.8;
+          live.current.push(drop);
         }
       } else {
         owed = 0;
       }
 
       const drag = Math.pow(DRAG, dt);
-      const floorY = height - 4;
-      const maxPile = height * MAX_PILE;
       const next: Particle[] = [];
-      let settledCount = 0;
 
       for (const particle of live.current) {
-        if (particle.settled) {
-          settledCount += 1;
-          next.push(particle);
+        // Waiting its turn in a staggered blast. It exists, it is simply not
+        // in the world yet — no ageing, no motion, and nothing drawn.
+        if (particle.delay > 0) {
+          next.push({ ...particle, delay: particle.delay - dt });
           continue;
         }
 
@@ -397,105 +408,27 @@ export function Fireworks({
         const vy =
           particle.approach > 0
             ? particle.vy
-            : particle.vy * drag + GRAVITY * dt;
+            : particle.vy * drag + particle.gravity * dt;
         const x = particle.x + vx * near * dt;
         const y = particle.y + vy * near * dt;
 
-        // A blast coin never lands. It leaves through the front of the screen,
-        // which is the entire point of it.
-        if (pile && particle.approach === 0 && vy > 0) {
-          const column = Math.max(
-            0,
-            Math.min(COLUMNS - 1, Math.floor((x / Math.max(1, width)) * COLUMNS)),
-          );
-          const top = floorY - (heights.current[column] ?? 0);
-          if (y + particle.r >= top) {
-            /*
-             * Landed. It stops here, raises its own column and spills a share
-             * onto each neighbour so the heap slopes.
-             *
-             * A coin that lands off the sides of the board is dropped rather
-             * than settled: it is outside the frame and would sit in a corner
-             * nothing is looking at, holding a slot in the particle budget.
-             */
-            if (x < -particle.r || x > width + particle.r) continue;
-
-            const rest = top - particle.r;
-            const grow = particle.r * STACK_FACTOR;
-            const spill = particle.r * SPILL_FACTOR;
-            heights.current[column] = Math.min(maxPile, (heights.current[column] ?? 0) + grow);
-            if (column > 0) {
-              heights.current[column - 1] = Math.min(
-                maxPile,
-                (heights.current[column - 1] ?? 0) + spill,
-              );
-            }
-            if (column < COLUMNS - 1) {
-              heights.current[column + 1] = Math.min(
-                maxPile,
-                (heights.current[column + 1] ?? 0) + spill,
-              );
-            }
-            lastLanding.current = now;
-            settledCount += 1;
-            next.push({
-              ...particle,
-              x,
-              y: rest,
-              vx: 0,
-              vy: 0,
-              life,
-              settled: true,
-              // Frozen where it stopped turning, so the heap is still.
-              restAngle: particle.angle + particle.spin * life,
-            });
-            continue;
-          }
-        }
-
-        // Not landed. It ages out as before — which is the whole behaviour
-        // when `pile` is off.
+        // Everything leaves. A blast coin goes out through the front of the
+        // screen, a poured one falls past the bottom edge, and both simply age
+        // out — there is no floor here any more. See the note at the top.
         if (life >= particle.ttl) continue;
         next.push({ ...particle, life, vx, vy, x, y });
       }
 
       /*
-       * The heap leaves on its own.
-       *
-       * Held for a beat after the last coin lands so the player sees what
-       * arrived, then faded. Without this the pile is permanent and the next
-       * spin happens behind a wall of coins.
-       */
-      const idle = pouring.current.left <= 0 && settledCount > 0;
-      if (idle && now - lastLanding.current > PILE_HOLD_MS) {
-        pileAlpha.current = Math.max(
-          0,
-          1 - (now - lastLanding.current - PILE_HOLD_MS) / PILE_FADE_MS,
-        );
-        if (pileAlpha.current <= 0) {
-          heights.current = new Array(COLUMNS).fill(0);
-          pileAlpha.current = 1;
-          live.current = next.filter((p) => !p.settled);
-          setParticles(live.current);
-          if (live.current.length) {
-            frame.current = requestAnimationFrame(step);
-          } else {
-            cancelAnimationFrame(frame.current);
-            frame.current = 0;
-          }
-          return;
-        }
-      }
-
-      /*
-       * The budget. Settled coins at the BOTTOM of the heap go first — they
-       * are the ones buried under everything else, so dropping them is the
-       * change nobody can see.
+       * The budget. The OLDEST go first, which is the change nobody can see:
+       * every particle fades over its own lifetime, so the oldest on screen are
+       * also the faintest.
        */
       if (next.length > MAX_PARTICLES) {
-        const settled = next.filter((p) => p.settled).sort((a, b) => b.y - a.y);
-        const drop = new Set(settled.slice(0, next.length - MAX_PARTICLES));
-        live.current = next.filter((p) => !drop.has(p));
+        live.current = next
+          .slice()
+          .sort((a, b) => a.life / a.ttl - b.life / b.ttl)
+          .slice(0, MAX_PARTICLES);
       } else {
         live.current = next;
       }
@@ -513,30 +446,25 @@ export function Fireworks({
       controller.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [width, height, reduced, pile]);
+  }, [width, height, reduced]);
 
   if (!particles.length) return null;
 
   return (
     <View style={[StyleSheet.absoluteFill, styles.layer]} pointerEvents="none">
       {particles.map((particle, i) => {
-        /*
-         * A flying coin fades out over its own lifetime, so the burst thins
-         * rather than vanishing all at once. A SETTLED one does not — it is
-         * part of the heap, and a heap whose lower coins had faded to nothing
-         * would be a ring of coins around a hole.
-         */
+        // Queued behind the coins ahead of it in the blast. Drawing it at its
+        // launch point would put the whole burst on screen as a tight knot of
+        // motionless coins, which is the single-pop look the stagger exists
+        // to remove.
+        if (particle.delay > 0) return null;
+        // Fades out over the last third of its life, so a burst thins rather
+        // than vanishing all at once.
         const t = particle.life / particle.ttl;
-        const opacity = particle.settled
-          ? pileAlpha.current
-          : t > 0.7
-            ? 1 - (t - 0.7) / 0.3
-            : 1;
+        const opacity = t > 0.7 ? 1 - (t - 0.7) / 0.3 : 1;
         const near = particle.approach > 0 ? 1 + particle.approach * particle.life : 1;
         const size = particle.r * 2 * near;
-        const rotation = particle.settled
-          ? particle.restAngle
-          : particle.angle + particle.spin * particle.life;
+        const rotation = particle.angle + particle.spin * particle.life;
         return (
           <Image
             key={i}
