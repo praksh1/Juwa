@@ -1486,6 +1486,30 @@ export function SlotsScreen() {
     return () => clearTimeout(timer);
   }, [auto, spinning, roundActive, bet, balance, spin, autoDelay]);
 
+  /*
+   * On a portrait phone, the physical controls are a dock, not the final item
+   * in a document. Safari may add its own privacy/address UI at any moment;
+   * putting SPIN after the reel art makes the player scroll away from the game
+   * simply to play it. Wide and landscape layouts retain their side rail.
+   */
+  const dockedConsole = dragonHoard && !sideControls;
+  const controlConsole = (
+    <SlotConsole
+      bet={bet}
+      balance={balance}
+      win={runningWin}
+      options={options}
+      onBet={setBet}
+      onSpin={spin}
+      spinning={spinning}
+      auto={auto}
+      onToggleAuto={() => setAuto((on) => !on)}
+      compact={sideControls}
+      dense={dockedConsole}
+      {...(cabinet.controls === 'lever' ? { hideSpin: true } : {})}
+    />
+  );
+
   return (
     <View
       style={styles.root}
@@ -1554,7 +1578,7 @@ export function SlotsScreen() {
 
       <ScrollView
         style={[styles.scroll, { transform: [{ translateX: screenShake }] }]}
-        contentContainerStyle={styles.screen}
+        contentContainerStyle={[styles.screen, dockedConsole && styles.screenWithDock]}
         showsVerticalScrollIndicator
         contentInsetAdjustmentBehavior="automatic"
       >
@@ -1960,7 +1984,7 @@ export function SlotsScreen() {
         ) : null}
       </Card>
 
-      <View style={sideControls ? styles.controlsColumn : undefined}>
+      {!dockedConsole ? <View style={sideControls ? styles.controlsColumn : undefined}>
         {/*
           The cabinet's own controls.
 
@@ -1969,21 +1993,8 @@ export function SlotsScreen() {
           beside the reels, because a lever with no way to change your stake is
           a museum piece rather than a machine.
         */}
-        <SlotConsole
-          bet={bet}
-          balance={balance}
-          win={runningWin}
-          options={options}
-          onBet={setBet}
-          onSpin={spin}
-          spinning={spinning}
-          auto={auto}
-          onToggleAuto={() => setAuto((on) => !on)}
-          compact={sideControls}
-          dense={dragonHoard && !sideControls}
-          {...(cabinet.controls === 'lever' ? { hideSpin: true } : {})}
-        />
-      </View>
+        {controlConsole}
+      </View> : null}
       </View>
 
       <Txt variant="caption" color={colors.text.muted} style={styles.fairness}>
@@ -1994,6 +2005,8 @@ export function SlotsScreen() {
             : 'Every result is provably fair.'}
       </Txt>
       </ScrollView>
+
+      {dockedConsole ? <View style={styles.mobileConsoleDock}>{controlConsole}</View> : null}
 
       {/*
         Headline wins own the whole game stage. Unlike the cabinet rain above,
@@ -2094,6 +2107,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     justifyContent: 'flex-start',
   },
+  screenWithDock: { paddingBottom: 96 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2105,6 +2119,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface.base,
     zIndex: 2,
   },
+  mobileConsoleDock: {
+    position: 'absolute',
+    left: spacing.lg,
+    right: spacing.lg,
+    bottom: 0,
+    paddingTop: spacing.xs,
+    backgroundColor: colors.surface.base,
+    zIndex: 4,
+  },
   rtpPill: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
@@ -2115,8 +2138,9 @@ const styles = StyleSheet.create({
   },
   machineCompact: { gap: spacing.xs, padding: spacing.sm, flex: 1, marginHorizontal: 0 },
   landscapeRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
-  // Wide enough for "10,000 GC" on a chip without wrapping to three lines.
-  controlsColumn: { width: 190, gap: spacing.sm, justifyContent: 'center' },
+  // Wide enough for a real win amount as well as the stake. A narrow rail
+  // clipped the WIN value on Surface/Chrome even though the spin button fit.
+  controlsColumn: { width: 212, gap: spacing.sm, justifyContent: 'center' },
   machine: {
     gap: spacing.sm,
     /*
