@@ -34,6 +34,7 @@ import {
 import { REEL_GAP, WinLines, litCells, useWinCycle } from '../components/WinLines';
 import { CabinetGlass, ReelFrame, SlotConsole, SpinLever } from '../components/SlotControls';
 import { CabinetAtmosphere } from '../components/CabinetAtmosphere';
+import { DragonMarquee } from '../components/DragonMarquee';
 import { cabinetFor, roomFor } from '../api/cabinets';
 import { hasTileArt } from '../components/GameArt';
 import { WinOverlay, useCabinetShake, useScreenShake } from '../components/WinOverlay';
@@ -925,7 +926,10 @@ export function SlotsScreen() {
      * width calculation made the reel window taller than the available game
      * stage and forced a second scroll just to reach WIN and SPIN.
      */
-    const stageCap = compact ? 54 : sideControls ? 76 : MAX_SYMBOL_SIZE;
+    // Only the genuinely short landscape stage needs a tight cap. A Surface
+    // or laptop has room for the large physical reel face once the controls
+    // live in their own rail, so do not make desktop play look miniature.
+    const stageCap = compact ? 54 : sideControls ? (viewportWidth >= 1_000 ? 104 : 88) : MAX_SYMBOL_SIZE;
     return Math.max(26, Math.min(stageCap, byWidth));
   }, [viewportWidth, reelsWidth, REELS, compact, sideControls]);
 
@@ -1628,7 +1632,11 @@ export function SlotsScreen() {
         <ReelFrame style={dragonHoard ? 'none' : cabinet.frame}>
         {/* The lit sign above the reels, cast in this game's own material. */}
         {glassHeight >= MIN_GLASS && details ? (
-          <CabinetGlass name={details.name} material={material} height={glassHeight} />
+          dragonHoard ? (
+            <DragonMarquee height={glassHeight} />
+          ) : (
+            <CabinetGlass name={details.name} material={material} height={glassHeight} />
+          )
         ) : null}
         <Animated.View style={[styles.reelBay, compact && styles.reelBayCompact, bayStyle]}>
         {room ? (
