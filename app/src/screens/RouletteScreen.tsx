@@ -416,7 +416,7 @@ export function RouletteScreen() {
           // the server response: the table never celebrates information the
           // player has not seen yet.
           if (multiple >= 25) {
-            sounds.bigWin();
+            sounds.megaWin();
             celebration.current?.blast(1);
             celebration.current?.pour(1, 2.8);
           } else if (multiple >= 10) {
