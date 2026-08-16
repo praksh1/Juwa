@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, {
   Circle,
   Defs,
+  G,
   LinearGradient as SvgLinearGradient,
   Path,
   Rect,
@@ -173,15 +174,13 @@ export function CrashScreen() {
             </Txt>
           </View>
         </View>
-        <CrashCurve
+        <CrashFlight
           progress={Math.min(1, (shown - 1) / Math.max(0.6, target * 1.6 - 1))}
           accent={game.accent}
           crashed={!running && !!result && !won}
-          target={target}
-          reached={shown}
         />
         <Txt
-          variant="h1"
+          variant="h2"
           color={
             running
               ? game.accent
@@ -208,7 +207,7 @@ export function CrashScreen() {
           ) : result ? (
             won ? <View style={local.winReadout}>
               <Txt variant="caption" color="#B9FFD9">AUTO CASH OUT · {target.toFixed(2)}×</Txt>
-              <Txt variant="h2" color={colors.feedback.winBright}>{format(minor(state.round!.settlement?.payout ?? 0), 'GC')}</Txt>
+              <Txt variant="display" color={colors.feedback.winBright}>{format(minor(state.round!.settlement?.payout ?? 0), 'GC')}</Txt>
               <Txt variant="bodySmall" color={colors.text.secondary}>The flight reached {result.crashPoint.toFixed(2)}×</Txt>
             </View> : <Txt variant="bodySmall" color={colors.text.muted}>
               Crashed at {result.crashPoint.toFixed(2)}× — you needed {target.toFixed(2)}×
@@ -295,80 +294,46 @@ function useClimb() {
 }
 
 /**
- * The curve itself.
- *
- * A filled area under an exponential arc, with the cash-out line marked across
- * it. The fill is what makes it read as a chart of something growing rather
- * than as a stroke on a background, and the marked line is what turns the climb
- * into a question — you can see how far there is to go.
+ * The flight itself. The multiplier still climbs on the same honest clock, but
+ * the player follows a physical craft through a light tunnel instead of a chart
+ * line. That makes the moment read as a flight rather than a spreadsheet.
  */
-function CrashCurve({
+function CrashFlight({
   progress,
   accent,
   crashed,
-  target,
-  reached,
 }: {
   progress: number;
   accent: string;
   crashed: boolean;
-  target: number;
-  reached: number;
 }) {
-  const W = 260;
-  const H = 96;
+  const W = 292;
+  const H = 126;
   const p = Math.max(0, Math.min(1, progress));
-
-  // The visible arc, sampled. Twenty points is smooth at this size and cheap
-  // enough to rebuild every frame.
-  const points: string[] = [];
-  for (let i = 0; i <= 20; i += 1) {
-    const t = (i / 20) * p;
-    points.push(`${(t * W).toFixed(1)},${(H - Math.pow(t, 1.7) * H).toFixed(1)}`);
-  }
-  const line = points.length > 1 ? `M${points.join(' L')}` : '';
-  const area = line ? `${line} L${(p * W).toFixed(1)},${H} L0,${H} Z` : '';
-
-  // Where the target sits on the same axis, so the line and the curve agree.
-  const targetAt = Math.min(1, (target - 1) / Math.max(0.6, target * 1.6 - 1));
-  const targetY = H - Math.pow(targetAt, 1.7) * H;
-  const hit = reached >= target;
+  const x = 30 + p * (W - 60);
+  const y = H - 24 - Math.pow(p, 1.55) * (H - 52);
+  const trailStart = Math.max(8, x - 78);
+  const glow = crashed ? '#FF5C67' : accent;
 
   return (
     <Svg width={W} height={H}>
       <Defs>
-        <SvgLinearGradient id="crash-fill" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={crashed ? '#FF6B6B' : accent} stopOpacity="0.42" />
-          <Stop offset="1" stopColor={crashed ? '#FF6B6B' : accent} stopOpacity="0" />
+        <SvgLinearGradient id="crash-thrust" x1="0" y1="0" x2="1" y2="0">
+          <Stop offset="0" stopColor={glow} stopOpacity="0" />
+          <Stop offset="0.78" stopColor={glow} stopOpacity="0.26" />
+          <Stop offset="1" stopColor="#FFF5C8" stopOpacity="0.9" />
         </SvgLinearGradient>
       </Defs>
-
-      {/* The cash-out line, drawn under the curve so the curve crosses it. */}
-      <Path
-        d={`M0,${targetY} L${W},${targetY}`}
-        stroke={hit ? colors.feedback.winBright : 'rgba(255,255,255,0.28)'}
-        strokeWidth={1}
-        strokeDasharray="4 4"
-      />
-      {area ? <Path d={area} fill="url(#crash-fill)" /> : null}
-      {line ? (
-        <Path
-          d={line}
-          stroke={crashed ? '#FF6B6B' : accent}
-          strokeWidth={2.5}
-          fill="none"
-          strokeLinecap="round"
-        />
-      ) : null}
-      {/* The head of the curve — the thing the eye follows. */}
-      {p > 0.01 ? (
-        <Circle
-          cx={p * W}
-          cy={H - Math.pow(p, 1.7) * H}
-          r={crashed ? 5 : 4}
-          fill={crashed ? '#FF6B6B' : '#FFFFFF'}
-        />
-      ) : null}
+      {[22, 50, 78, 106].map((line) => <Path key={line} d={`M10,${line} L${W - 10},${line - 19}`} stroke="rgba(255,255,255,0.11)" strokeWidth={1} />)}
+      {[46, 106, 166, 226].map((line) => <Circle key={line} cx={line} cy={25 + ((line / 9) % 30)} r={1.5} fill="rgba(255,242,190,0.56)" />)}
+      {p > 0.01 ? <Path d={`M${trailStart},${y + 7} L${x - 7},${y + 3}`} stroke="url(#crash-thrust)" strokeWidth={13} strokeLinecap="round" /> : null}
+      <Circle cx={x} cy={y} r={crashed ? 20 : 15} fill={glow} opacity={crashed ? 0.42 : 0.2} />
+      <G transform={`translate(${x} ${y}) rotate(-23)`}>
+        <Path d="M-24,0 L2,-12 L25,0 L2,12 Z" fill="#101D2D" stroke={glow} strokeWidth={2} />
+        <Path d="M-12,0 L4,-6 L15,0 L4,6 Z" fill="#EAF9FF" opacity={crashed ? 0.45 : 0.92} />
+        <Path d="M-2,-4 L-10,-16 L8,-6 Z M-2,4 L-10,16 L8,6 Z" fill={glow} opacity="0.9" />
+        <Circle cx="16" cy="0" r="3" fill="#FFF6CA" />
+      </G>
     </Svg>
   );
 }
@@ -401,7 +366,7 @@ export function LimboScreen() {
   };
 
   const result = state.round?.state as { result: number; won: boolean } | undefined;
-  const { display, rolling, roll } = useNumberRoll(2);
+  const { display, rolling, roll } = useNumberRoll(2, 1_450);
 
   const play = async () => {
     const round = await state.play({ type: 'set-target', target });
@@ -438,22 +403,26 @@ export function LimboScreen() {
 
         {/* The drawn number, at the largest size on the screen — it is the
             entire outcome, and it should be the entire focus. */}
-        <View style={local.limboFace}>
-          <View style={local.limboCut} pointerEvents="none" />
-          <Txt
-            variant="display"
-            color={
-              rolling
-                ? colors.text.primary
-                : settled
-                  ? result!.won
-                    ? colors.feedback.winBright
-                    : colors.feedback.error
-                  : colors.text.muted
-            }
-          >
-            {result || rolling ? `${display.toFixed(2)}×` : '—'}
-          </Txt>
+        <View style={local.limboChamber}>
+          <View style={local.limboOrbit} pointerEvents="none" />
+          <View style={local.limboFace}>
+            <View style={local.limboCut} pointerEvents="none" />
+            <Txt
+              variant="display"
+              style={local.limboNumber}
+              color={
+                rolling
+                  ? colors.text.primary
+                  : settled
+                    ? result!.won
+                      ? colors.feedback.winBright
+                      : colors.feedback.error
+                    : colors.text.muted
+              }
+            >
+              {result || rolling ? `${display.toFixed(2)}×` : '—'}
+            </Txt>
+          </View>
         </View>
 
         <TargetPicker values={LIMBO_TARGETS} value={target} onChange={setTarget} colour={game.accent} />
@@ -486,7 +455,7 @@ export function LimboScreen() {
  * outcome. `ceiling` bounds the scramble so the digits look plausible for the
  * game: Limbo can draw anything upward, Dice only 0 to 99.99.
  */
-function useNumberRoll(initial: number) {
+function useNumberRoll(initial: number, duration = 900) {
   const [display, setDisplay] = useState(initial);
   const [rolling, setRolling] = useState(false);
   const frame = useRef(0);
@@ -504,7 +473,7 @@ function useNumberRoll(initial: number) {
     }
 
     const started = performance.now();
-    const DURATION = 900;
+    const DURATION = duration;
     let lastTick = 0;
 
     const tick = (now: number) => {
@@ -1526,8 +1495,8 @@ const local = StyleSheet.create({
   mineCore: { position: 'absolute', width: 10, height: 10, borderRadius: 5, backgroundColor: '#FFEF88', shadowColor: '#FF4D21', shadowOpacity: 1, shadowRadius: 10 },
   /** The drawn number in Limbo, given fixed height so the panel cannot jump. */
   limboFace: {
-    minHeight: 62,
-    minWidth: 220,
+    minHeight: 112,
+    minWidth: 264,
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: radius.md,
@@ -1536,6 +1505,9 @@ const local = StyleSheet.create({
     backgroundColor: 'rgba(2, 18, 24, 0.72)',
     overflow: 'hidden',
   },
+  limboChamber: { width: '100%', minHeight: 134, alignItems: 'center', justifyContent: 'center', borderRadius: radius.lg, borderWidth: 1, borderColor: 'rgba(78,221,226,0.28)', backgroundColor: 'rgba(0,11,20,0.38)', overflow: 'hidden' },
+  limboOrbit: { position: 'absolute', width: 244, height: 74, borderRadius: 122, borderWidth: 1, borderColor: 'rgba(94,234,212,0.38)', transform: [{ rotate: '-12deg' }] },
+  limboNumber: { fontSize: 52, lineHeight: 60, textShadowColor: 'rgba(78,221,226,0.5)', textShadowRadius: 18 },
   limboCut: {
     position: 'absolute',
     left: -48,

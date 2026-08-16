@@ -365,6 +365,7 @@ export function BlackjackScreen() {
           <View style={styles.tableRailInner} />
         </View>
         <Animated.View style={[styles.lampPool, { opacity: lamp.interpolate({ inputRange: [0, 1], outputRange: [0.18, 0.52] }) }]} pointerEvents="none" />
+        <View style={styles.tableDimension} pointerEvents="none" />
         <View style={styles.tablePlaque} pointerEvents="none">
           <Txt variant="caption" color="#FFE9A6">PRIVATE TABLE · 21</Txt>
         </View>
@@ -382,12 +383,6 @@ export function BlackjackScreen() {
             <Txt variant="caption" color="#C9A95D">
               DEALER
             </Txt>
-            {table?.dealerRevealed && dealerValue ? (
-              <Txt variant="bodySmall" color="#F7E9BC">
-                {dealerValue.total}
-                {dealerValue.soft ? ' (soft)' : ''}
-              </Txt>
-            ) : null}
           </View>
           <View style={styles.cards}>
             {table ? (
@@ -403,6 +398,12 @@ export function BlackjackScreen() {
                 server never sent it. This is a placeholder, not a hidden value. */}
             {table && !table.dealerRevealed ? (
               <PlayingCard rank="?" suit="S" hidden index={1} />
+            ) : null}
+            {table?.dealerRevealed && dealerValue ? (
+              <View style={styles.handTotalBadge}>
+                <Txt variant="h2" color="#FFF0B1">{dealerValue.total}</Txt>
+                {dealerValue.soft ? <Txt variant="caption" color="#C9A95D">SOFT</Txt> : null}
+              </View>
             ) : null}
           </View>
         </View>
@@ -425,10 +426,6 @@ export function BlackjackScreen() {
                     {' · '}
                     {format(minor(hand.stake), 'GC')}
                   </Txt>
-                  <Txt variant="bodySmall" color="#F7E9BC">
-                    {value.total}
-                    {value.soft ? ' (soft)' : ''}
-                  </Txt>
                 </View>
                 <View style={styles.cards}>
                   {hand.cards.map((card, i) => (
@@ -440,6 +437,10 @@ export function BlackjackScreen() {
                       size={table.hands.length > 1 ? 'small' : 'normal'}
                     />
                   ))}
+                  <View style={styles.handTotalBadge}>
+                    <Txt variant="h2" color={active ? '#FFF1B5' : '#F7E9BC'}>{value.total}</Txt>
+                    {value.soft ? <Txt variant="caption" color="#C9A95D">SOFT</Txt> : null}
+                  </View>
                 </View>
                 {hand.outcome ? (
                   <Txt
@@ -582,6 +583,7 @@ const styles = StyleSheet.create({
   tableRail: { ...StyleSheet.absoluteFillObject, borderRadius: 20, borderWidth: 8, borderColor: 'rgba(29,14,4,0.76)' },
   tableRailInner: { flex: 1, margin: 5, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,225,133,0.72)' },
   lampPool: { position: 'absolute', width: 260, height: 150, borderRadius: 130, alignSelf: 'center', top: -54, backgroundColor: '#F8CD63', shadowColor: '#FFE29A', shadowRadius: 40 },
+  tableDimension: { position: 'absolute', left: 30, right: 30, bottom: -44, height: 126, borderRadius: 100, borderWidth: 1, borderColor: 'rgba(255,224,133,0.26)', backgroundColor: 'rgba(0,0,0,0.14)', transform: [{ scaleX: 1.18 }] },
   tablePlaque: { alignSelf: 'center', paddingHorizontal: 14, paddingVertical: 5, borderRadius: 3, borderWidth: 1, borderColor: 'rgba(255,218,116,0.62)', backgroundColor: 'rgba(8,12,16,0.66)' },
   feltSheen: { position: 'absolute', left: 0, right: 0, top: 0, height: '30%' },
   seat: { gap: spacing.sm, minHeight: 96 },
@@ -594,6 +596,7 @@ const styles = StyleSheet.create({
   seatLabel: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   // Extra right padding compensates for the negative margin that overlaps cards.
   cards: { flexDirection: 'row', alignItems: 'center', paddingRight: spacing.lg, minHeight: 74 },
+  handTotalBadge: { minWidth: 54, minHeight: 54, marginLeft: spacing.md, paddingHorizontal: spacing.xs, borderRadius: 27, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(9,12,17,0.84)', borderWidth: 2, borderColor: '#C9A95D', shadowColor: '#F7CA62', shadowOpacity: 0.42, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } },
   divider: { height: 1, backgroundColor: 'rgba(255,221,137,0.38)' },
   betRow: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'center', flexWrap: 'wrap' },
   chip: {

@@ -70,12 +70,11 @@ const WHEEL_LAND_SECONDS = 3.4;
  * Big enough that the painted numbers are readable on a phone, small enough
  * that the whole result — wheel, number, and the win line — clears the dock.
  *
- * It was 230, and on a 664-point viewport that put "WIN 200 GC" underneath the
- * pinned controls: the player was scrolled back to the top to be shown a result
- * that was covered up. The cluster is measured against the dock now rather than
- * sized on its own.
+ * The result is in a scrollable stage above the pinned controls, so the wheel
+ * can be large enough to feel like a physical object without covering the
+ * payout readout on a compact phone.
  */
-const WHEEL_SIZE = 206;
+const WHEEL_SIZE = 232;
 
 /** Payout quoted as "X to 1"; the stake comes back on top. */
 const ODDS: Record<BetType, number> = {
@@ -416,12 +415,20 @@ export function RouletteScreen() {
           // The burst is deliberately tied to the ball's landing rather than
           // the server response: the table never celebrates information the
           // player has not seen yet.
-          if (multiple >= 10) {
+          if (multiple >= 25) {
             sounds.bigWin();
             celebration.current?.blast(1);
+            celebration.current?.pour(1, 2.8);
+          } else if (multiple >= 10) {
+            sounds.bigWin();
+            celebration.current?.blast(0.9);
+            celebration.current?.pour(0.72, 1.6);
+          } else if (multiple >= 3) {
+            sounds.win();
+            celebration.current?.fire(0.9);
           } else {
             sounds.win();
-            celebration.current?.fire(Math.max(0.25, Math.min(0.8, (multiple - 1) / 4)));
+            celebration.current?.fire(Math.max(0.32, Math.min(0.64, (multiple - 1) / 4)));
           }
         }
         else sounds.lose();
@@ -854,7 +861,7 @@ const styles = StyleSheet.create({
   // around the wheel/result cluster rather than across the whole scroll view.
   wheelStage: { position: 'relative', overflow: 'hidden', borderRadius: 24, backgroundColor: '#060812' },
   wheelArtwork: { ...StyleSheet.absoluteFillObject, opacity: 0.32 },
-  wheelShell: { overflow: 'hidden', borderRadius: 24, borderWidth: 2, borderColor: '#C99C35', padding: spacing.md, shadowColor: '#E7B33F', shadowOpacity: 0.38, shadowRadius: 22, shadowOffset: { width: 0, height: 8 } },
+  wheelShell: { overflow: 'hidden', borderRadius: 24, borderWidth: 2, borderColor: '#C99C35', padding: spacing.md, shadowColor: '#E7B33F', shadowOpacity: 0.52, shadowRadius: 30, shadowOffset: { width: 0, height: 11 } },
   wheelCrown: { alignSelf: 'center', paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.sm, borderWidth: 1, borderColor: 'rgba(255,224,143,0.68)', backgroundColor: 'rgba(12,5,2,0.72)' },
   spinStage: { ...StyleSheet.absoluteFillObject, zIndex: 8, alignItems: 'center', justifyContent: 'center', gap: spacing.md, overflow: 'hidden' },
   spinArtwork: { ...StyleSheet.absoluteFillObject, opacity: 0.24 },
