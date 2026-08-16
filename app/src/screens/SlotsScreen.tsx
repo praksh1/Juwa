@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Image, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Animated, Image, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { BASE_CABINET, anticipatingReels, bonusCabinet, colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
 import { publishBalance } from '../api/usePlayer';
@@ -159,30 +159,6 @@ const MIN_ROW_ASPECT = 1.0;
 const MAX_ROW_ASPECT = 1.34;
 
 /**
- * Everything on screen that is not the reel window or the top glass.
- *
- * MEASURED off the built screen at 390x844, not estimated: navigation header
- * 95, balance strip and its gap 92, readout 48, console and its gap 92,
- * fairness line 42, tab bar 62, and the cabinet's own borders and padding 15.
- *
- * The old figure here was 230, which was not a measurement of anything. It
- * survived only because width binds first on a three-row machine, so the
- * height budget was never actually spent — until a five-row diamond spent it
- * and pushed the spin button off the bottom of the phone.
- *
- * In landscape the console moves BESIDE the machine and the readout collapses,
- * so most of that budget comes back and the reels take the height instead.
- */
-const PORTRAIT_CHROME = 436;
-/*
- * Landscape is not "portrait with more room": it has 390 points of height in
- * total, of which the navigation header takes 55 and the balance strip 48. The
- * console moves out of the budget entirely — it goes in a rail beside the
- * reels — but what is left is still less than half the portrait budget, and
- * understating it clipped the balance strip behind the header.
- */
-const COMPACT_CHROME = 200;
-/**
  * The tallest the top glass may grow.
  *
  * It exists to absorb height the reels cannot use, and on a phone there is a
@@ -197,15 +173,6 @@ const COMPACT_CHROME = 200;
 const MAX_GLASS = 150;
 /** Below this it is a stripe rather than a sign, and is better not drawn. */
 const MIN_GLASS = 30;
-/**
- * Height set aside for the glass BEFORE the reels are sized.
- *
- * Without it, a tall grid takes every point there is and the machine loses the
- * one part that says which game you are in — Ocean Drift's five-row diamond
- * did exactly that. A reserve costs the diamond about four points of symbol
- * and buys it a nameplate.
- */
-const GLASS_RESERVE = 34;
 
 /**
  * How long auto-spin waits after being switched on, before spending anything.
@@ -911,50 +878,14 @@ export function SlotsScreen() {
   const [reelsWidth, setReelsWidth] = useState(0);
 
   /**
-   * The machine shrinks on a short screen.
-   *
-   * A phone held sideways leaves roughly 200 points of height once Safari's
-   * chrome and the tab bar are taken out. Three rows of 58-point symbols plus a
-   * readout, the bet chips and a spin button need more than twice that, so the
-   * machine ran off the bottom and the game was unplayable in landscape — the
-   * player could see one row of symbols and no button.
-   *
-   * Scaling the symbols is the fix rather than scrolling, because a slot is one
-   * object: the reels and the button that turns them have to be on screen
-   * together, or every spin is two gestures and a guess.
+   * Landscape still uses the side-by-side console, but the stage itself is now
+   * allowed to scroll. Browser chrome on iOS changes the reported height while
+   * the address bar collapses; using that number to resize a live reel window
+   * made the entire cabinet visibly shrink while the player dragged the page.
    */
   const compact = useCompactLayout();
   const { height: viewportHeight, width: viewportWidth } = useWindowDimensions();
   const symbolSize = useMemo(() => {
-    // Everything above and below the reels: header, readout, chips, button and
-    // tab bar. Taken from the portrait layout rather than guessed.
-    // MEASURED. In portrait the header, readout, chips and spin button sit
-    // above and below the reels and come to about 300.
-    //
-    // In landscape the chips and button move BESIDE the machine, so only the
-    // navigation header, the card padding and the readout are spending height
-    // — about 120. That is the whole reason for the side-by-side layout: at 258
-    // the symbols had to shrink to 20 points to fit, which was playable and
-    // did not look like a slot machine.
-    // MEASURED against the built screen, not guessed. The old 300 left the
-    // machine occupying about a fifth of a 900-point phone with dead space
-    // above and below it — a slot cabinet is the screen, not a widget on it.
-    const chrome = compact ? COMPACT_CHROME : PORTRAIT_CHROME;
-    /*
-     * Budgeted against the SHORTEST cell the machine could use, not the one it
-     * will actually use.
-     *
-     * Symbols are square and sized off the cell's width, so dividing the height
-     * budget by a tall aspect shrinks the symbol to make room for space it does
-     * not need. Using the floor means height only ever binds on a genuinely
-     * short screen; on a phone held upright width binds, which is the truth of
-     * the geometry — five reels across 390 points is what fixes a symbol at
-     * about 72, and no amount of spare height changes that.
-     */
-    const byHeight = Math.floor(
-      (viewportHeight - chrome - (compact ? 0 : GLASS_RESERVE)) / (MAX_ROWS * MIN_ROW_ASPECT),
-    );
-
     /*
      * WIDTH MATTERS AS MUCH AS HEIGHT, and used not to count at all.
      *
@@ -972,12 +903,13 @@ export function SlotsScreen() {
     const byWidth =
       reelsWidth > 0
         ? Math.floor((reelsWidth - REEL_GAP * (REELS - 1)) / REELS)
-        : byHeight;
+        : Math.floor((viewportWidth - REEL_GAP * (REELS - 1)) / REELS);
 
-    // Never so small the artwork stops reading — below about 26 points a
-    // symbol is a coloured smudge — and never so large it stops fitting.
-    return Math.max(26, Math.min(MAX_SYMBOL_SIZE, Math.min(byHeight, byWidth)));
-  }, [viewportHeight, MAX_ROWS, compact, reelsWidth, REELS]);
+    // Width is stable when Safari's address bar appears or disappears. Height
+    // is deliberately not a constraint: the surrounding ScrollView owns any
+    // additional vertical space instead of rescaling a physical cabinet.
+    return Math.max(26, Math.min(MAX_SYMBOL_SIZE, byWidth));
+  }, [viewportWidth, reelsWidth, REELS]);
 
   /**
    * How tall a cell is against how wide it is.
@@ -996,22 +928,8 @@ export function SlotsScreen() {
   const cellHeight = useMemo(() => {
     const want = cabinet.rowAspect ?? DEFAULT_ROW_ASPECT;
     const aspect = Math.min(MAX_ROW_ASPECT, Math.max(MIN_ROW_ASPECT, want));
-    /*
-     * Air is the FIRST thing given up when the screen runs out.
-     *
-     * A cabinet may ask for a third again of its symbol in height, but only out
-     * of height that exists. Ocean Drift's five-row diamond asked for 1.3 and
-     * got a 470-point reel window on a phone that had 370 to give, which pushed
-     * the console off the bottom — a machine you cannot spin. Clamping here
-     * rather than refusing the request means the tall grids simply sit tighter,
-     * which is what a real cabinet does with a big grid anyway.
-     */
-    const room = Math.floor(
-      (viewportHeight - (compact ? COMPACT_CHROME : PORTRAIT_CHROME) - (compact ? 0 : GLASS_RESERVE)) /
-        MAX_ROWS,
-    );
-    return Math.max(symbolSize, Math.min(Math.round(symbolSize * aspect), room));
-  }, [symbolSize, cabinet.rowAspect, viewportHeight, compact, MAX_ROWS]);
+    return Math.max(symbolSize, Math.round(symbolSize * aspect));
+  }, [symbolSize, cabinet.rowAspect]);
 
   /**
    * What is left of the screen once the reels and the controls are paid for.
@@ -1078,12 +996,9 @@ export function SlotsScreen() {
 
   const glassHeight = useMemo(() => {
     if (compact) return 0;
-    // Cannot come out negative: `cellHeight` is clamped against this same
-    // budget, and GLASS_RESERVE was taken out of it before the reels were
-    // sized. The floor is belt and braces for an unusually short viewport.
-    const spare = viewportHeight - PORTRAIT_CHROME - cellHeight * MAX_ROWS;
-    return Math.round(Math.max(0, Math.min(MAX_GLASS, spare)));
-  }, [compact, viewportHeight, cellHeight, MAX_ROWS]);
+    // A width-led top box remains still when mobile-browser chrome changes.
+    return Math.round(Math.max(MIN_GLASS, Math.min(MAX_GLASS, cellHeight * 0.72)));
+  }, [compact, cellHeight]);
 
   /**
    * The bonus-round re-theme.
@@ -1553,10 +1468,16 @@ export function SlotsScreen() {
   }, [auto, spinning, roundActive, bet, balance, spin, autoDelay]);
 
   return (
-    <View style={styles.screen} ref={screenRef}>
+    <View style={styles.root} ref={screenRef}>
       {showRules && details && paytable ? (
         <RulesIntro game={details} model={paytable} bet={bet} onPlay={() => setShowRules(false)} />
       ) : null}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.screen}
+        showsVerticalScrollIndicator
+        contentInsetAdjustmentBehavior="automatic"
+      >
       <View style={styles.header}>
         {/*
           The destination of every coin the machine pays out.
@@ -1774,7 +1695,7 @@ export function SlotsScreen() {
           a player's first session contains no evidence that the game has one
           at all. See BonusMeter.
         */}
-        {bonusSpec ? (
+        {bonusSpec && !dragonHoard ? (
           <BonusMeter
             reward={bonusSpec.reward}
             trigger={bonusSpec.trigger}
@@ -1785,6 +1706,19 @@ export function SlotsScreen() {
           />
         ) : null}
         </View>
+        {dragonHoard && bonusSpec ? (
+          <View style={styles.dragonBonusDock}>
+            <BonusMeter
+              reward={bonusSpec.reward}
+              trigger={bonusSpec.trigger}
+              scatters={visibleScatters}
+              gameId={gameId}
+              active={phase === 'feature' || phase === 'fs' || phase === 'fs-intro'}
+              variant="cabinet"
+              {...(details?.art ? { family: details.art } : {})}
+            />
+          </View>
+        ) : null}
         </Animated.View>
 
         <View
@@ -2033,6 +1967,7 @@ export function SlotsScreen() {
             ? `Fair: ${round.fairness.serverSeedHash.slice(0, 16)}… · nonce ${round.fairness.nonce}`
             : 'Every result is provably fair.'}
       </Txt>
+      </ScrollView>
 
       {/*
         The collect: the win, carried into the balance as coins.
@@ -2096,8 +2031,10 @@ export function SlotsScreen() {
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.surface.base },
+  scroll: { flex: 1 },
   screen: {
-    flex: 1,
+    flexGrow: 1,
     backgroundColor: colors.surface.base,
     /*
      * Tight vertically, roomy horizontally.
@@ -2110,7 +2047,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     gap: spacing.sm,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
   },
   header: {
     flexDirection: 'row',
@@ -2166,6 +2103,11 @@ const styles = StyleSheet.create({
     // leaves the usable machine inside the viewport.
     paddingTop: 18,
     paddingBottom: 10,
+  },
+  dragonBonusDock: {
+    alignItems: 'center',
+    marginTop: -spacing.xs,
+    marginBottom: spacing.xs,
   },
   /**
    * The reel bay is recessed: darker than the cabinet, with a gold inner rule.

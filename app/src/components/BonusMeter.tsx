@@ -76,9 +76,11 @@ export interface BonusMeterProps {
    * one the player is being told to land.
    */
   gameId?: string;
+  /** A cabinet plaque sits beneath the reel window rather than on its side. */
+  variant?: 'default' | 'cabinet';
 }
 
-export function BonusMeter({ reward, scatters, trigger, active, family, gameId }: BonusMeterProps) {
+export function BonusMeter({ reward, scatters, trigger, active, family, gameId, variant = 'default' }: BonusMeterProps) {
   const reduced = usePrefersReducedMotion();
   const spin = useRef(new Animated.Value(0)).current;
   const glow = useRef(new Animated.Value(0)).current;
@@ -130,10 +132,12 @@ export function BonusMeter({ reward, scatters, trigger, active, family, gameId }
   // The free-spins badge already draws the count, so the words underneath must
   // not repeat it — "8 / 8 FREE SPINS" reads as a fraction.
   const rewardLabel = reward.kind === 'wheel' ? 'BONUS\nWHEEL' : 'FREE\nSPINS';
+  const cabinet = variant === 'cabinet';
+  const copyColor = cabinet ? '#E7C670' : colors.text.muted;
 
   return (
     <View
-      style={[styles.wrap, armed && styles.wrapArmed]}
+      style={[styles.wrap, cabinet && styles.wrapCabinet, armed && styles.wrapArmed]}
       accessibilityRole="text"
       accessibilityLabel={
         `Bonus: land ${trigger} scatter symbols to win ` +
@@ -148,7 +152,7 @@ export function BonusMeter({ reward, scatters, trigger, active, family, gameId }
         that was missing, and the reason a counter could not help. Two symbols
         on these reels look like stars; this says which one matters.
       */}
-      <Txt variant="caption" color={colors.text.muted} style={styles.rule}>
+      <Txt variant="caption" color={copyColor} style={styles.rule}>
         LAND {trigger}
       </Txt>
       <Animated.View style={[styles.symbol, { transform: [{ scale }] }]}>
@@ -170,10 +174,10 @@ export function BonusMeter({ reward, scatters, trigger, active, family, gameId }
         complete, which is a promise this machine does not keep. Stating the
         rule costs one line and removes the only reading that was wrong.
       */}
-      <Txt variant="caption" color={colors.text.muted} style={styles.rule}>
+      <Txt variant="caption" color={copyColor} style={styles.rule}>
         ON ONE SPIN
       </Txt>
-      <Txt variant="caption" color={colors.text.muted} style={styles.rule}>
+      <Txt variant="caption" color={copyColor} style={styles.rule}>
         TO WIN
       </Txt>
 
@@ -330,6 +334,17 @@ const styles = StyleSheet.create({
     borderColor: colors.surface.border,
     backgroundColor: 'rgba(255,255,255,0.03)',
     maxWidth: 84,
+  },
+  wrapCabinet: {
+    minWidth: 96,
+    paddingVertical: spacing.xs,
+    borderColor: '#8A5A1D',
+    backgroundColor: 'rgba(9, 4, 12, 0.9)',
+    shadowColor: '#F0B83F',
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 5,
   },
   wrapArmed: {
     borderColor: colors.gold.default,
