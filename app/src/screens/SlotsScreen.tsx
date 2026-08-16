@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Image, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { BASE_CABINET, anticipatingReels, bonusCabinet, colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
 import { publishBalance } from '../api/usePlayer';
@@ -8,7 +8,7 @@ import { Card, Txt } from '../components/primitives';
 import { SoundToggles } from '../components/SoundToggles';
 import { useRoute } from '@react-navigation/native';
 import { Reel, SPIN_UP_SECONDS, type ReelPhase } from '../components/Reel';
-import { tintFromAccent } from '../components/SlotSymbol';
+import { SlotSymbol, tintFromAccent } from '../components/SlotSymbol';
 import { materialFor } from '../components/symbols/materials';
 import { useCompactLayout } from '../layout';
 import { bonusTrigger, scatterTrigger, slotDetails, slotPaytable } from '../api/games';
@@ -20,6 +20,7 @@ import {
   celebrationDuration,
   celebrationHold,
   type WinTier,
+  usePrefersReducedMotion,
 } from '../motion';
 import { CoinCounter } from '../components/CoinCounter';
 import { CoinStream, type Point } from '../components/CoinStream';
@@ -912,6 +913,10 @@ export function SlotsScreen() {
   // profile is used only on an upright phone; wide and landscape cabinets keep
   // their intentionally larger presentation.
   const portraitCabinet = !sideControls ? cabinet.portrait : undefined;
+  // Three individually configured five-row cabinets have a purposely shallower
+  // wide face. This is not a global desktop shrink: normal five-by-three
+  // machines retain their physical presentation beside the console rail.
+  const wideCabinet = sideControls && !compact ? cabinet.wide : undefined;
   const symbolSize = useMemo(() => {
     /*
      * WIDTH MATTERS AS MUCH AS HEIGHT, and used not to count at all.
@@ -947,10 +952,10 @@ export function SlotsScreen() {
     const stageCap = compact
       ? 54
       : sideControls
-        ? (viewportWidth >= 1_000 ? 104 : 88)
+        ? (wideCabinet?.symbolCap ?? (viewportWidth >= 1_000 ? 104 : 88))
         : (portraitCabinet?.symbolCap ?? MAX_SYMBOL_SIZE);
     return Math.max(26, Math.min(stageCap, byWidth));
-  }, [viewportWidth, reelsWidth, REELS, compact, sideControls, portraitCabinet?.symbolCap]);
+  }, [viewportWidth, reelsWidth, REELS, compact, sideControls, portraitCabinet?.symbolCap, wideCabinet?.symbolCap]);
 
   /**
    * How tall a cell is against how wide it is.
@@ -967,10 +972,10 @@ export function SlotsScreen() {
    * grid stops being a grid.
    */
   const cellHeight = useMemo(() => {
-    const want = portraitCabinet?.rowAspect ?? cabinet.rowAspect ?? DEFAULT_ROW_ASPECT;
+    const want = portraitCabinet?.rowAspect ?? wideCabinet?.rowAspect ?? cabinet.rowAspect ?? DEFAULT_ROW_ASPECT;
     const aspect = Math.min(MAX_ROW_ASPECT, Math.max(MIN_ROW_ASPECT, want));
     return Math.max(symbolSize, Math.round(symbolSize * aspect));
-  }, [symbolSize, cabinet.rowAspect, portraitCabinet?.rowAspect]);
+  }, [symbolSize, cabinet.rowAspect, portraitCabinet?.rowAspect, wideCabinet?.rowAspect]);
 
   /**
    * What is left of the screen once the reels and the controls are paid for.
@@ -1043,6 +1048,7 @@ export function SlotsScreen() {
   const glassHeight = useMemo(() => {
     if (compact) return 0;
     if (portraitCabinet) return portraitCabinet.glassHeight;
+    if (wideCabinet?.glassHeight) return wideCabinet.glassHeight;
     // A width-led top box remains still when mobile-browser chrome changes.
     return Math.round(Math.max(MIN_GLASS, Math.min(MAX_GLASS, cellHeight * 0.72)));
   }, [compact, cellHeight, portraitCabinet]);
@@ -1693,6 +1699,21 @@ export function SlotsScreen() {
             cabinets keep their own room clean instead of sharing one moving
             diagonal light across the catalogue. */}
         {theatreLighting ? <CabinetAtmosphere /> : null}
+        {/*
+          Every cabinet gets one quiet, theme-specific living mark in its own
+          glass. It never changes the reels or the math; it simply makes an
+          ocean ripple, a comet orbit, a neon sign drift, etc. while the game
+          waits to be played. Dragon's Hoard keeps its larger dragon performance
+          instead of receiving a second generic decoration.
+        */}
+        {details && !dragonHoard ? (
+          <CabinetHero
+            gameId={gameId}
+            family={details.art}
+            tint={symbolTint}
+            size={Math.min(66, Math.max(42, symbolSize * 0.9))}
+          />
+        ) : null}
         <View
           style={[styles.reels, styles.reelsFill]}
           onLayout={(e) => setReelsWidth(e.nativeEvent.layout.width)}
@@ -2133,6 +2154,94 @@ export function SlotsScreen() {
   );
 }
 
+type HeroMotion = 'drift' | 'orbit' | 'pulse' | 'rise' | 'sweep';
+
+const CABINET_HEROES: Record<string, { symbol: string; motion: HeroMotion }> = {
+  'juwa-classic-slots': { symbol: 'BELL', motion: 'rise' },
+  'slot-triple-bar': { symbol: 'BAR', motion: 'sweep' },
+  'slot-fruit-stand': { symbol: 'LEMON', motion: 'drift' },
+  'slot-lucky-sevens': { symbol: 'SEVEN', motion: 'pulse' },
+  'slot-desert-mirage': { symbol: 'DIAMOND', motion: 'rise' },
+  'slot-pharaohs-vault': { symbol: 'DIAMOND', motion: 'orbit' },
+  'slot-jade-temple': { symbol: 'BELL', motion: 'drift' },
+  'slot-royal-flush': { symbol: 'DIAMOND', motion: 'orbit' },
+  'slot-midnight-gold': { symbol: 'BELL', motion: 'rise' },
+  'slot-spice-market': { symbol: 'CHERRY', motion: 'sweep' },
+  'slot-emerald-nights': { symbol: 'DIAMOND', motion: 'pulse' },
+  'slot-frost-peak': { symbol: 'DIAMOND', motion: 'drift' },
+  'slot-storm-chaser': { symbol: 'BELL', motion: 'sweep' },
+  'slot-supernova': { symbol: 'DIAMOND', motion: 'orbit' },
+  'slot-aurora-borealis': { symbol: 'CHERRY', motion: 'drift' },
+  'slot-vault-breaker': { symbol: 'DIAMOND', motion: 'rise' },
+  'slot-city-lights': { symbol: 'DIAMOND', motion: 'pulse' },
+  'slot-neon-alley': { symbol: 'DIAMOND', motion: 'sweep' },
+  'slot-ocean-drift': { symbol: 'CHERRY', motion: 'drift' },
+  'slot-sunset-strip': { symbol: 'BELL', motion: 'sweep' },
+  'slot-carnival-row': { symbol: 'DIAMOND', motion: 'pulse' },
+  'slot-jungle-run': { symbol: 'DIAMOND', motion: 'orbit' },
+};
+
+/**
+ * A small animated emblem lives inside the real reel glass.  The changing
+ * symbol and motion are intentional — a comet should orbit, a pearl should
+ * drift, and a casino bell should rise — rather than every cabinet getting
+ * the same title sweep with a different colour.
+ */
+function CabinetHero({
+  gameId,
+  family,
+  tint,
+  size,
+}: {
+  gameId: string;
+  family?: string;
+  tint: ReturnType<typeof tintFromAccent>;
+  size: number;
+}) {
+  const hero = CABINET_HEROES[gameId] ?? { symbol: 'DIAMOND', motion: 'pulse' as HeroMotion };
+  const reduced = usePrefersReducedMotion();
+  const phase = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (reduced) {
+      phase.setValue(0.5);
+      return undefined;
+    }
+    const timing = Animated.loop(Animated.sequence([
+      Animated.timing(phase, { toValue: 1, duration: hero.motion === 'sweep' ? 3_800 : 4_800, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      Animated.timing(phase, { toValue: 0, duration: hero.motion === 'sweep' ? 3_800 : 4_800, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+    ]));
+    timing.start();
+    return () => timing.stop();
+  }, [hero.motion, phase, reduced]);
+
+  const translateX = hero.motion === 'sweep'
+    ? phase.interpolate({ inputRange: [0, 1], outputRange: [-16, 9] })
+    : hero.motion === 'orbit'
+      ? phase.interpolate({ inputRange: [0, 1], outputRange: [-7, 8] })
+      : 0;
+  const translateY = hero.motion === 'rise'
+    ? phase.interpolate({ inputRange: [0, 1], outputRange: [9, -8] })
+    : hero.motion === 'drift'
+      ? phase.interpolate({ inputRange: [0, 1], outputRange: [-5, 7] })
+      : hero.motion === 'orbit'
+        ? phase.interpolate({ inputRange: [0, 1], outputRange: [6, -5] })
+        : 0;
+  const scale = hero.motion === 'pulse'
+    ? phase.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1.07] })
+    : 1;
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[styles.cabinetHero, { transform: [{ translateX }, { translateY }, { scale }] }]}
+      accessibilityElementsHidden
+    >
+      <SlotSymbol name={hero.symbol} size={size} family={family} gameId={gameId} tint={tint} />
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface.base, overflow: 'hidden' },
   scroll: { flex: 1 },
@@ -2309,6 +2418,7 @@ const styles = StyleSheet.create({
    * is legible as a room and loses every argument with a symbol.
    */
   roomScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(4, 6, 16, 0.58)' },
+  cabinetHero: { position: 'absolute', right: 4, top: 7, opacity: 0.3, zIndex: 1 },
   chip: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,

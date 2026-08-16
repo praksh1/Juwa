@@ -15,7 +15,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, {
   Circle,
   Defs,
-  G,
   LinearGradient as SvgLinearGradient,
   Path,
   Rect,
@@ -28,7 +27,6 @@ import {
   PLINKO_ROWS,
   diceMultiplier,
   minesMultiplier,
-  plinkoTable,
   type PlinkoRisk,
   type PlinkoRows,
 } from '@juwa/economy';
@@ -295,8 +293,9 @@ function useClimb() {
 
 /**
  * The flight itself. The multiplier still climbs on the same honest clock, but
- * the player follows a physical craft through a light tunnel instead of a chart
- * line. That makes the moment read as a flight rather than a spreadsheet.
+ * the player follows the same polished craft shown in Crash's lobby tile over
+ * a live telemetry graph. The graph is a record of WHERE the craft has flown,
+ * not a decorative line floating without a job.
  */
 function CrashFlight({
   progress,
@@ -316,6 +315,7 @@ function CrashFlight({
   const glow = crashed ? '#FF5C67' : accent;
 
   return (
+    <View style={local.crashFlightStage}>
     <Svg width={W} height={H}>
       <Defs>
         <SvgLinearGradient id="crash-thrust" x1="0" y1="0" x2="1" y2="0">
@@ -324,17 +324,18 @@ function CrashFlight({
           <Stop offset="1" stopColor="#FFF5C8" stopOpacity="0.9" />
         </SvgLinearGradient>
       </Defs>
-      {[22, 50, 78, 106].map((line) => <Path key={line} d={`M10,${line} L${W - 10},${line - 19}`} stroke="rgba(255,255,255,0.11)" strokeWidth={1} />)}
-      {[46, 106, 166, 226].map((line) => <Circle key={line} cx={line} cy={25 + ((line / 9) % 30)} r={1.5} fill="rgba(255,242,190,0.56)" />)}
-      {p > 0.01 ? <Path d={`M${trailStart},${y + 7} L${x - 7},${y + 3}`} stroke="url(#crash-thrust)" strokeWidth={13} strokeLinecap="round" /> : null}
-      <Circle cx={x} cy={y} r={crashed ? 20 : 15} fill={glow} opacity={crashed ? 0.42 : 0.2} />
-      <G transform={`translate(${x} ${y}) rotate(-23)`}>
-        <Path d="M-24,0 L2,-12 L25,0 L2,12 Z" fill="#101D2D" stroke={glow} strokeWidth={2} />
-        <Path d="M-12,0 L4,-6 L15,0 L4,6 Z" fill="#EAF9FF" opacity={crashed ? 0.45 : 0.92} />
-        <Path d="M-2,-4 L-10,-16 L8,-6 Z M-2,4 L-10,16 L8,6 Z" fill={glow} opacity="0.9" />
-        <Circle cx="16" cy="0" r="3" fill="#FFF6CA" />
-      </G>
+      {[30, 58, 86, 114].map((line) => <Path key={line} d={`M10,${line} L${W - 10},${line}`} stroke="rgba(255,230,170,0.10)" strokeWidth={1} />)}
+      {[42, 94, 146, 198, 250].map((line) => <Path key={line} d={`M${line},14 L${line},${H - 12}`} stroke="rgba(255,230,170,0.07)" strokeWidth={1} />)}
+      {p > 0.01 ? <Path d={`M14,${H - 24} Q${x * 0.62},${H - 22} ${x - 10},${y + 7}`} stroke="url(#crash-thrust)" strokeWidth={crashed ? 16 : 12} strokeLinecap="round" /> : null}
+      <Circle cx={x} cy={y} r={crashed ? 24 : 18} fill={glow} opacity={crashed ? 0.44 : 0.2} />
     </Svg>
+    <Image
+      source={{ uri: '/art/overlays/crash-aircraft-stage-v1.png' }}
+      resizeMode="contain"
+      style={[local.crashAircraft, { left: x - 67, top: y - 47, opacity: crashed ? 0.42 : 1 }]}
+      accessibilityElementsHidden
+    />
+    </View>
   );
 }
 
@@ -748,9 +749,6 @@ export function PlinkoScreen() {
   const state = useInstantGame(game);
   const [rows, setRows] = useState<PlinkoRows>(12);
   const [risk, setRisk] = useState<PlinkoRisk>('medium');
-  // The bucket values, known before the ball drops because they are a
-  // property of the board rather than of the outcome.
-  const table = useMemo(() => plinkoTable(rows, risk), [rows, risk]);
   const result = state.round?.state as
     | { path: ('L' | 'R')[]; bucket: number; multiplier: number }
     | undefined;
@@ -773,8 +771,6 @@ export function PlinkoScreen() {
   // The bucket only lights up once the ball has arrived in it. Lighting it on
   // the response would answer the question the fall is asking.
   const landedBucket = !dropping && result ? result.bucket : null;
-  const centrePayout = table[Math.floor(table.length / 2)] ?? 0;
-  const edgePayout = Math.max(table[0] ?? 0, table[table.length - 1] ?? 0);
 
   return (
     <InstantLayout game={game} state={state}
@@ -797,25 +793,9 @@ export function PlinkoScreen() {
           path={result?.path}
           accent={game.accent}
           step={dropping ? step : result ? rows : 0}
+          landedBucket={landedBucket}
+          outcome={result ? { multiplier: result.multiplier, payout: state.round?.settlement?.payout ?? 0 } : undefined}
         />
-        <View style={local.buckets}>
-          {table.map((_value, i) => (
-            <View
-              key={i}
-              style={[
-                local.bucket,
-                landedBucket === i && { backgroundColor: game.accent },
-              ]}
-            >
-              {landedBucket === i ? <View style={local.bucketLanded} /> : null}
-            </View>
-          ))}
-        </View>
-        <View style={local.payoutLegend}>
-          <Txt variant="caption" color="#F3B6FF">EDGE {edgePayout}×</Txt>
-          <Txt variant="caption" color="#E7D5EA">CENTER {centrePayout}×</Txt>
-          <Txt variant="caption" color="#F3B6FF">EDGE {edgePayout}×</Txt>
-        </View>
         <View style={local.row}>
           {PLINKO_ROWS.map((option) => (
             <Pressable
@@ -858,22 +838,6 @@ export function PlinkoScreen() {
             </Pressable>
           ))}
         </View>
-        {dropping || result ? (
-          <View style={shell.result}>
-            {dropping ? (
-              <Txt variant="bodySmall" color={colors.text.secondary}>
-                Falling…
-              </Txt>
-            ) : (
-              <Txt
-                variant="h2"
-                color={result!.multiplier >= 1 ? colors.feedback.winBright : colors.text.muted}
-              >
-                WON {format(minor(state.round!.settlement?.payout ?? 0), 'GC')} · {result!.multiplier}×
-              </Txt>
-            )}
-          </View>
-        ) : null}
       </Board>
     </InstantLayout>
   );
@@ -942,15 +906,19 @@ function PlinkoVault({
   path,
   accent,
   step,
+  landedBucket,
+  outcome,
 }: {
   rows: number;
   path?: ('L' | 'R')[];
   accent: string;
   /** How many bounces have happened. The trail is drawn only this far. */
   step: number;
+  landedBucket: number | null;
+  outcome?: { multiplier: number; payout: number };
 }) {
   const width = 300;
-  const height = 218;
+  const height = 202;
   const gap = 16;
   // The path is truncated to the bounces the player has actually seen.
   const shown = path ? path.slice(0, Math.max(0, step)) : [];
@@ -968,6 +936,13 @@ function PlinkoVault({
     <View style={local.plinkoGlass} pointerEvents="none" />
     {path && step > 0 ? <><View style={[local.plinkoOrbGlow, { left: x - 17, top: y - 17, backgroundColor: accent }]} /><View style={[local.plinkoOrb, { left: x - 7, top: y - 7 }]} /></> : null}
     <Txt variant="caption" color="#FFE4FF" style={local.plinkoVaultLabel}>{droppingLabel(step, rows)}</Txt>
+    <View style={local.plinkoBuckets} pointerEvents="none">
+      {Array.from({ length: rows + 1 }, (_, index) => <View key={index} style={[local.plinkoBucket, landedBucket === index && { backgroundColor: accent }]} />)}
+    </View>
+    {outcome ? <View style={local.plinkoOutcome}>
+      <Txt variant="caption" color="#FFF0FF">LANDED {outcome.multiplier}×</Txt>
+      <Txt variant="bodySmall" color={outcome.multiplier >= 1 ? colors.feedback.winBright : '#FFB6CC'}>WON {format(minor(outcome.payout), 'GC')}</Txt>
+    </View> : null}
   </View>;
 }
 
@@ -1433,21 +1408,6 @@ const local = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: colors.surface.overlay,
   },
-  // Seventeen buckets have to fit the width of a phone at sixteen rows, so
-  // they share it rather than each claiming a minimum. With a minimum they
-  // wrapped onto a second line, which put the left half of the board's payouts
-  // underneath the right half.
-  buckets: { flexDirection: 'row', gap: 2, alignSelf: 'stretch', paddingHorizontal: 3 },
-  bucket: {
-    flex: 1,
-    height: 16,
-    borderRadius: 5,
-    backgroundColor: 'rgba(255,255,255,0.11)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bucketLanded: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#FFF6D0', shadowColor: '#FFF6D0', shadowOpacity: 1, shadowRadius: 6 },
-  payoutLegend: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing.sm },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, width: 5 * 44, justifyContent: 'center' },
   mineVault: { width: '100%', minHeight: 250, borderRadius: radius.lg, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(125,211,252,0.52)', shadowColor: '#38BDF8', shadowOpacity: 0.45, shadowRadius: 18, shadowOffset: { width: 0, height: 6 } },
   tile: {
@@ -1509,12 +1469,17 @@ const local = StyleSheet.create({
   diceRollReadout: { position: 'absolute', right: spacing.md, bottom: spacing.sm, alignItems: 'flex-end', paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.sm, borderWidth: 1, borderColor: 'rgba(226,255,177,0.62)', backgroundColor: 'rgba(2,17,5,0.72)' },
   crashDeck: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.sm, paddingBottom: 3, borderBottomWidth: 1, borderBottomColor: 'rgba(244,190,78,0.28)' },
   crashStatus: { paddingHorizontal: spacing.sm, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(248,201,90,0.52)', backgroundColor: 'rgba(19,8,3,0.56)' },
+  crashFlightStage: { width: 292, height: 126, alignSelf: 'center', overflow: 'hidden' },
+  crashAircraft: { position: 'absolute', width: 134, height: 94 },
   limboHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'center', paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(111,240,244,0.65)', backgroundColor: 'rgba(1,19,29,0.72)' },
   limboSeal: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#67E8F9' },
   limboPulse: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#5EEAD4', shadowColor: '#5EEAD4', shadowOpacity: 1, shadowRadius: 7 },
   diceHeader: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: 'rgba(215,249,157,0.3)', paddingBottom: 5 },
   plinkoHeader: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: 'rgba(245,183,255,0.34)', paddingBottom: 5 },
   plinkoVault: { width: 300, alignSelf: 'center', overflow: 'hidden', borderRadius: radius.lg, borderWidth: 1, borderColor: 'rgba(245,183,255,0.64)', shadowColor: '#E879F9', shadowOpacity: 0.5, shadowRadius: 18, shadowOffset: { width: 0, height: 6 } },
+  plinkoBuckets: { position: 'absolute', left: 9, right: 9, bottom: 8, flexDirection: 'row', gap: 2 },
+  plinkoBucket: { flex: 1, height: 10, borderRadius: 4, backgroundColor: 'rgba(255,240,255,0.22)' },
+  plinkoOutcome: { position: 'absolute', right: 9, top: 8, alignItems: 'flex-end', paddingHorizontal: 6, paddingVertical: 3, borderRadius: radius.sm, borderWidth: 1, borderColor: 'rgba(255,220,255,0.54)', backgroundColor: 'rgba(23,3,34,0.8)' },
   plinkoGlass: { ...StyleSheet.absoluteFillObject, borderWidth: 1, borderColor: 'rgba(255,230,255,0.28)', borderRadius: radius.lg },
   plinkoOrbGlow: { position: 'absolute', width: 34, height: 34, borderRadius: 17, opacity: 0.42, shadowColor: '#FFFFFF', shadowOpacity: 0.92, shadowRadius: 13 },
   plinkoOrb: { position: 'absolute', width: 14, height: 14, borderRadius: 7, backgroundColor: '#FFF5FF', borderWidth: 2, borderColor: '#F7A2FF', shadowColor: '#FFFFFF', shadowOpacity: 1, shadowRadius: 8 },

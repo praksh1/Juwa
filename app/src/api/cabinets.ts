@@ -112,6 +112,20 @@ export interface CabinetSpec {
     /** Width reserved inside the cabinet for a real pull handle. */
     leverWidth?: number;
   };
+  /**
+   * A Surface/laptop is wide but not infinitely tall.  Only cabinets that
+   * actually need a shorter wide face declare this: a normal five-by-three
+   * cabinet keeps its large desktop presentation rather than inheriting a
+   * compromise intended for a five-row diamond game.
+   */
+  wide?: {
+    /** Largest cell when the console moves to a side rail. */
+    symbolCap: number;
+    /** Wide-screen-only cell shape for this individual cabinet. */
+    rowAspect?: number;
+    /** Keep its top glass in proportion to the shallower wide reel face. */
+    glassHeight?: number;
+  };
 }
 
 const BG = '/art/backgrounds';
@@ -146,7 +160,7 @@ export const CABINETS: Record<string, CabinetSpec> = {
   'slot-pharaohs-vault': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.14, background: `${BG}/egypt.jpg`, portrait: { symbolCap: 70, glassHeight: 38 } },
   // Five visible rows in the centre reel: this needs a materially shorter
   // portrait face than the three-row gilt cabinets above it.
-  'slot-jade-temple': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.2, background: `${BG}/bg09.jpg`, portrait: { symbolCap: 49, glassHeight: 30, rowAspect: 1.1 } },
+  'slot-jade-temple': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.2, background: `${BG}/bg09.jpg`, portrait: { symbolCap: 49, glassHeight: 30, rowAspect: 1.1 }, wide: { symbolCap: 62, rowAspect: 1.02, glassHeight: 34 } },
   'slot-dragons-hoard': { controls: 'console', frame: 'gilt', symbolFill: 1.0, rowAspect: 1.1, background: `${BG}/bg10.jpg` },
   'slot-royal-flush': { controls: 'console', frame: 'gilt', symbolFill: 0.96, rowAspect: 1.22, background: `${BG}/bg11.jpg`, portrait: { symbolCap: 68, glassHeight: 38 } },
   'slot-midnight-gold': { controls: 'console', frame: 'gilt', symbolFill: 0.96, rowAspect: 1.22, background: `${BG}/bg04.jpg`, portrait: { symbolCap: 68, glassHeight: 40 } },
@@ -158,7 +172,7 @@ export const CABINETS: Record<string, CabinetSpec> = {
   'slot-storm-chaser': { controls: 'console', frame: 'chrome', symbolFill: 0.96, rowAspect: 1.26, background: `${BG}/bg01.jpg`, portrait: { symbolCap: 66, glassHeight: 36 } },
   'slot-supernova': { controls: 'console', frame: 'chrome', symbolFill: 0.96, rowAspect: 1.28, portrait: { symbolCap: 66, glassHeight: 36 } },
   // Like Ocean Drift, Aurora is a 3-4-5-4-3 diamond rather than a 3x5 grid.
-  'slot-aurora-borealis': { controls: 'console', frame: 'chrome', symbolFill: 0.96, rowAspect: 1.24, portrait: { symbolCap: 49, glassHeight: 30, rowAspect: 1.1 } },
+  'slot-aurora-borealis': { controls: 'console', frame: 'chrome', symbolFill: 0.96, rowAspect: 1.24, portrait: { symbolCap: 49, glassHeight: 30, rowAspect: 1.1 }, wide: { symbolCap: 58, rowAspect: 1.0, glassHeight: 30 } },
   'slot-vault-breaker': { controls: 'console', frame: 'chrome', symbolFill: 0.98, rowAspect: 1.18, background: `${BG}/bg08.jpg`, portrait: { symbolCap: 68, glassHeight: 36 } },
   'slot-city-lights': { controls: 'console', frame: 'chrome', symbolFill: 0.96, rowAspect: 1.24, portrait: { symbolCap: 67, glassHeight: 36 } },
 
@@ -168,7 +182,7 @@ export const CABINETS: Record<string, CabinetSpec> = {
   'slot-neon-alley': { controls: 'console', frame: 'none', symbolFill: 0.96, rowAspect: 1.3, portrait: { symbolCap: 66, glassHeight: 34 } },
   // The extra two centre rows need their own fit so the bonus glass remains
   // visible above the dock instead of being hidden behind SPIN.
-  'slot-ocean-drift': { controls: 'console', frame: 'none', symbolFill: 0.96, rowAspect: 1.3, portrait: { symbolCap: 48, glassHeight: 30, rowAspect: 1.08 } },
+  'slot-ocean-drift': { controls: 'console', frame: 'none', symbolFill: 0.96, rowAspect: 1.3, portrait: { symbolCap: 48, glassHeight: 30, rowAspect: 1.08 }, wide: { symbolCap: 58, rowAspect: 1.0, glassHeight: 30 } },
   'slot-sunset-strip': { controls: 'console', frame: 'none', symbolFill: 0.96, rowAspect: 1.3, portrait: { symbolCap: 66, glassHeight: 34 } },
   'slot-carnival-row': { controls: 'console', frame: 'none', symbolFill: 0.98, rowAspect: 1.26, portrait: { symbolCap: 66, glassHeight: 34 } },
   'slot-jungle-run': { controls: 'console', frame: 'none', symbolFill: 0.98, rowAspect: 1.26, portrait: { symbolCap: 66, glassHeight: 34 } },

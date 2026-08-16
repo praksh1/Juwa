@@ -68,7 +68,10 @@ export interface DragonRoarProps {
 }
 
 /** Long enough to be an event, short enough not to hold up the next spin. */
-const DURATION = 2600;
+// Big and mega wins get one unhurried hero beat before the dragon exits.  The
+// counter and controls remain live underneath, so this extends the spectacle,
+// not the time a player is forced to wait before the next spin.
+const DURATION = 4_000;
 
 export function DragonRoar({ round, active, size = 300, onDone }: DragonRoarProps) {
   const enter = useRef(new Animated.Value(0)).current;
