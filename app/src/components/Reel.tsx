@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   colors,
   landBlur,
@@ -261,6 +262,8 @@ export function Reel({
    */
   const [moving, setMoving] = useState(phase !== 'idle');
   const glow = useRef(new Animated.Value(0)).current;
+  /** A travelling reflection makes anticipation read as a live event. */
+  const anticipationSweep = useRef(new Animated.Value(0)).current;
 
   // Held in a ref: it changes identity on every parent render, and depending on
   // it would restart the animation mid-spin.
@@ -297,6 +300,22 @@ export function Reel({
     pulse.start();
     return () => pulse.stop();
   }, [anticipating, moving, glow]);
+
+  useEffect(() => {
+    if (!anticipating || !moving || reduceMotion) {
+      anticipationSweep.setValue(0);
+      return;
+    }
+    const sweep = Animated.loop(
+      Animated.timing(anticipationSweep, {
+        toValue: 1,
+        duration: 780,
+        useNativeDriver: true,
+      }),
+    );
+    sweep.start();
+    return () => sweep.stop();
+  }, [anticipating, moving, reduceMotion, anticipationSweep]);
 
   // The loop strip is duplicated so translating by exactly one cycle height
   // returns an identical image, which is what makes the repeat invisible.
@@ -486,12 +505,43 @@ export function Reel({
       </Animated.View>
 
       {anticipating ? (
-        <Animated.View
-          pointerEvents="none"
-          style={[styles.anticipation, { opacity: glow }]}
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
-        />
+        <>
+          {!reduceMotion ? (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.anticipationSweep,
+                {
+                  transform: [
+                    { rotate: '-12deg' },
+                    {
+                      translateY: anticipationSweep.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-260, 260],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+            >
+              <LinearGradient
+                colors={['rgba(255,255,255,0)', 'rgba(255,220,242,0.72)', 'rgba(255,255,255,0)']}
+                locations={[0, 0.5, 1]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+            </Animated.View>
+          ) : null}
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.anticipation, { opacity: glow }]}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          />
+        </>
       ) : null}
     </View>
   );
@@ -515,14 +565,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cellWinning: {
-    backgroundColor: colors.gold.wash,
+    backgroundColor: 'rgba(255, 197, 61, 0.34)',
     borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.gold.default,
+    borderWidth: 2,
+    borderColor: colors.gold.light,
     // A glow rather than a hard edge: the payline should look lit from behind.
     shadowColor: colors.gold.default,
     shadowOpacity: 0.9,
-    shadowRadius: 12,
+    shadowRadius: 20,
     shadowOffset: { width: 0, height: 0 },
   },
   /** ~20% opacity, per the brief. Enough to read, far enough back to ignore. */
@@ -535,12 +585,19 @@ const styles = StyleSheet.create({
   anticipation: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: radius.sm,
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: colors.neon.magenta,
-    backgroundColor: 'rgba(255, 61, 138, 0.16)',
+    backgroundColor: 'rgba(255, 61, 138, 0.28)',
     shadowColor: colors.neon.magenta,
     shadowOpacity: 0.9,
-    shadowRadius: 16,
+    shadowRadius: 24,
     shadowOffset: { width: 0, height: 0 },
+  },
+  anticipationSweep: {
+    position: 'absolute',
+    left: '-30%',
+    right: '-30%',
+    height: 120,
+    opacity: 0.8,
   },
 });

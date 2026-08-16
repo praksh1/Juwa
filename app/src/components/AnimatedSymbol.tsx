@@ -59,12 +59,12 @@ const BREATH_MS = 2600;
  * win reads exactly as strongly as it did. The difference is that it is now a
  * curve on a transform rather than a step in a layout.
  */
-const WIN_SCALE = 1.17;
+const WIN_SCALE = 1.24;
 /** The settle after the initial spring, and then the beat it holds. */
 const WIN_POP_MS = 260;
 const WIN_BEAT_MS = 620;
 /** How far the beat falls back between pulses. */
-const WIN_BEAT_LOW = 1.08;
+const WIN_BEAT_LOW = 1.12;
 
 /** One pass of the shine, and the wait before the next. */
 const SHINE_MS = 900;

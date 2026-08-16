@@ -364,13 +364,13 @@ export function useCabinetShake(tier: WinTier, round: number): Animated.Value {
   const reducedMotion = usePrefersReducedMotion();
 
   useEffect(() => {
-    // JACKPOT WAS MISSING, which meant the largest win in the game was the one
-    // that did not shake the cabinet — the tier was added to `WinTier` and this
-    // list was not updated with it.
-    if (reducedMotion || (tier !== 'big' && tier !== 'mega' && tier !== 'jackpot')) return;
+    if (reducedMotion || tier === 'none') return;
 
-    const amplitude = tier === 'big' ? 6 : tier === 'mega' ? 10 : 13;
-    const shakes = tier === 'big' ? 6 : tier === 'mega' ? 9 : 11;
+    // A real cabinet answers every win with a physical response. Small wins
+    // only get a two-pixel nudge; large tiers still hit hard enough to feel
+    // like the machine has landed on its own feet.
+    const amplitude = tier === 'win' ? 2 : tier === 'burst' ? 4 : tier === 'big' ? 7 : tier === 'mega' ? 11 : 14;
+    const shakes = tier === 'win' ? 2 : tier === 'burst' ? 4 : tier === 'big' ? 6 : tier === 'mega' ? 9 : 11;
     const sequence = Array.from({ length: shakes }, (_, i) =>
       Animated.timing(offset, {
         toValue: (i % 2 === 0 ? 1 : -1) * amplitude * (1 - i / shakes),

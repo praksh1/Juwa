@@ -2160,8 +2160,12 @@ const styles = StyleSheet.create({
   },
   dragonMachineRow: {
     paddingHorizontal: 24,
-    paddingTop: 86,
-    paddingBottom: 20,
+    // The first version reserved the whole illustrated dragon crown here.
+    // On an iPhone that displaced the header and the game controls instead of
+    // making the cabinet feel taller. The art still frames the bay, while this
+    // leaves the usable machine inside the viewport.
+    paddingTop: 18,
+    paddingBottom: 10,
   },
   /**
    * The reel bay is recessed: darker than the cabinet, with a gold inner rule.
