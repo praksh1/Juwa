@@ -87,7 +87,6 @@ const SPIN = [
 ];
 const LOOP = [
   `${A}/reel-loop-1.mp3`,
-  `${A}/reel-loop-2.mp3`,
   `${A}/reel-loop-3.mp3`,
   `${A}/reel-loop-4.mp3`,
 ];
