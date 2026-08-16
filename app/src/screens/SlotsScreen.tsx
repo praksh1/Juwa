@@ -892,6 +892,10 @@ export function SlotsScreen() {
    */
   const compact = useCompactLayout();
   const { height: viewportHeight, width: viewportWidth } = useWindowDimensions();
+  // A laptop has horizontal space even when it is tall enough not to qualify
+  // as "compact". Keep its bet and spin rail beside the cabinet so a player
+  // never has to reduce browser zoom just to reach the controls.
+  const sideControls = compact || viewportWidth >= 760;
   const symbolSize = useMemo(() => {
     /*
      * WIDTH MATTERS AS MUCH AS HEIGHT, and used not to count at all.
@@ -1556,11 +1560,11 @@ export function SlotsScreen() {
         height back to the reels — symbols go from 20 points to over 60, which
         is the difference between "playable" and "looks like a slot machine".
       */}
-      <View style={compact ? styles.landscapeRow : undefined}>
+      <View style={sideControls ? styles.landscapeRow : undefined}>
       <Card
         style={[
           styles.machine,
-          compact && styles.machineCompact,
+          sideControls && styles.machineCompact,
           cabinetStyle,
           dragonHoard && styles.dragonMachine,
         ]}
@@ -1948,7 +1952,7 @@ export function SlotsScreen() {
         ) : null}
       </Card>
 
-      <View style={compact ? styles.controlsColumn : undefined}>
+      <View style={sideControls ? styles.controlsColumn : undefined}>
         {/*
           The cabinet's own controls.
 
@@ -1967,7 +1971,7 @@ export function SlotsScreen() {
           spinning={spinning}
           auto={auto}
           onToggleAuto={() => setAuto((on) => !on)}
-          compact={compact}
+          compact={sideControls}
           {...(cabinet.controls === 'lever' ? { hideSpin: true } : {})}
         />
       </View>
@@ -2094,7 +2098,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.surface.border,
   },
-  machineCompact: { gap: spacing.xs, padding: spacing.sm, flex: 1 },
+  machineCompact: { gap: spacing.xs, padding: spacing.sm, flex: 1, marginHorizontal: 0 },
   landscapeRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
   // Wide enough for "10,000 GC" on a chip without wrapping to three lines.
   controlsColumn: { width: 190, gap: spacing.sm, justifyContent: 'center' },

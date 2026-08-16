@@ -135,6 +135,62 @@ export function BonusMeter({ reward, scatters, trigger, active, family, gameId, 
   const cabinet = variant === 'cabinet';
   const copyColor = cabinet ? '#E7C670' : colors.text.muted;
 
+  /*
+   * Dragon's Hoard uses this as a short rule strip under the reels. The first
+   * portrait version reused the tall side meter, which made the player choose
+   * between seeing the reels and reaching SPIN. The same rule now fits in one
+   * cabinet row: the scatter, the one-spin condition, and the prize remain
+   * visible without pushing the console off a phone screen.
+   */
+  if (cabinet) {
+    const progress = active ? 'BONUS ACTIVE' : scatters > 0 ? `${scatters} OF ${trigger} NOW` : 'IN ONE SPIN';
+    const prize = reward.kind === 'wheel' ? 'BONUS WHEEL' : `${reward.spins} FREE SPINS`;
+
+    return (
+      <View
+        style={[styles.wrap, styles.wrapCabinet, armed && styles.wrapArmed]}
+        accessibilityRole="text"
+        accessibilityLabel={
+          `Bonus: land ${trigger} scatter symbols to win ` +
+          (reward.kind === 'wheel' ? 'the bonus wheel' : `${reward.spins} free spins`) +
+          (scatters > 0 ? `. ${scatters} on the reels now.` : '.')
+        }
+      >
+        <View style={styles.cabinetRule}>
+          <Txt variant="caption" color={copyColor} style={styles.cabinetLand}>
+            LAND {trigger}
+          </Txt>
+          <Animated.View style={[styles.cabinetSymbol, { transform: [{ scale }] }]}>
+            <SlotSymbol
+              name="SCATTER"
+              size={30}
+              {...(gameId ? { gameId } : {})}
+              {...(family ? { family } : {})}
+            />
+          </Animated.View>
+          <View>
+            <Txt variant="caption" color={copyColor} style={styles.cabinetCopy}>SCATTERS</Txt>
+            <Txt variant="caption" color={colors.text.secondary} style={styles.cabinetStatus}>{progress}</Txt>
+          </View>
+        </View>
+        <View style={styles.cabinetPrize}>
+          <Animated.View style={{ transform: [{ scale }] }}>
+            {reward.kind === 'wheel' ? (
+              <Animated.View style={{ transform: [{ rotate }] }}>
+                <MiniWheel segments={reward.segments} />
+              </Animated.View>
+            ) : (
+              <FreeSpinsBadge spins={reward.spins} />
+            )}
+          </Animated.View>
+          <Txt variant="caption" color={armed ? colors.gold.light : copyColor} style={styles.cabinetPrizeCopy}>
+            {prize}
+          </Txt>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View
       style={[styles.wrap, cabinet && styles.wrapCabinet, armed && styles.wrapArmed]}
@@ -336,8 +392,13 @@ const styles = StyleSheet.create({
     maxWidth: 84,
   },
   wrapCabinet: {
-    minWidth: 96,
+    width: '94%',
+    maxWidth: 430,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
     borderColor: '#8A5A1D',
     backgroundColor: 'rgba(9, 4, 12, 0.9)',
     shadowColor: '#F0B83F',
@@ -346,6 +407,13 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 5,
   },
+  cabinetRule: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flex: 1 },
+  cabinetLand: { fontWeight: '900', letterSpacing: 0.7, fontSize: 10 },
+  cabinetSymbol: { marginHorizontal: 1 },
+  cabinetCopy: { fontWeight: '900', letterSpacing: 0.5, fontSize: 10, lineHeight: 12 },
+  cabinetStatus: { fontWeight: '800', letterSpacing: 0.35, fontSize: 8, lineHeight: 10 },
+  cabinetPrize: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  cabinetPrizeCopy: { maxWidth: 72, fontWeight: '900', letterSpacing: 0.3, fontSize: 9, lineHeight: 11 },
   wrapArmed: {
     borderColor: colors.gold.default,
     backgroundColor: 'rgba(200,164,77,0.14)',
