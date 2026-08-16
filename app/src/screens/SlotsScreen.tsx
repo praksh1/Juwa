@@ -539,8 +539,13 @@ export function SlotsScreen() {
   const [autoStarting, setAutoStarting] = useState(false);
   /** The machine this game is built as: frame, room, and which controls. */
   const cabinet = useMemo(() => cabinetFor(gameId), [gameId]);
+  /** Dragon's Hoard has a full illustrated cabinet instead of a generic room. */
+  const dragonHoard = gameId === DRAGON_GAME_ID;
   /** The room this machine stands in — its own tile unless told otherwise. */
-  const room = useMemo(() => roomFor(gameId, hasTileArt(gameId)), [gameId]);
+  const room = useMemo(
+    () => (dragonHoard ? undefined : roomFor(gameId, hasTileArt(gameId))),
+    [dragonHoard, gameId],
+  );
   /**
    * The metal the drawn symbols are cast in.
    *
@@ -1612,7 +1617,28 @@ export function SlotsScreen() {
         is the difference between "playable" and "looks like a slot machine".
       */}
       <View style={compact ? styles.landscapeRow : undefined}>
-      <Card style={[styles.machine, compact && styles.machineCompact, cabinetStyle]}>
+      <Card
+        style={[
+          styles.machine,
+          compact && styles.machineCompact,
+          cabinetStyle,
+          dragonHoard && styles.dragonMachine,
+        ]}
+      >
+        {dragonHoard ? (
+          /*
+           * Not a background in the reel bay: this IS the machine.  Keeping it
+           * at the Card level leaves its engraved pillars and dragon visible
+           * around the active reel window, which is the visual difference
+           * between a casino cabinet and an app card with a themed wallpaper.
+           */
+          <Image
+            source={{ uri: '/art/cabinets/dragons-hoard-v1.png' }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+            accessibilityElementsHidden
+          />
+        ) : null}
         <Animated.View style={{ transform: [{ translateX: shake }] }}>
         {/*
           The room, the surround, and the lever.
@@ -1622,8 +1648,8 @@ export function SlotsScreen() {
           what lets a symbol read on top of one — so they work as a room the
           machine stands in rather than as a picture competing with the game.
         */}
-        <View style={styles.machineRow}>
-        <ReelFrame style={cabinet.frame}>
+        <View style={[styles.machineRow, dragonHoard && styles.dragonMachineRow]}>
+        <ReelFrame style={dragonHoard ? 'none' : cabinet.frame}>
         {/* The lit sign above the reels, cast in this game's own material. */}
         {glassHeight >= MIN_GLASS && details ? (
           <CabinetGlass name={details.name} material={material} height={glassHeight} />
@@ -2120,6 +2146,22 @@ const styles = StyleSheet.create({
     borderColor: colors.gold.dark,
     borderWidth: 2,
     backgroundColor: '#0B1330',
+  },
+  /*
+   * Dragon's Hoard is the first purpose-built cabinet.  The larger inset is
+   * intentional: it gives the dragon, ruby metalwork and coin tray a visible
+   * job around the reels instead of shrinking them into a decorative border.
+   */
+  dragonMachine: {
+    padding: 0,
+    gap: 0,
+    borderWidth: 0,
+    backgroundColor: '#080204',
+  },
+  dragonMachineRow: {
+    paddingHorizontal: 24,
+    paddingTop: 86,
+    paddingBottom: 20,
   },
   /**
    * The reel bay is recessed: darker than the cabinet, with a gold inner rule.
