@@ -24,6 +24,7 @@ import { DiceEngine } from './dice.js';
 import { MinesEngine } from './mines.js';
 import { PlinkoEngine } from './plinko.js';
 import { RouletteEngine } from './roulette.js';
+import { ScratchEngine } from './scratch.js';
 import { allSlotEngines } from './slots.js';
 import type { GameEngine, GameId } from './types.js';
 
@@ -55,3 +56,4 @@ register(new LimboEngine());
 register(new DiceEngine());
 register(new PlinkoEngine());
 register(new MinesEngine());
+register(new ScratchEngine());

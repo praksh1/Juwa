@@ -246,9 +246,8 @@ const OTHER_GAMES: GameSummary[] = [
     accent: '#38BDF8',
     tag: 'new',
   },
-  // Not yet built. Greyed out in the lobby so the shape of the finished product
-  // is visible from day one. Each needs an engine plus a screen — see
-  // docs/04-adding-a-game.md.
+  // Poker remains a future category. Golden Scratch ships with the instant
+  // engines below and is intentionally listed alongside the other originals.
   {
     id: 'juwa-holdem',
     name: "Texas Hold'em",
@@ -275,7 +274,7 @@ const OTHER_GAMES: GameSummary[] = [
     rtp: 0.95,
     minBet: 100,
     maxBet: 10_000,
-    accent: '#FF2E88',
+    accent: '#D99B19',
     tag: 'jackpot',
   },
 ];
@@ -364,6 +363,7 @@ export const PLAYABLE = new Set<string>([
   'juwa-dice',
   'juwa-plinko',
   'juwa-mines',
+  'juwa-scratch',
 ]);
 
 export function gamesInCategory(category: GameCategory | 'all'): GameSummary[] {

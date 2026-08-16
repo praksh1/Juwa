@@ -13,6 +13,7 @@ import { RouletteScreen } from './src/screens/RouletteScreen';
 import {
   CrashScreen,
   DiceScreen,
+  GoldenScratchScreen,
   LimboScreen,
   MinesScreen,
   PlinkoScreen,
@@ -72,6 +73,7 @@ function LobbyStack() {
       <Stack.Screen name="juwa-dice" component={DiceScreen} options={{ headerShown: true, title: 'Dice' }} />
       <Stack.Screen name="juwa-plinko" component={PlinkoScreen} options={{ headerShown: true, title: 'Plinko' }} />
       <Stack.Screen name="juwa-mines" component={MinesScreen} options={{ headerShown: true, title: 'Mines' }} />
+      <Stack.Screen name="juwa-scratch" component={GoldenScratchScreen} options={{ headerShown: true, title: 'Golden Scratch' }} />
     </Stack.Navigator>
   );
 }

@@ -1,7 +1,7 @@
 /**
- * The shared frame for the five instant games.
+ * The shared frame for the instant games.
  *
- * Crash, Limbo, Dice, Plinko and Mines differ entirely in what they draw and
+ * Crash, Limbo, Dice, Plinko, Mines and Golden Scratch differ entirely in what they draw and
  * barely at all in what they do: load a balance, pick a stake, send one bet,
  * show what came back, handle the failure. That common half lives here so each
  * screen is only its own play area — the same trick that lets twenty-three
@@ -41,7 +41,11 @@ export interface InstantGame {
   minBet: number;
   maxBet: number;
   accent: string;
+  /** The physical character of this game cabinet — not merely its colour. */
+  cabinet?: InstantCabinet;
 }
+
+export type InstantCabinet = 'crash' | 'limbo' | 'dice' | 'plinko' | 'mines' | 'scratch';
 
 export interface InstantState {
   balance: Minor;
@@ -185,14 +189,14 @@ export function InstantLayout({
    * the layout is what knows it: board, then stake, then the button. Passed as
    * a child it landed above the stake chips, which pushed them off the bottom
    * of a 700-point screen — so the control for choosing how much to bet was
-   * below the fold on every one of these five games.
+   * below the fold on every one of these games.
    */
   action?: React.ReactNode;
   footer?: React.ReactNode;
   stakeLocked?: boolean;
 }) {
   /**
-   * The room these five are in.
+   * The room these games are in.
    *
    * They had no music at all, which made them the quietest screens in the app —
    * and they are also the ones with the least happening visually, so the
@@ -205,7 +209,7 @@ export function InstantLayout({
   /*
    * Recorded wins, not the synthesised fallback.
    *
-   * These five never installed a sound set — `SoundSet` is written in the
+   * These games never installed a sound set — `SoundSet` is written in the
    * vocabulary of a reel and none of them has reels — so every win here played
    * the two-oscillator chime that exists only to cover a slow download. See
    * INSTANT_SOUNDS.
@@ -227,7 +231,7 @@ export function InstantLayout({
           </Txt>
         </View>
         {/*
-          The rules, one tap away, on every one of these five.
+          The rules, one tap away, on every one of these games.
 
           These games are the only ones in the app with no physical ancestor —
           nobody has to be told how a slot machine works, and everybody has to
@@ -250,7 +254,7 @@ export function InstantLayout({
         Hidden, not dimmed, while a round is open.
 
         The stake is already committed at that point, so the chips are dead
-        controls — and on Mines, which is the tallest of the five, the fifty
+        controls — and on Mines, which is the tallest, the fifty
         points they occupy were pushing the CASH OUT button off the bottom of
         the screen at exactly the moment it is the only thing the player wants.
         Dimming them kept the cost and removed the use.
@@ -294,7 +298,7 @@ export function InstantLayout({
         THE DOCK.
 
         Measured on a 700-point phone, the tab bar floats over the bottom 69
-        points — so the usable height is 631, and four of these five games put
+        points — so the usable height is 631, and several of these games put
         their one play button underneath it. The button looked present and was
         not tappable: a tap on Plinko's Drop opened the Wallet tab instead.
 
@@ -316,8 +320,8 @@ export function InstantLayout({
  * The play area's panel.
  *
  * Was a flat `#05091A` rectangle with a grey hairline — the same slab on all
- * five games, which is most of why they read as one unfinished screen rather
- * than five games. It is now lit: a vertical gradient so the panel has a top
+ * games, which is most of why they read as one unfinished screen rather
+ * than distinct games. It is now lit: a vertical gradient so the panel has a top
  * and a bottom, a border in the game's own accent so each one is identifiably
  * itself, and a sheen across the top third.
  *
@@ -330,10 +334,12 @@ export function Board({
   children,
   /** Set on the frame a win is revealed — the panel flares and throws sparks. */
   celebrate,
+  cabinet = 'crash',
 }: {
   accent: string;
   children: React.ReactNode;
   celebrate?: CelebrationHandle;
+  cabinet?: InstantCabinet;
 }) {
   const [size, setSize] = useState({ width: 320, height: 320 });
   const flare = useRef(new Animated.Value(0)).current;
@@ -367,6 +373,7 @@ export function Board({
     inputRange: [0, 1],
     outputRange: [`${accent}55`, '#FFFFFF'],
   });
+  const finish = CABINET_FINISH[cabinet];
 
   return (
     <Animated.View
@@ -379,10 +386,22 @@ export function Board({
       }
     >
       <LinearGradient
-        colors={['#111A33', '#080C1C', '#04060F']}
+        colors={finish.panel}
         locations={[0, 0.55, 1]}
         style={StyleSheet.absoluteFill}
       />
+      {/* A cabinet's glass is a material, not a plain dark rectangle.  Each
+          game gets an individual faceplate so changing games feels like
+          walking to another machine rather than recolouring one component. */}
+      <View style={[styles.innerRim, { borderColor: finish.rim }]} pointerEvents="none" />
+      <View style={[styles.cabinetPlate, { borderColor: finish.rim, backgroundColor: finish.plate }]} pointerEvents="none">
+        <Txt variant="caption" color={finish.label} style={styles.cabinetPlateLabel}>{finish.labelText}</Txt>
+        <View style={styles.plateMarks}>
+          {finish.marks.map((mark, index) => (
+            <View key={`${mark}-${index}`} style={[styles.plateMark, { backgroundColor: finish.rim }]} />
+          ))}
+        </View>
+      </View>
       {/* The sheen. Non-interactive, and it must say so on a plain View —
           `pointerEvents` does not reach the DOM through LinearGradient. */}
       <View style={styles.boardSheen} pointerEvents="none">
@@ -403,6 +422,22 @@ export function Board({
     </Animated.View>
   );
 }
+
+const CABINET_FINISH: Record<InstantCabinet, {
+  panel: [string, string, string];
+  rim: string;
+  plate: string;
+  label: string;
+  labelText: string;
+  marks: readonly string[];
+}> = {
+  crash: { panel: ['#2A1008', '#12080D', '#05050B'], rim: '#F3B84A', plate: 'rgba(81,32,8,0.8)', label: '#FFE3A0', labelText: 'FLIGHT DECK', marks: ['a', 'b', 'c'] },
+  limbo: { panel: ['#08242D', '#07151E', '#04070E'], rim: '#67E8F9', plate: 'rgba(8,62,75,0.8)', label: '#D8FBFF', labelText: 'VAULT DRAW', marks: ['a', 'b', 'c', 'd'] },
+  dice: { panel: ['#1D2B0C', '#10190A', '#05080A'], rim: '#D9F99D', plate: 'rgba(54,83,13,0.78)', label: '#F3FFD8', labelText: 'HIGH ROLLER', marks: ['a', 'b'] },
+  plinko: { panel: ['#291033', '#170A24', '#07050D'], rim: '#F5B7FF', plate: 'rgba(92,25,106,0.82)', label: '#FFE2FF', labelText: 'PEG CHAMBER', marks: ['a', 'b', 'c', 'd', 'e'] },
+  mines: { panel: ['#0A2634', '#081722', '#04080D'], rim: '#7DD3FC', plate: 'rgba(10,67,90,0.8)', label: '#DDF7FF', labelText: 'TREASURE VAULT', marks: ['a', 'b', 'c'] },
+  scratch: { panel: ['#402008', '#1F0C12', '#07050A'], rim: '#FFE08A', plate: 'rgba(132,57,9,0.84)', label: '#FFF1BE', labelText: 'GOLDEN PRIZE', marks: ['a', 'b', 'c', 'd', 'e'] },
+};
 
 /**
  * The handle a game uses to set its own board off.
@@ -631,6 +666,8 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#FFE08A',
     // A coloured glow under the one button that does anything.
     shadowOpacity: 0.55,
     shadowRadius: 12,
@@ -654,6 +691,23 @@ export const styles = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 4 },
   },
+  innerRim: { ...StyleSheet.absoluteFillObject, margin: 4, borderWidth: 1, borderRadius: radius.md, opacity: 0.55 },
+  cabinetPlate: {
+    position: 'absolute',
+    top: 7,
+    right: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    opacity: 0.86,
+  },
+  cabinetPlateLabel: { fontWeight: '900', letterSpacing: 0.8, fontSize: 8 },
+  plateMarks: { flexDirection: 'row', gap: 2 },
+  plateMark: { width: 3, height: 3, borderRadius: 2 },
   boardSheen: { position: 'absolute', left: 0, right: 0, top: 0, height: '34%' },
   /*
    * Tight on purpose. Plinko's pegs and Mines' 25 tiles are the two tallest

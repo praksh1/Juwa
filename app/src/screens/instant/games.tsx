@@ -1,5 +1,5 @@
 /**
- * The five instant games' play areas.
+ * The instant games' play areas.
  *
  * One file because each is small — the shell in `shell.tsx` carries the
  * balance, the stake chips, the request and the error handling, so what is
@@ -11,6 +11,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import Svg, {
   Circle,
   Defs,
@@ -47,11 +48,12 @@ import type { RoundResponse } from '../../api/client';
 import { usePrefersReducedMotion } from '../../motion';
 
 const GAMES: Record<string, InstantGame> = {
-  crash: { id: 'juwa-crash', name: 'Crash', minBet: 50, maxBet: 500_000, accent: '#F97316' },
-  limbo: { id: 'juwa-limbo', name: 'Limbo', minBet: 50, maxBet: 500_000, accent: '#06B6D4' },
-  dice: { id: 'juwa-dice', name: 'Dice', minBet: 50, maxBet: 500_000, accent: '#A3E635' },
-  plinko: { id: 'juwa-plinko', name: 'Plinko', minBet: 50, maxBet: 500_000, accent: '#E879F9' },
-  mines: { id: 'juwa-mines', name: 'Mines', minBet: 50, maxBet: 500_000, accent: '#38BDF8' },
+  crash: { id: 'juwa-crash', name: 'Crash', minBet: 50, maxBet: 500_000, accent: '#F59E0B', cabinet: 'crash' },
+  limbo: { id: 'juwa-limbo', name: 'Limbo', minBet: 50, maxBet: 500_000, accent: '#2DD4BF', cabinet: 'limbo' },
+  dice: { id: 'juwa-dice', name: 'Dice', minBet: 50, maxBet: 500_000, accent: '#A3E635', cabinet: 'dice' },
+  plinko: { id: 'juwa-plinko', name: 'Plinko', minBet: 50, maxBet: 500_000, accent: '#E879F9', cabinet: 'plinko' },
+  mines: { id: 'juwa-mines', name: 'Mines', minBet: 50, maxBet: 500_000, accent: '#38BDF8', cabinet: 'mines' },
+  scratch: { id: 'juwa-scratch', name: 'Golden Scratch', minBet: 100, maxBet: 10_000, accent: '#F6C84C', cabinet: 'scratch' },
 };
 
 /** A row of preset targets. Typing 2.47 on a phone is nobody's idea of fun. */
@@ -159,7 +161,7 @@ export function CrashScreen() {
           />
       }
     >
-      <Board accent={game.accent} celebrate={handle}>
+      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet}>
         <CrashCurve
           progress={Math.min(1, (shown - 1) / Math.max(0.6, target * 1.6 - 1))}
           accent={game.accent}
@@ -408,7 +410,7 @@ export function LimboScreen() {
           />
       }
     >
-      <Board accent={game.accent} celebrate={handle}>
+      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet}>
         <Txt variant="caption" color={colors.text.muted}>
           YOU NEED
         </Txt>
@@ -419,6 +421,7 @@ export function LimboScreen() {
         {/* The drawn number, at the largest size on the screen — it is the
             entire outcome, and it should be the entire focus. */}
         <View style={local.limboFace}>
+          <View style={local.limboCut} pointerEvents="none" />
           <Txt
             variant="display"
             color={
@@ -575,7 +578,7 @@ export function DiceScreen() {
           />
       }
     >
-      <Board accent={game.accent} celebrate={handle}>
+      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet}>
         {/*
           The track — the single most useful thing that was missing.
 
@@ -584,6 +587,7 @@ export function DiceScreen() {
           is legible at a glance: this much of the line wins, that much loses,
           and the marker is where it came in.
         */}
+        <DiceTumbler accent={game.accent} rolling={rolling} />
         <DiceTrack
           target={target}
           direction={direction}
@@ -703,6 +707,32 @@ function DiceTrack({
   );
 }
 
+/** A small cut-glass die makes Dice read as a table game before a number lands. */
+function DiceTumbler({ accent, rolling }: { accent: string; rolling: boolean }) {
+  const turn = useRef(new Animated.Value(0)).current;
+  const reduced = usePrefersReducedMotion();
+
+  useEffect(() => {
+    if (!rolling || reduced) {
+      turn.setValue(0);
+      return undefined;
+    }
+    const spin = Animated.loop(Animated.timing(turn, { toValue: 1, duration: 520, easing: Easing.linear, useNativeDriver: true }));
+    spin.start();
+    return () => spin.stop();
+  }, [rolling, reduced, turn]);
+
+  const rotate = turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
+  return (
+    <Animated.View style={[local.diceTumbler, { borderColor: accent, transform: [{ rotate }] }]}>
+      <LinearGradient colors={['#F9F5D5', '#D5B35B', '#60410D']} style={StyleSheet.absoluteFill} />
+      <View style={local.dicePips} pointerEvents="none">
+        {[0, 1, 2, 3, 4].map((pip) => <View key={pip} style={local.dicePip} />)}
+      </View>
+    </Animated.View>
+  );
+}
+
 // ------------------------------------------------------------------ plinko
 
 const RISKS: PlinkoRisk[] = ['low', 'medium', 'high'];
@@ -758,7 +788,7 @@ export function PlinkoScreen() {
           />
       }
     >
-      <Board accent={game.accent} celebrate={handle}>
+      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet}>
         <PlinkoBoard
           rows={rows}
           path={result?.path}
@@ -957,7 +987,8 @@ function PlinkoBoard({
           // The row the ball is passing through lights up, so the eye has
           // somewhere to be during the fall rather than hunting for the ball.
           r={ball && peg.row === shown.length - 1 ? 2.6 : 1.8}
-          fill={ball && peg.row === shown.length - 1 ? accent : colors.text.muted}
+          fill={ball && peg.row === shown.length - 1 ? '#FFF5C2' : '#C99A37'}
+          opacity={ball && peg.row === shown.length - 1 ? 1 : 0.78}
         />
       ))}
       {trail ? (
@@ -1062,7 +1093,7 @@ export function MinesScreen() {
         )
       }
     >
-      <Board accent={game.accent} celebrate={handle}>
+      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet}>
         <View style={local.grid}>
           {Array.from({ length: MINES_TILES }, (_, tile) => (
             <MineTile
@@ -1107,7 +1138,7 @@ export function MinesScreen() {
         )}
 
         {/* Rendered only when there is something to say. Everywhere else in
-            these five the readout carries a hint line and so reserving its
+            the other instant games the readout carries a hint line and so reserving its
             height prevents a jump; here it is empty until the round ends, so
             reserving it was fifty points of nothing on the tallest board in
             the app. */}
@@ -1128,6 +1159,88 @@ export function MinesScreen() {
   );
 }
 
+// ------------------------------------------------------------- golden scratch
+
+/** A real card game, not the old disabled lobby tile. Outcome is server-settled; tapping only reveals it. */
+export function GoldenScratchScreen() {
+  const game = GAMES['scratch']!;
+  const state = useInstantGame(game);
+  const [revealed, setRevealed] = useState(false);
+  const announce = useSettlementAnnouncer();
+  const { handle, celebrate } = useCelebration();
+  const ticket = state.round?.state as { multiplier: number; prizes: readonly number[] } | undefined;
+
+  const buy = async () => {
+    setRevealed(false);
+    await state.play({ type: 'buy-card' });
+  };
+  const reveal = () => {
+    if (!ticket || revealed) return;
+    setRevealed(true);
+    sounds.coinLock();
+    announce(state.round);
+    celebrate(state.round);
+  };
+
+  return (
+    <InstantLayout
+      game={game}
+      state={state}
+      action={<PlayButton label={state.busy ? 'Minting card…' : `Buy card · ${format(state.bet, 'GC')}`} onPress={() => void buy()} disabled={state.busy} colour={game.accent} />}
+    >
+      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet}>
+        <Txt variant="caption" color="#FFE8A6">GOLDEN SCRATCH</Txt>
+        <ScratchCard ticket={ticket} revealed={revealed} onReveal={reveal} />
+        <View style={shell.result}>
+          {!ticket ? (
+            <Txt variant="bodySmall" color={colors.text.secondary}>Buy a card, then scratch to reveal your prize.</Txt>
+          ) : !revealed ? (
+            <Txt variant="bodySmall" color="#FFE8A6">Your prize is sealed under the gold coating.</Txt>
+          ) : (
+            <Txt variant="h2" color={ticket.multiplier > 0 ? colors.feedback.winBright : colors.feedback.error}>
+              {ticket.multiplier > 0 ? `${ticket.multiplier}× · ${format(minor(state.round!.settlement?.payout ?? 0), 'GC')}` : 'No prize this card'}
+            </Txt>
+          )}
+        </View>
+      </Board>
+    </InstantLayout>
+  );
+}
+
+function ScratchCard({ ticket, revealed, onReveal }: { ticket?: { multiplier: number; prizes: readonly number[] }; revealed: boolean; onReveal: () => void }) {
+  const coating = useRef(new Animated.Value(0)).current;
+  const reduced = usePrefersReducedMotion();
+  useEffect(() => {
+    if (!revealed) {
+      coating.setValue(0);
+      return;
+    }
+    Animated.timing(coating, { toValue: 1, duration: reduced ? 0 : 540, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [revealed, reduced, coating]);
+  const opacity = coating.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
+  const scale = coating.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] });
+
+  return (
+    <Pressable style={local.scratchCard} disabled={!ticket || revealed} onPress={onReveal} accessibilityRole="button" accessibilityLabel={revealed ? 'Prize revealed' : 'Scratch card to reveal prize'}>
+      <LinearGradient colors={['#FFF4BE', '#C98B16', '#5A2508']} style={StyleSheet.absoluteFill} />
+      <View style={local.scratchInner}>
+        {(ticket?.prizes ?? [0, 0, 0]).map((prize, index) => (
+          <View key={index} style={local.scratchPrize}>
+            <Txt variant="h2" color="#2B1605">{prize > 0 ? `${prize}×` : '—'}</Txt>
+          </View>
+        ))}
+      </View>
+      {!revealed ? (
+        <Animated.View pointerEvents="none" style={[local.scratchCoating, { opacity, transform: [{ scale }] }]}>
+          <LinearGradient colors={['#FFE9A0', '#B7740A', '#6D2B09']} style={StyleSheet.absoluteFill} />
+          <Txt variant="h3" color="#FFF6CF">SCRATCH</Txt>
+          <Txt variant="caption" color="#FFF6CF">TAP TO REVEAL</Txt>
+        </Animated.View>
+      ) : null}
+    </Pressable>
+  );
+}
+
 /**
  * One tile, which turns over rather than changing colour.
  *
@@ -1137,7 +1250,7 @@ export function MinesScreen() {
  * a real 3D rotation would just read as a flicker.
  *
  * A mine also shakes. Losing eight tiles of accumulated multiplier deserves
- * more than a colour change, and the shake is the only moment in these five
+ * more than a colour change, and the shake is the only moment in these
  * games where the screen itself reacts.
  */
 function MineTile({
@@ -1194,11 +1307,22 @@ function MineTile({
         accessibilityLabel={`Tile ${index + 1}`}
         style={({ pressed }) => [
           local.tile,
-          status === 'safe' && { backgroundColor: accent },
-          status === 'mine' && { backgroundColor: colors.feedback.error },
+          status === 'safe' && { borderColor: '#E9FBFF' },
+          status === 'mine' && { borderColor: '#FFD0D0' },
           pressed && status === 'hidden' && local.tilePressed,
         ]}
       >
+        <LinearGradient
+          colors={
+            status === 'safe'
+              ? ['#E7FFFF', accent, '#075A70']
+              : status === 'mine'
+                ? ['#FFB2A8', '#D63838', '#560812']
+                : ['#18374A', '#0B1B28', '#040A10']
+          }
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
         {/* The lit face, so an unopened tile is a moulded object rather than a
             grey square — the same treatment the roulette felt cells get. */}
         <View style={local.tileGloss} pointerEvents="none" />
@@ -1246,14 +1370,14 @@ const local = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, width: 5 * 44, justifyContent: 'center' },
   tile: {
     // 40, not 48: five rows of tiles is the tallest single element in these
-    // five games, and every point a row buys back five overall — which is what
+    // games, and every point a row buys back five overall — which is what
     // brings the Bet button back onto a 700-point screen.
     width: 40,
     height: 40,
     borderRadius: radius.sm,
-    backgroundColor: colors.surface.overlay,
+    backgroundColor: '#081522',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: '#497184',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -1268,5 +1392,65 @@ const local = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.09)',
   },
   /** The drawn number in Limbo, given fixed height so the panel cannot jump. */
-  limboFace: { minHeight: 62, justifyContent: 'center' },
+  limboFace: {
+    minHeight: 62,
+    minWidth: 220,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: '#4EDDE2',
+    backgroundColor: 'rgba(2, 18, 24, 0.72)',
+    overflow: 'hidden',
+  },
+  limboCut: {
+    position: 'absolute',
+    left: -48,
+    top: -14,
+    width: 108,
+    height: 24,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    transform: [{ rotate: '-20deg' }],
+  },
+  diceTumbler: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    borderWidth: 1,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dicePips: { width: 23, height: 23, flexDirection: 'row', flexWrap: 'wrap', gap: 3, justifyContent: 'center', alignItems: 'center' },
+  dicePip: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#271709' },
+  scratchCard: {
+    width: 282,
+    height: 138,
+    borderRadius: radius.lg,
+    borderWidth: 2,
+    borderColor: '#FFE7A1',
+    overflow: 'hidden',
+    justifyContent: 'center',
+    shadowColor: '#F6C84C',
+    shadowOpacity: 0.62,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  scratchInner: { flexDirection: 'row', gap: spacing.xs, padding: spacing.md },
+  scratchPrize: {
+    flex: 1,
+    minHeight: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(82,35,4,0.58)',
+    backgroundColor: 'rgba(255,247,209,0.72)',
+  },
+  scratchCoating: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+  },
 });

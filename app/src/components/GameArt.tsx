@@ -288,9 +288,9 @@ function Scratch() {
     <>
       <Defs>
         <LinearGradient id={uid(g, 'bg')} x1="0" y1="0" x2="1" y2="1">
-          <Stop offset="0" stopColor="#FF8A3D" />
-          <Stop offset="0.55" stopColor="#FF3D8A" />
-          <Stop offset="1" stopColor="#9D174D" />
+          <Stop offset="0" stopColor="#FFF0A6" />
+          <Stop offset="0.42" stopColor="#D89016" />
+          <Stop offset="1" stopColor="#3C1207" />
         </LinearGradient>
         <LinearGradient id={uid(g, 'coin')} x1="0" y1="0" x2="0" y2="1">
           <Stop offset="0" stopColor="#FFE08A" />
@@ -313,8 +313,8 @@ function Scratch() {
 
       {/* The card, half scratched off. */}
       <Rect x={18} y={26} width={64} height={46} rx={6} fill="#FFFFFF" opacity={0.95} />
-      <Rect x={24} y={32} width={52} height={34} rx={4} fill="#C4B5FD" />
-      <Path d="M24,50 Q38,38 52,50 Q66,62 76,48 L76,66 L24,66 Z" fill="#8B7BB8" opacity={0.75} />
+      <Rect x={24} y={32} width={52} height={34} rx={4} fill="#4A1608" />
+      <Path d="M24,50 Q38,38 52,50 Q66,62 76,48 L76,66 L24,66 Z" fill="#D08A18" opacity={0.82} />
 
       <Circle cx={50} cy={49} r={15} fill={`url(#${uid(g, 'coin')})`} />
       <Circle cx={50} cy={49} r={11} fill="none" stroke="#B45309" strokeWidth={1.6} opacity={0.6} />

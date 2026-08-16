@@ -40,6 +40,7 @@ import {
 } from './instant-math.js';
 import { MAX_MINES, MinesEngine, MIN_MINES } from './mines.js';
 import { PlinkoEngine } from './plinko.js';
+import { ScratchEngine, SCRATCH_OUTCOMES, scratchRtp } from './scratch.js';
 import { toClientView, IllegalActionError, type GameEngine, type RoundState } from './types.js';
 
 const RISKS: PlinkoRisk[] = ['low', 'medium', 'high'];
@@ -595,7 +596,34 @@ describe('crash and limbo', () => {
 
 // ---------------------------------------------------------------------------
 
-describe('every instant engine', () => {
+describe('golden scratch', () => {
+  it('has the advertised exact 95% return', () => {
+    assert.equal(scratchRtp(), 0.95);
+    assert.deepEqual(
+      SCRATCH_OUTCOMES.map(({ multiplier, weight }) => [multiplier, weight]),
+      [[0, 59], [1, 21], [2, 12], [5, 6], [10, 2]],
+    );
+  });
+
+  it('settles the paid prize during the server deal, before visual reveal', () => {
+    const engine = new ScratchEngine();
+    const stake = minor(500);
+    const first = engine.init(stake, stream(71));
+    const replayed = engine.init(stake, stream(71));
+
+    assert.equal(first.status, 'settled');
+    assert.equal(first.availableActions.length, 0);
+    assert.deepEqual(first.public, replayed.public, 'same provably-fair stream must deal the same card');
+    assert.equal(first.settlement!.stake, stake);
+    assert.equal(first.settlement!.multiplier, first.public.multiplier);
+    assert.equal(first.settlement!.payout, stake * first.public.multiplier);
+    assert.equal(first.public.prizes.length, 3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('every action-based instant engine', () => {
   // Widened deliberately: the point of these tests is that the contract holds
   // regardless of which engine is behind it, so they must not depend on any
   // one engine's public shape.

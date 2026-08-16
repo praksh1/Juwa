@@ -146,4 +146,18 @@ export const INSTANT_RULES: Record<string, HowToPlayContent> = {
       'over the long run at every mine count. There is no pattern to the mine positions and no ' +
       'tile that is safer than another.',
   },
+
+  'juwa-scratch': {
+    summary: 'Buy a Golden Scratch card, then reveal the three prize windows. The winning multiplier is settled before the card is shown and is revealed only when you scratch it.',
+    steps: [
+      'Choose your stake and press Buy card.',
+      'Tap the card to scratch away its gold coating.',
+      'The revealed multiplier is applied to your stake immediately.',
+    ],
+    controls: [
+      { label: 'Buy card', body: 'Commits the stake and deals one server-settled card.' },
+      { label: 'Scratch to reveal', body: 'Reveals a card already settled by the server; scratching does not change the result.' },
+    ],
+    edge: 'Golden Scratch returns 95% of stakes over the long run. Most cards do not pay; rarer 2×, 5× and 10× cards create the prize moments.',
+  },
 };

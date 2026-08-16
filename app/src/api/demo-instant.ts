@@ -37,6 +37,7 @@ export const INSTANT_GAME_IDS = [
   'juwa-dice',
   'juwa-plinko',
   'juwa-mines',
+  'juwa-scratch',
 ] as const;
 
 export function isInstantGame(gameId: string): boolean {
@@ -156,6 +157,27 @@ export function demoPlaceBet(
         availableActions: ['reveal'],
         payout: 0,
         multiplier: 0,
+      };
+    }
+
+    case 'juwa-scratch': {
+      // Same 95% prize table as the server engine. The demo source is not
+      // provably fair, but it must never teach a different paytable.
+      const drawPrize = () => {
+        const ticket = Math.floor(Math.random() * 100);
+        if (ticket < 59) return 0;
+        if (ticket < 80) return 1;
+        if (ticket < 92) return 2;
+        if (ticket < 98) return 5;
+        return 10;
+      };
+      const multiplier = drawPrize();
+      return {
+        status: 'settled',
+        state: { multiplier, prizes: [drawPrize(), drawPrize(), multiplier] },
+        availableActions: [],
+        payout: multiplier > 0 ? Math.floor(stake * multiplier) : 0,
+        multiplier,
       };
     }
 
