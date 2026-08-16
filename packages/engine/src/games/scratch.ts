@@ -11,7 +11,7 @@ import { assertWithinLimits, IllegalActionError, type BetLimits, type GameAction
 
 export interface ScratchPublic {
   multiplier: number;
-  /** Three values printed beneath the scratch coating; all are cosmetic until reveal. */
+  /** The three matching prize panels that make the ticket rule visible. */
   prizes: readonly number[];
 }
 
@@ -52,9 +52,11 @@ export class ScratchEngine implements GameEngine<ScratchPublic, null, { rtp: num
   init(stake: Minor, rng: RngStream): RoundState<ScratchPublic, null> {
     assertWithinLimits(stake, this.limits);
     const multiplier = draw(rng);
-    // Decoys are deliberately independently drawn only after the paid result.
-    // They are display values, never additional winning chances.
-    const prizes = [draw(rng), draw(rng), multiplier] as const;
+    // A scratch card must explain itself at a glance. The previous decoy values
+    // showed 5× and 10× on a losing card, which looked like a broken payout.
+    // Every paid ticket now has three matching multipliers; every losing ticket
+    // has three blanks. The server-settled multiplier remains the only payout.
+    const prizes = [multiplier, multiplier, multiplier] as const;
     return {
       status: 'settled',
       public: { multiplier, prizes },

@@ -835,7 +835,7 @@ const styles = StyleSheet.create({
   // Fireworks uses absolute fill, so the wrapper establishes a stage exactly
   // around the wheel/result cluster rather than across the whole scroll view.
   wheelStage: { position: 'relative', overflow: 'hidden', borderRadius: 24, backgroundColor: '#060812' },
-  wheelArtwork: { ...StyleSheet.absoluteFillObject, opacity: 0.18 },
+  wheelArtwork: { ...StyleSheet.absoluteFillObject, opacity: 0.32 },
   wheelShell: { overflow: 'hidden', borderRadius: 24, borderWidth: 2, borderColor: '#C99C35', padding: spacing.md, shadowColor: '#E7B33F', shadowOpacity: 0.38, shadowRadius: 22, shadowOffset: { width: 0, height: 8 } },
   wheelCrown: { alignSelf: 'center', paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.sm, borderWidth: 1, borderColor: 'rgba(255,224,143,0.68)', backgroundColor: 'rgba(12,5,2,0.72)' },
   ball: {

@@ -148,15 +148,15 @@ export const INSTANT_RULES: Record<string, HowToPlayContent> = {
   },
 
   'juwa-scratch': {
-    summary: 'Buy a Golden Scratch card, then reveal the three prize windows. The winning multiplier is settled before the card is shown and is revealed only when you scratch it.',
+    summary: 'Buy a Golden Scratch card, then drag across its foil to reveal three prize windows. A card wins only when all three revealed windows match.',
     steps: [
       'Choose your stake and press Buy card.',
-      'Tap the card to scratch away its gold coating.',
-      'The revealed multiplier is applied to your stake immediately.',
+      'Drag your finger across the foil until all three windows are exposed.',
+      'Three matching 1×, 2×, 5× or 10× windows pay that multiplier times your stake. Three blanks means no prize.',
     ],
     controls: [
       { label: 'Buy card', body: 'Commits the stake and deals one server-settled card.' },
-      { label: 'Scratch to reveal', body: 'Reveals a card already settled by the server; scratching does not change the result.' },
+      { label: 'Drag to scratch', body: 'Your finger removes the foil. Scratching reveals a card already settled by the server; it never changes the result.' },
     ],
     edge: 'Golden Scratch returns 95% of stakes over the long run. Most cards do not pay; rarer 2×, 5× and 10× cards create the prize moments.',
   },

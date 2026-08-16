@@ -757,7 +757,7 @@ const RISKS: PlinkoRisk[] = ['low', 'medium', 'high'];
  * button below the fold. Ten still separates the rows clearly at a 4-point ball
  * and brings the whole game back onto one screen.
  */
-const PEG_PITCH = 10;
+const PEG_PITCH = 8;
 
 export function PlinkoScreen() {
   const game = GAMES['plinko']!;
@@ -789,6 +789,8 @@ export function PlinkoScreen() {
   // The bucket only lights up once the ball has arrived in it. Lighting it on
   // the response would answer the question the fall is asking.
   const landedBucket = !dropping && result ? result.bucket : null;
+  const centrePayout = table[Math.floor(table.length / 2)] ?? 0;
+  const edgePayout = Math.max(table[0] ?? 0, table[table.length - 1] ?? 0);
 
   return (
     <InstantLayout game={game} state={state}
@@ -813,7 +815,7 @@ export function PlinkoScreen() {
           step={dropping ? step : result ? rows : 0}
         />
         <View style={local.buckets}>
-          {table.map((value, i) => (
+          {table.map((_value, i) => (
             <View
               key={i}
               style={[
@@ -821,14 +823,14 @@ export function PlinkoScreen() {
                 landedBucket === i && { backgroundColor: game.accent },
               ]}
             >
-              <Txt
-                variant="caption"
-                color={landedBucket === i ? colors.surface.base : colors.text.secondary}
-              >
-                {value}
-              </Txt>
+              {landedBucket === i ? <View style={local.bucketLanded} /> : null}
             </View>
           ))}
+        </View>
+        <View style={local.payoutLegend}>
+          <Txt variant="caption" color="#F3B6FF">EDGE {edgePayout}×</Txt>
+          <Txt variant="caption" color="#E7D5EA">CENTER {centrePayout}×</Txt>
+          <Txt variant="caption" color="#F3B6FF">EDGE {edgePayout}×</Txt>
         </View>
         <View style={local.row}>
           {PLINKO_ROWS.map((option) => (
@@ -1210,12 +1212,12 @@ export function GoldenScratchScreen() {
       game={game}
       state={state}
       action={
-        <PlayButton
-          label={state.busy ? 'Minting card…' : needsReveal ? 'Reveal your prize' : `Buy card · ${format(state.bet, 'GC')}`}
-          onPress={() => (needsReveal ? reveal() : void buy())}
+        !needsReveal ? <PlayButton
+          label={state.busy ? 'Minting card…' : `Buy card · ${format(state.bet, 'GC')}`}
+          onPress={() => void buy()}
           disabled={state.busy}
           colour={game.accent}
-        />
+        /> : undefined
       }
     >
       <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet}>
@@ -1223,9 +1225,9 @@ export function GoldenScratchScreen() {
         <ScratchCard ticket={ticket} ticketId={state.round?.roundId} revealed={revealed} onReveal={reveal} />
         <View style={shell.result}>
           {!ticket ? (
-            <Txt variant="bodySmall" color={colors.text.secondary}>Buy a card, then scratch to reveal your prize.</Txt>
+            <Txt variant="bodySmall" color={colors.text.secondary}>Buy a card, then drag across the foil to reveal it.</Txt>
           ) : !revealed ? (
-            <Txt variant="bodySmall" color="#FFE8A6">Your prize is sealed under the gold coating.</Txt>
+            <Txt variant="bodySmall" color="#FFE8A6">Match all 3 prize windows to win. Drag across the gold foil.</Txt>
           ) : (
             <Txt variant="h2" color={ticket.multiplier > 0 ? colors.feedback.winBright : colors.feedback.error}>
               {ticket.multiplier > 0 ? `${ticket.multiplier}× · ${format(minor(state.round!.settlement?.payout ?? 0), 'GC')}` : 'No prize this card'}
@@ -1285,10 +1287,11 @@ function ScratchCard({
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => !!ticket && !revealed,
+        onStartShouldSetPanResponderCapture: () => !!ticket && !revealed,
         onMoveShouldSetPanResponder: () => !!ticket && !revealed,
+        onMoveShouldSetPanResponderCapture: () => !!ticket && !revealed,
         onPanResponderGrant: () => {
           lastScrubDistance.current = 0;
-          scratchNext();
         },
         onPanResponderMove: (_event, gesture) => {
           const distance = Math.abs(gesture.dx) + Math.abs(gesture.dy);
@@ -1299,6 +1302,11 @@ function ScratchCard({
             scratchNext();
           }
         },
+        // The scratch surface owns the drag. Without this, Safari hands a
+        // vertical stroke to the page and the player scrolls instead of
+        // scraping the foil.
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
       }),
     [ticket, revealed],
   );
@@ -1308,7 +1316,6 @@ function ScratchCard({
     <Pressable
       style={local.scratchCard}
       disabled={!ticket || revealed}
-      onPressIn={scratchNext}
       {...scratchPan.panHandlers}
       accessibilityRole="button"
       accessibilityLabel={revealed ? 'Prize revealed' : `Scratch gold foil, ${Math.max(0, 6 - scratched)} rubs remaining`}
@@ -1369,6 +1376,7 @@ function MineTile({
 }) {
   const flip = useRef(new Animated.Value(0)).current;
   const shake = useRef(new Animated.Value(0)).current;
+  const blast = useRef(new Animated.Value(0)).current;
   const reduced = usePrefersReducedMotion();
   const previous = useRef(status);
 
@@ -1386,14 +1394,19 @@ function MineTile({
     ]).start();
 
     if (status === 'mine') {
+      blast.setValue(0);
       Animated.sequence([
         Animated.timing(shake, { toValue: 1, duration: 45, useNativeDriver: true }),
         Animated.timing(shake, { toValue: -1, duration: 90, useNativeDriver: true }),
         Animated.timing(shake, { toValue: 1, duration: 90, useNativeDriver: true }),
         Animated.timing(shake, { toValue: 0, duration: 45, useNativeDriver: true }),
       ]).start();
+      Animated.sequence([
+        Animated.timing(blast, { toValue: 1, duration: 120, useNativeDriver: true }),
+        Animated.timing(blast, { toValue: 0, duration: 650, useNativeDriver: true }),
+      ]).start();
     }
-  }, [status, reduced, flip, shake]);
+  }, [status, reduced, flip, shake, blast]);
 
   // Squashes towards zero width at the midpoint — the read of a card turning.
   const scaleX = flip.interpolate({ inputRange: [0, 1], outputRange: [1, 0.08] });
@@ -1427,6 +1440,10 @@ function MineTile({
         {/* The lit face, so an unopened tile is a moulded object rather than a
             grey square — the same treatment the roulette felt cells get. */}
         <View style={local.tileGloss} pointerEvents="none" />
+        {status === 'mine' ? <>
+          <Animated.View pointerEvents="none" style={[local.mineBlast, { opacity: blast, transform: [{ scale: blast.interpolate({ inputRange: [0, 1], outputRange: [0.25, 2.5] }) }] }]} />
+          <View pointerEvents="none" style={local.mineCore} />
+        </> : null}
         <Txt variant="bodySmall" color={colors.surface.base}>
           {status === 'safe' ? '◆' : status === 'mine' ? '✱' : ' '}
         </Txt>
@@ -1460,14 +1477,17 @@ const local = StyleSheet.create({
   // they share it rather than each claiming a minimum. With a minimum they
   // wrapped onto a second line, which put the left half of the board's payouts
   // underneath the right half.
-  buckets: { flexDirection: 'row', gap: 1, alignSelf: 'stretch' },
+  buckets: { flexDirection: 'row', gap: 2, alignSelf: 'stretch', paddingHorizontal: 3 },
   bucket: {
     flex: 1,
-    paddingVertical: 2,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surface.overlay,
+    height: 16,
+    borderRadius: 5,
+    backgroundColor: 'rgba(255,255,255,0.11)',
     alignItems: 'center',
+    justifyContent: 'center',
   },
+  bucketLanded: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#FFF6D0', shadowColor: '#FFF6D0', shadowOpacity: 1, shadowRadius: 6 },
+  payoutLegend: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing.sm },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, width: 5 * 44, justifyContent: 'center' },
   tile: {
     // 40, not 48: five rows of tiles is the tallest single element in these
@@ -1492,6 +1512,8 @@ const local = StyleSheet.create({
     height: '48%',
     backgroundColor: 'rgba(255,255,255,0.09)',
   },
+  mineBlast: { position: 'absolute', width: 22, height: 22, borderRadius: 11, backgroundColor: '#FFEF88', shadowColor: '#FF4D21', shadowOpacity: 1, shadowRadius: 16 },
+  mineCore: { position: 'absolute', width: 10, height: 10, borderRadius: 5, backgroundColor: '#FFEF88', shadowColor: '#FF4D21', shadowOpacity: 1, shadowRadius: 10 },
   /** The drawn number in Limbo, given fixed height so the panel cannot jump. */
   limboFace: {
     minHeight: 62,

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Image, Pressable, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
@@ -340,6 +340,11 @@ export function BlackjackScreen() {
           })
         }
       >
+        <Image
+          source={{ uri: '/art/tiles/juwa-blackjack.png' }}
+          resizeMode="cover"
+          style={styles.tableArtwork}
+        />
         {/*
           Lit felt, not a flat green rectangle.
 
@@ -560,6 +565,7 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     shadowOffset: { width: 0, height: 6 },
   },
+  tableArtwork: { ...StyleSheet.absoluteFillObject, opacity: 0.16 },
   tableRail: { ...StyleSheet.absoluteFillObject, borderRadius: 20, borderWidth: 8, borderColor: 'rgba(29,14,4,0.76)' },
   tableRailInner: { flex: 1, margin: 5, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,225,133,0.72)' },
   lampPool: { position: 'absolute', width: 260, height: 150, borderRadius: 130, alignSelf: 'center', top: -54, backgroundColor: '#F8CD63', shadowColor: '#FFE29A', shadowRadius: 40 },
