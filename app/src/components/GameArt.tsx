@@ -477,6 +477,7 @@ const TILE_ART: Record<string, string> = {
   // SVG icons, so the lobby promises the same visual quality as play.
   'juwa-crash': 'juwa-crash.png', 'juwa-limbo': 'juwa-limbo.png', 'juwa-dice': 'juwa-dice.png',
   'juwa-plinko': 'juwa-plinko.png', 'juwa-mines': 'juwa-mines.png', 'juwa-scratch': 'juwa-scratch.png',
+  'juwa-blackjack': 'juwa-blackjack.png', 'juwa-roulette-eu': 'juwa-roulette-eu.png',
 };
 
 /**

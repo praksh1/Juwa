@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
@@ -164,6 +164,16 @@ export function BlackjackScreen() {
   const [round, setRound] = useState<RoundResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const lamp = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const glow = Animated.loop(Animated.sequence([
+      Animated.timing(lamp, { toValue: 1, duration: 2600, useNativeDriver: true }),
+      Animated.timing(lamp, { toValue: 0, duration: 2600, useNativeDriver: true }),
+    ]));
+    glow.start();
+    return () => glow.stop();
+  }, [lamp]);
 
   useEffect(() => {
     let alive = true;
@@ -339,12 +349,19 @@ export function BlackjackScreen() {
           and it costs two views.
         */}
         <LinearGradient
-          colors={['#1B7A4B', '#0E5233', '#07331F']}
+          colors={['#05070D', '#103A30', '#031A14']}
           locations={[0, 0.55, 1]}
           start={{ x: 0.3, y: 0 }}
           end={{ x: 0.7, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
+        <View style={styles.tableRail} pointerEvents="none">
+          <View style={styles.tableRailInner} />
+        </View>
+        <Animated.View style={[styles.lampPool, { opacity: lamp.interpolate({ inputRange: [0, 1], outputRange: [0.18, 0.52] }) }]} pointerEvents="none" />
+        <View style={styles.tablePlaque} pointerEvents="none">
+          <Txt variant="caption" color="#FFE9A6">PRIVATE TABLE · 21</Txt>
+        </View>
         <View style={styles.feltSheen} pointerEvents="none">
           <LinearGradient
             colors={['rgba(255,255,255,0.10)', 'rgba(255,255,255,0.02)', 'rgba(255,255,255,0)']}
@@ -356,11 +373,11 @@ export function BlackjackScreen() {
         {/* Dealer */}
         <View style={styles.seat}>
           <View style={styles.seatLabel}>
-            <Txt variant="caption" color={colors.text.muted}>
+            <Txt variant="caption" color="#C9A95D">
               DEALER
             </Txt>
             {table?.dealerRevealed && dealerValue ? (
-              <Txt variant="bodySmall" color={colors.text.secondary}>
+              <Txt variant="bodySmall" color="#F7E9BC">
                 {dealerValue.total}
                 {dealerValue.soft ? ' (soft)' : ''}
               </Txt>
@@ -397,12 +414,12 @@ export function BlackjackScreen() {
                 style={[styles.seat, active && styles.seatActive]}
               >
                 <View style={styles.seatLabel}>
-                  <Txt variant="caption" color={active ? colors.gold.default : colors.text.muted}>
+            <Txt variant="caption" color={active ? '#FFE89B' : '#C9A95D'}>
                     {table.hands.length > 1 ? `HAND ${handIndex + 1}` : 'YOU'}
                     {' · '}
                     {format(minor(hand.stake), 'GC')}
                   </Txt>
-                  <Txt variant="bodySmall" color={colors.text.secondary}>
+                  <Txt variant="bodySmall" color="#F7E9BC">
                     {value.total}
                     {value.soft ? ' (soft)' : ''}
                   </Txt>
@@ -532,17 +549,21 @@ const styles = StyleSheet.create({
   // Green felt, because a blackjack table is green felt — but lit, and with a
   // rail. See the gradients in the render.
   table: {
-    borderRadius: radius.lg,
+    borderRadius: 22,
     borderWidth: 2,
-    borderColor: '#2E1A0C',
+    borderColor: '#B98B28',
     overflow: 'hidden',
-    padding: spacing.lg,
+    padding: spacing.lg + 4,
     gap: spacing.lg,
     shadowColor: '#000',
-    shadowOpacity: 0.5,
-    shadowRadius: 18,
+    shadowOpacity: 0.72,
+    shadowRadius: 24,
     shadowOffset: { width: 0, height: 6 },
   },
+  tableRail: { ...StyleSheet.absoluteFillObject, borderRadius: 20, borderWidth: 8, borderColor: 'rgba(29,14,4,0.76)' },
+  tableRailInner: { flex: 1, margin: 5, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,225,133,0.72)' },
+  lampPool: { position: 'absolute', width: 260, height: 150, borderRadius: 130, alignSelf: 'center', top: -54, backgroundColor: '#F8CD63', shadowColor: '#FFE29A', shadowRadius: 40 },
+  tablePlaque: { alignSelf: 'center', paddingHorizontal: 14, paddingVertical: 5, borderRadius: 3, borderWidth: 1, borderColor: 'rgba(255,218,116,0.62)', backgroundColor: 'rgba(8,12,16,0.66)' },
   feltSheen: { position: 'absolute', left: 0, right: 0, top: 0, height: '30%' },
   seat: { gap: spacing.sm, minHeight: 96 },
   seatActive: {
@@ -554,19 +575,19 @@ const styles = StyleSheet.create({
   seatLabel: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   // Extra right padding compensates for the negative margin that overlaps cards.
   cards: { flexDirection: 'row', alignItems: 'center', paddingRight: spacing.lg, minHeight: 74 },
-  divider: { height: 1, backgroundColor: colors.table.feltLight },
+  divider: { height: 1, backgroundColor: 'rgba(255,221,137,0.38)' },
   betRow: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'center', flexWrap: 'wrap' },
   chip: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface.raised,
-    borderWidth: 1,
-    borderColor: colors.surface.border,
+    backgroundColor: '#121825',
+    borderWidth: 1.5,
+    borderColor: '#6F5420',
     minWidth: 64,
     alignItems: 'center',
   },
-  chipActive: { backgroundColor: colors.gold.default, borderColor: colors.gold.default },
+  chipActive: { backgroundColor: '#E1B649', borderColor: '#FFF0B0' },
   chipOff: { opacity: 0.35 },
   actions: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', justifyContent: 'center' },
   actionButton: { flexGrow: 1, minWidth: 100 },

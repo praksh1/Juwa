@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
@@ -544,7 +544,17 @@ export function RouletteScreen() {
           );
         }}
       >
-      <Card style={styles.wheel}>
+      <Image
+        source={{ uri: '/art/tiles/juwa-roulette-eu.png' }}
+        resizeMode="cover"
+        style={styles.wheelArtwork}
+      />
+      <View style={styles.wheelShell}>
+        <LinearGradient colors={['rgba(82,38,8,0.98)', 'rgba(7,9,17,0.98)', 'rgba(3,5,12,0.99)']} style={StyleSheet.absoluteFill} />
+        <View style={styles.wheelCrown} pointerEvents="none">
+          <Txt variant="caption" color="#FFE5A0">EUROPEAN ROULETTE · PRIVATE SALON</Txt>
+        </View>
+        <View style={styles.wheel}>
         <RouletteWheel
           size={WHEEL_SIZE}
           phase={wheelPhase}
@@ -605,7 +615,8 @@ export function RouletteScreen() {
             </Txt>
           )}
         </View>
-      </Card>
+        </View>
+      </View>
       {/* The shared casino celebration language, over the wheel but never in
           the way of its controls.  This is the only table that was missing it. */}
       <Fireworks
@@ -820,19 +831,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.surface.border,
   },
-  wheel: { alignItems: 'center', gap: spacing.sm, borderColor: colors.gold.dark },
+  wheel: { alignItems: 'center', gap: spacing.sm, borderColor: colors.gold.dark, paddingTop: spacing.sm },
   // Fireworks uses absolute fill, so the wrapper establishes a stage exactly
   // around the wheel/result cluster rather than across the whole scroll view.
-  wheelStage: { position: 'relative' },
+  wheelStage: { position: 'relative', overflow: 'hidden', borderRadius: 24, backgroundColor: '#060812' },
+  wheelArtwork: { ...StyleSheet.absoluteFillObject, opacity: 0.18 },
+  wheelShell: { overflow: 'hidden', borderRadius: 24, borderWidth: 2, borderColor: '#C99C35', padding: spacing.md, shadowColor: '#E7B33F', shadowOpacity: 0.38, shadowRadius: 22, shadowOffset: { width: 0, height: 8 } },
+  wheelCrown: { alignSelf: 'center', paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.sm, borderWidth: 1, borderColor: 'rgba(255,224,143,0.68)', backgroundColor: 'rgba(12,5,2,0.72)' },
   ball: {
     width: 56,
     height: 56,
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surface.overlay,
+    backgroundColor: '#10111C',
     borderWidth: 2,
-    borderColor: colors.surface.border,
+    borderColor: '#D1A33A',
   },
   readout: { minHeight: 28, justifyContent: 'center' },
   chipRow: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'center' },
@@ -840,14 +854,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface.raised,
+    backgroundColor: '#15131B',
     borderWidth: 1,
-    borderColor: colors.surface.border,
+    borderColor: '#6E5224',
     minWidth: 56,
     alignItems: 'center',
   },
-  chipButtonActive: { backgroundColor: colors.gold.default, borderColor: colors.gold.default },
-  felt: { backgroundColor: colors.table.felt, borderColor: colors.table.feltLight, gap: 3, padding: spacing.sm },
+  chipButtonActive: { backgroundColor: '#D2A13A', borderColor: '#FFE9A7' },
+  felt: { backgroundColor: '#08281D', borderColor: '#C69A39', borderWidth: 2, gap: 3, padding: spacing.sm, shadowColor: '#000', shadowOpacity: 0.42, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } },
   feltRow: { flexDirection: 'row', gap: 3 },
   zero: {
     height: 38,
@@ -922,9 +936,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surface.overlay,
+    backgroundColor: '#15131B',
     borderWidth: 1,
-    borderColor: colors.surface.border,
+    borderColor: '#715521',
   },
   slip: { gap: spacing.xs, padding: spacing.md },
   slipRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -953,9 +967,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.md,
-    backgroundColor: colors.surface.raised,
+    backgroundColor: '#0B0D16',
     borderTopWidth: 1,
-    borderTopColor: colors.gold.dark,
+    borderTopColor: '#D6A83E',
   },
   dockTotal: { minWidth: 74 },
   clear: { flex: 1 },

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { colors, motion, radius, spacing } from '@juwa/ui';
 
 /**
@@ -58,7 +59,8 @@ export function PlayingCard({ rank, suit, hidden, index = 0, size = 'normal' }: 
   if (hidden) {
     return (
       <Animated.View style={[styles.card, small && styles.cardSmall, styles.back, animatedStyle]}>
-        <View style={styles.backPattern} />
+        <LinearGradient colors={['#1B2541', '#080E1E', '#31170A']} style={StyleSheet.absoluteFill} />
+        <View style={styles.backPattern}><View style={styles.backMark} /></View>
       </Animated.View>
     );
   }
@@ -70,8 +72,17 @@ export function PlayingCard({ rank, suit, hidden, index = 0, size = 'normal' }: 
         { S: 'spades', H: 'hearts', D: 'diamonds', C: 'clubs' }[suit]
       }`}
     >
-      <Text style={[styles.rank, small && styles.rankSmall, { color: ink }]}>{rank}</Text>
+      <LinearGradient colors={['#FFFDF2', '#F0E6CF', '#FFFFFF']} style={StyleSheet.absoluteFill} />
+      <View style={styles.faceRim} pointerEvents="none" />
+      <View style={styles.cornerTop} pointerEvents="none">
+        <Text style={[styles.cornerRank, small && styles.cornerRankSmall, { color: ink }]}>{rank}</Text>
+        <Text style={[styles.cornerPip, small && styles.cornerPipSmall, { color: ink }]}>{PIPS[suit]}</Text>
+      </View>
       <Text style={[styles.pip, small && styles.pipSmall, { color: ink }]}>{PIPS[suit]}</Text>
+      <View style={styles.cornerBottom} pointerEvents="none">
+        <Text style={[styles.cornerRank, small && styles.cornerRankSmall, { color: ink }]}>{rank}</Text>
+        <Text style={[styles.cornerPip, small && styles.cornerPipSmall, { color: ink }]}>{PIPS[suit]}</Text>
+      </View>
     </Animated.View>
   );
 }
@@ -82,8 +93,8 @@ const styles = StyleSheet.create({
     height: 74,
     borderRadius: radius.sm,
     backgroundColor: '#F7F5F0',
-    borderWidth: 1,
-    borderColor: '#D8D3C8',
+    borderWidth: 1.5,
+    borderColor: '#C59A35',
     alignItems: 'center',
     justifyContent: 'center',
     // Cards overlap slightly, like a real hand held in one hand.
@@ -95,19 +106,27 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   cardSmall: { width: 40, height: 58, marginRight: -12 },
-  rank: { fontSize: 20, fontWeight: '700', lineHeight: 22 },
-  rankSmall: { fontSize: 15, lineHeight: 17 },
-  pip: { fontSize: 18, lineHeight: 20 },
-  pipSmall: { fontSize: 13, lineHeight: 15 },
-  back: { backgroundColor: colors.surface.overlay, borderColor: colors.gold.dark },
+  faceRim: { ...StyleSheet.absoluteFillObject, margin: 3, borderWidth: 1, borderColor: 'rgba(135,91,12,0.45)', borderRadius: 4 },
+  cornerTop: { position: 'absolute', left: 6, top: 5, alignItems: 'center' },
+  cornerBottom: { position: 'absolute', right: 6, bottom: 5, alignItems: 'center', transform: [{ rotate: '180deg' }] },
+  cornerRank: { fontSize: 10, fontWeight: '900', lineHeight: 11 },
+  cornerRankSmall: { fontSize: 8, lineHeight: 9 },
+  cornerPip: { fontSize: 8, lineHeight: 9 },
+  cornerPipSmall: { fontSize: 6, lineHeight: 7 },
+  pip: { fontSize: 25, lineHeight: 27, textShadowColor: 'rgba(178,132,22,0.22)', textShadowRadius: 2 },
+  pipSmall: { fontSize: 18, lineHeight: 20 },
+  back: { backgroundColor: colors.surface.overlay, borderColor: colors.gold.light, overflow: 'hidden' },
   backPattern: {
     width: '70%',
     height: '80%',
     borderRadius: radius.sm,
     borderWidth: 2,
-    borderColor: colors.gold.dark,
-    backgroundColor: colors.surface.raised,
+    borderColor: '#E8BE56',
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  backMark: { width: '44%', aspectRatio: 1, borderRadius: 99, borderWidth: 1.5, borderColor: '#E8BE56', transform: [{ rotate: '45deg' }] },
 });
 
 export const CARD_GAP = spacing.md;

@@ -10,7 +10,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Easing, PanResponder, Pressable, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, {
   Circle,
@@ -162,6 +162,10 @@ export function CrashScreen() {
       }
     >
       <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet}>
+        <View style={local.crashDeck}>
+          <Txt variant="caption" color="#FFE6A0">FLIGHT DECK · LIVE TELEMETRY</Txt>
+          <View style={local.crashLights}>{[0, 1, 2, 3, 4].map((light) => <View key={light} style={[local.crashLight, { backgroundColor: light < 3 ? '#F8C95A' : '#7A2C11' }]} />)}</View>
+        </View>
         <CrashCurve
           progress={Math.min(1, (shown - 1) / Math.max(0.6, target * 1.6 - 1))}
           accent={game.accent}
@@ -411,6 +415,11 @@ export function LimboScreen() {
       }
     >
       <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet}>
+        <View style={local.limboHeader}>
+          <View style={local.limboSeal}><Txt variant="caption" color="#B8FFFF">∞</Txt></View>
+          <Txt variant="caption" color="#B8FFFF">QUANTUM VAULT DRAW</Txt>
+          <View style={local.limboPulse} />
+        </View>
         <Txt variant="caption" color={colors.text.muted}>
           YOU NEED
         </Txt>
@@ -579,6 +588,10 @@ export function DiceScreen() {
       }
     >
       <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet}>
+        <View style={local.diceHeader}>
+          <Txt variant="caption" color="#EEFFC3">CUT-GLASS DICE VAULT</Txt>
+          <Txt variant="caption" color="#B7D95A">RISK INSTRUMENT</Txt>
+        </View>
         {/*
           The track — the single most useful thing that was missing.
 
@@ -789,6 +802,10 @@ export function PlinkoScreen() {
       }
     >
       <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet}>
+        <View style={local.plinkoHeader}>
+          <Txt variant="caption" color="#FFE4FF">LUMEN PEG ARRAY</Txt>
+          <Txt variant="caption" color="#F4A9FF">PATH RECORDER</Txt>
+        </View>
         <PlinkoBoard
           rows={rows}
           path={result?.path}
@@ -1094,6 +1111,11 @@ export function MinesScreen() {
       }
     >
       <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet}>
+        <View style={local.minesHeader}>
+          <View style={local.minesIndicator} />
+          <Txt variant="caption" color="#C6F7FF">DEEP VAULT · CLEAR THE GRID</Txt>
+          <Txt variant="caption" color="#71DFFF">{open ? 'ARMED' : 'STANDBY'}</Txt>
+        </View>
         <View style={local.grid}>
           {Array.from({ length: MINES_TILES }, (_, tile) => (
             <MineTile
@@ -1226,28 +1248,60 @@ function ScratchCard({
   revealed: boolean;
   onReveal: () => void;
 }) {
-  // A whole-card tap had no physical feedback in Safari and looked broken.
-  // Three foil panels make the interaction unmistakable, and `onPressIn`
-  // fires on touch-down rather than waiting for Safari's click synthesis.
+  // This is deliberately stroke based instead of a sequence of taps. Safari
+  // synthesises a click late, which made the former ticket feel like a button
+  // that happened to be labelled "scratch". Here finger travel progressively
+  // tears away visible foil strips; a short press still starts the reveal for
+  // keyboard and mouse users.
   const [scratched, setScratched] = useState(0);
   const announced = useRef(false);
+  const lastScrubDistance = useRef(0);
+  const lastScratchAt = useRef(0);
 
   useEffect(() => {
     setScratched(0);
     announced.current = false;
+    lastScrubDistance.current = 0;
   }, [ticketId]);
 
   useEffect(() => {
-    if (scratched < 3 || announced.current) return;
+    if (scratched < 6 || announced.current) return;
     announced.current = true;
     onReveal();
   }, [scratched, onReveal]);
 
   const scratchNext = () => {
-    if (!ticket || revealed || scratched >= 3) return;
+    if (!ticket || revealed) return;
+    const now = Date.now();
+    // Pressable and PanResponder both receive a touch-down on web. Treat that
+    // as one scrape, not two, while still accepting successive motion strokes.
+    if (now - lastScratchAt.current < 70) return;
+    lastScratchAt.current = now;
     sounds.coinLock();
-    setScratched((current) => Math.min(3, current + 1));
+    setScratched((current) => Math.min(6, current + 1));
   };
+
+  const scratchPan = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => !!ticket && !revealed,
+        onMoveShouldSetPanResponder: () => !!ticket && !revealed,
+        onPanResponderGrant: () => {
+          lastScrubDistance.current = 0;
+          scratchNext();
+        },
+        onPanResponderMove: (_event, gesture) => {
+          const distance = Math.abs(gesture.dx) + Math.abs(gesture.dy);
+          // Each 34pt of finger travel removes another physical foil strip.
+          // That makes a long drag materially different from tapping.
+          if (distance - lastScrubDistance.current >= 34) {
+            lastScrubDistance.current = distance;
+            scratchNext();
+          }
+        },
+      }),
+    [ticket, revealed],
+  );
 
   const prizes = ticket?.prizes ?? [0, 0, 0];
   return (
@@ -1255,27 +1309,35 @@ function ScratchCard({
       style={local.scratchCard}
       disabled={!ticket || revealed}
       onPressIn={scratchNext}
+      {...scratchPan.panHandlers}
       accessibilityRole="button"
-      accessibilityLabel={revealed ? 'Prize revealed' : `Scratch gold foil, ${3 - scratched} panels remaining`}
+      accessibilityLabel={revealed ? 'Prize revealed' : `Scratch gold foil, ${Math.max(0, 6 - scratched)} rubs remaining`}
     >
       <LinearGradient colors={['#FFF4BE', '#C98B16', '#4A1607']} style={StyleSheet.absoluteFill} />
       <View style={local.scratchInner}>
         {prizes.map((prize, index) => {
-          const uncovered = revealed || index < scratched;
+          const stripStart = index * 2;
+          const uncovered = revealed || scratched >= stripStart + 2;
+          const foilRemaining = Math.max(0, Math.min(2, stripStart + 2 - scratched));
           return (
             <View key={index} style={local.scratchPrize}>
               <Txt variant="h2" color="#2B1605">{uncovered ? (prize > 0 ? `${prize}×` : '—') : '✦'}</Txt>
               {!uncovered ? (
                 <View pointerEvents="none" style={local.scratchFoil}>
                   <LinearGradient colors={['#FFF4B5', '#D7961A', '#7A3007']} style={StyleSheet.absoluteFill} />
-                  <Txt variant="caption" color="#FFF8D9">RUB</Txt>
+                  <View style={local.scratchGrain}>
+                    {Array.from({ length: foilRemaining * 4 }, (_, grain) => (
+                      <View key={grain} style={[local.scratchFlake, { transform: [{ rotate: `${grain % 2 ? -18 : 22}deg` }] }]} />
+                    ))}
+                  </View>
+                  <Txt variant="caption" color="#FFF8D9">SCRATCH</Txt>
                 </View>
               ) : null}
             </View>
           );
         })}
       </View>
-      {!revealed ? <Txt variant="caption" color="#FFF6CF">RUB THE GOLD FOIL · {Math.max(0, 3 - scratched)} LEFT</Txt> : null}
+      {!revealed ? <Txt variant="caption" color="#FFF6CF">DRAG ACROSS THE FOIL · {Math.max(0, 6 - scratched)} SCRAPES LEFT</Txt> : null}
     </Pressable>
   );
 }
@@ -1452,16 +1514,26 @@ const local = StyleSheet.create({
     transform: [{ rotate: '-20deg' }],
   },
   diceTumbler: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    borderWidth: 1,
+    width: 54,
+    height: 54,
+    borderRadius: 14,
+    borderWidth: 2,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dicePips: { width: 23, height: 23, flexDirection: 'row', flexWrap: 'wrap', gap: 3, justifyContent: 'center', alignItems: 'center' },
-  dicePip: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#271709' },
+  dicePips: { width: 31, height: 31, flexDirection: 'row', flexWrap: 'wrap', gap: 4, justifyContent: 'center', alignItems: 'center' },
+  dicePip: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#271709' },
+  crashDeck: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.sm },
+  crashLights: { flexDirection: 'row', gap: 4 },
+  crashLight: { width: 7, height: 7, borderRadius: 4, shadowColor: '#F8C95A', shadowOpacity: 0.9, shadowRadius: 5 },
+  limboHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'center', paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(111,240,244,0.65)', backgroundColor: 'rgba(1,19,29,0.72)' },
+  limboSeal: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#67E8F9' },
+  limboPulse: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#5EEAD4', shadowColor: '#5EEAD4', shadowOpacity: 1, shadowRadius: 7 },
+  diceHeader: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: 'rgba(215,249,157,0.3)', paddingBottom: 5 },
+  plinkoHeader: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: 'rgba(245,183,255,0.34)', paddingBottom: 5 },
+  minesHeader: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xs },
+  minesIndicator: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#79E7FF', shadowColor: '#79E7FF', shadowOpacity: 1, shadowRadius: 8 },
   scratchCard: {
     width: 282,
     height: 138,
@@ -1494,4 +1566,13 @@ const local = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#FFF0A0',
   },
+  scratchGrain: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+    padding: 8,
+    opacity: 0.72,
+  },
+  scratchFlake: { width: 24, height: 2, borderRadius: 2, backgroundColor: 'rgba(76, 28, 4, 0.58)' },
 });

@@ -605,10 +605,17 @@ export function PlayButton({
         ]}
       >
         <LinearGradient
-          colors={[lighten(colour), colour, darken(colour)]}
-          locations={[0, 0.45, 1]}
+          colors={['#12131C', darken(colour), '#05060B']}
+          locations={[0, 0.48, 1]}
           style={StyleSheet.absoluteFill}
         />
+        <View style={[styles.playCore, { borderColor: lighten(colour) }]} pointerEvents="none">
+          <LinearGradient
+            colors={[lighten(colour), colour, darken(colour)]}
+            locations={[0, 0.35, 1]}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
         <View style={styles.playSheen} pointerEvents="none" />
         <Txt variant="h3" color={colors.surface.base}>
           {label}
@@ -726,17 +733,18 @@ export const styles = StyleSheet.create({
   },
   play: {
     minHeight: 58,
-    borderRadius: radius.pill,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#FFE08A',
+    borderWidth: 2,
+    borderColor: '#5A441A',
     // A coloured glow under the one button that does anything.
     shadowOpacity: 0.55,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 3 },
   },
+  playCore: { ...StyleSheet.absoluteFillObject, margin: 4, borderRadius: 11, borderWidth: 1, overflow: 'hidden' },
   playSheen: {
     position: 'absolute',
     left: 0,
@@ -744,8 +752,8 @@ export const styles = StyleSheet.create({
     top: 0,
     height: '46%',
     backgroundColor: 'rgba(255,255,255,0.16)',
-    borderTopLeftRadius: radius.pill,
-    borderTopRightRadius: radius.pill,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
   },
   boardOuter: {
     borderRadius: radius.lg,
