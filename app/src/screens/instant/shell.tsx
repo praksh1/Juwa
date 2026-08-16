@@ -18,7 +18,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Image, Pressable, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { format, minor, type Minor } from '@juwa/money';
 import { publishBalance } from '../../api/usePlayer';
@@ -390,18 +390,22 @@ export function Board({
         locations={[0, 0.55, 1]}
         style={StyleSheet.absoluteFill}
       />
-      {/* A cabinet's glass is a material, not a plain dark rectangle.  Each
-          game gets an individual faceplate so changing games feels like
-          walking to another machine rather than recolouring one component. */}
-      <View style={[styles.innerRim, { borderColor: finish.rim }]} pointerEvents="none" />
-      <View style={[styles.cabinetPlate, { borderColor: finish.rim, backgroundColor: finish.plate }]} pointerEvents="none">
-        <Txt variant="caption" color={finish.label} style={styles.cabinetPlateLabel}>{finish.labelText}</Txt>
-        <View style={styles.plateMarks}>
-          {finish.marks.map((mark, index) => (
-            <View key={`${mark}-${index}`} style={[styles.plateMark, { backgroundColor: finish.rim }]} />
-          ))}
-        </View>
+      <View pointerEvents="none" style={styles.cabinetArt}>
+        <Image
+          source={{ uri: `/art/tiles/${CABINET_ART[cabinet]}` }}
+          resizeMode="cover"
+          style={StyleSheet.absoluteFill}
+        />
       </View>
+      <LinearGradient
+        colors={['rgba(1,4,12,0.12)', 'rgba(1,4,12,0.66)', 'rgba(1,4,12,0.92)']}
+        locations={[0, 0.48, 1]}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+      <StageAtmosphere cabinet={cabinet} accent={accent} />
+      {/* A cabinet's glass is a material, not a plain dark rectangle. */}
+      <View style={[styles.innerRim, { borderColor: finish.rim }]} pointerEvents="none" />
       {/* The sheen. Non-interactive, and it must say so on a plain View —
           `pointerEvents` does not reach the DOM through LinearGradient. */}
       <View style={styles.boardSheen} pointerEvents="none">
@@ -426,18 +430,78 @@ export function Board({
 const CABINET_FINISH: Record<InstantCabinet, {
   panel: [string, string, string];
   rim: string;
-  plate: string;
-  label: string;
-  labelText: string;
-  marks: readonly string[];
 }> = {
-  crash: { panel: ['#2A1008', '#12080D', '#05050B'], rim: '#F3B84A', plate: 'rgba(81,32,8,0.8)', label: '#FFE3A0', labelText: 'FLIGHT DECK', marks: ['a', 'b', 'c'] },
-  limbo: { panel: ['#08242D', '#07151E', '#04070E'], rim: '#67E8F9', plate: 'rgba(8,62,75,0.8)', label: '#D8FBFF', labelText: 'VAULT DRAW', marks: ['a', 'b', 'c', 'd'] },
-  dice: { panel: ['#1D2B0C', '#10190A', '#05080A'], rim: '#D9F99D', plate: 'rgba(54,83,13,0.78)', label: '#F3FFD8', labelText: 'HIGH ROLLER', marks: ['a', 'b'] },
-  plinko: { panel: ['#291033', '#170A24', '#07050D'], rim: '#F5B7FF', plate: 'rgba(92,25,106,0.82)', label: '#FFE2FF', labelText: 'PEG CHAMBER', marks: ['a', 'b', 'c', 'd', 'e'] },
-  mines: { panel: ['#0A2634', '#081722', '#04080D'], rim: '#7DD3FC', plate: 'rgba(10,67,90,0.8)', label: '#DDF7FF', labelText: 'TREASURE VAULT', marks: ['a', 'b', 'c'] },
-  scratch: { panel: ['#402008', '#1F0C12', '#07050A'], rim: '#FFE08A', plate: 'rgba(132,57,9,0.84)', label: '#FFF1BE', labelText: 'GOLDEN PRIZE', marks: ['a', 'b', 'c', 'd', 'e'] },
+  crash: { panel: ['#1A0705', '#0A0509', '#02030A'], rim: '#F3B84A' },
+  limbo: { panel: ['#06212B', '#031018', '#01050B'], rim: '#67E8F9' },
+  dice: { panel: ['#122104', '#091006', '#020502'], rim: '#D9F99D' },
+  plinko: { panel: ['#25062F', '#12071F', '#030108'], rim: '#F5B7FF' },
+  mines: { panel: ['#062633', '#04121D', '#01050A'], rim: '#7DD3FC' },
+  scratch: { panel: ['#341504', '#16070A', '#030204'], rim: '#FFE08A' },
 };
+
+const CABINET_ART: Record<InstantCabinet, string> = {
+  crash: 'juwa-crash.png',
+  limbo: 'juwa-limbo.png',
+  dice: 'juwa-dice.png',
+  plinko: 'juwa-plinko.png',
+  mines: 'juwa-mines.png',
+  scratch: 'juwa-scratch.png',
+};
+
+/**
+ * Non-interactive moving light architecture behind each game. The six boards
+ * deliberately have different geometry, so a player changes *place* when
+ * changing games rather than merely changing the colour of one card.
+ */
+function StageAtmosphere({ cabinet, accent }: { cabinet: InstantCabinet; accent: string }) {
+  const drift = useRef(new Animated.Value(0)).current;
+  const reduced = usePrefersReducedMotion();
+
+  useEffect(() => {
+    if (reduced) return undefined;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(drift, { toValue: 1, duration: cabinet === 'crash' ? 3500 : 5200, useNativeDriver: true }),
+        Animated.timing(drift, { toValue: 0, duration: cabinet === 'crash' ? 3500 : 5200, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [cabinet, drift, reduced]);
+
+  const translate = drift.interpolate({ inputRange: [0, 1], outputRange: ['-14%', '14%'] });
+  const rotate = drift.interpolate({ inputRange: [0, 1], outputRange: ['-10deg', '10deg'] });
+
+  return (
+    <View pointerEvents="none" style={styles.stageAtmosphere}>
+      {cabinet === 'crash' ? <>
+        <Animated.View style={[styles.crashArc, { borderColor: accent, transform: [{ rotate }] }]} />
+        <Animated.View style={[styles.crashArcInner, { borderColor: '#FFE9A6', transform: [{ rotate: rotate }] }]} />
+        <Animated.View style={[styles.crashStreak, { backgroundColor: accent, transform: [{ translateX: translate }, { rotate: '-24deg' }] }]} />
+      </> : null}
+      {cabinet === 'limbo' ? <>
+        <Animated.View style={[styles.limboBeam, { backgroundColor: accent, transform: [{ translateX: translate }, { rotate: '-18deg' }] }]} />
+        <View style={[styles.limboFrame, { borderColor: accent }]} />
+      </> : null}
+      {cabinet === 'dice' ? <>
+        <Animated.View style={[styles.diceDiamond, { borderColor: accent, transform: [{ rotate }] }]} />
+        <View style={[styles.diceDiamondInner, { borderColor: '#FFF6BE' }]} />
+      </> : null}
+      {cabinet === 'plinko' ? <>
+        <Animated.View style={[styles.plinkoHalo, { borderColor: accent, transform: [{ rotate }] }]} />
+        <View style={styles.plinkoMatrix}>{Array.from({ length: 24 }, (_, i) => <View key={i} style={[styles.matrixDot, { backgroundColor: i % 3 === 0 ? '#FFF0FC' : accent }]} />)}</View>
+      </> : null}
+      {cabinet === 'mines' ? <>
+        <Animated.View style={[styles.minesSweep, { backgroundColor: accent, transform: [{ translateX: translate }, { rotate: '-36deg' }] }]} />
+        <View style={styles.minesMesh}>{Array.from({ length: 16 }, (_, i) => <View key={i} style={[styles.meshCell, { borderColor: accent }]} />)}</View>
+      </> : null}
+      {cabinet === 'scratch' ? <>
+        <Animated.View style={[styles.scratchRay, { backgroundColor: accent, transform: [{ rotate }] }]} />
+        <Animated.View style={[styles.scratchRayAlt, { backgroundColor: '#FFF2AC', transform: [{ rotate: '-28deg' }, { translateX: translate }] }]} />
+      </> : null}
+    </View>
+  );
+}
 
 /**
  * The handle a game uses to set its own board off.
@@ -691,23 +755,24 @@ export const styles = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 4 },
   },
+  cabinetArt: { ...StyleSheet.absoluteFillObject, opacity: 0.34 },
+  stageAtmosphere: { ...StyleSheet.absoluteFillObject, overflow: 'hidden', opacity: 0.46 },
+  crashArc: { position: 'absolute', width: '138%', aspectRatio: 1, left: '-22%', top: '-64%', borderWidth: 1, borderRadius: 999 },
+  crashArcInner: { position: 'absolute', width: '100%', aspectRatio: 1, left: '0%', top: '-46%', borderWidth: 1, borderRadius: 999, opacity: 0.6 },
+  crashStreak: { position: 'absolute', width: '86%', height: 2, left: '-10%', top: '56%', shadowOpacity: 0.9, shadowRadius: 10 },
+  limboBeam: { position: 'absolute', height: '185%', width: '12%', left: '42%', top: '-42%', opacity: 0.25 },
+  limboFrame: { position: 'absolute', left: '13%', right: '13%', top: '18%', bottom: '18%', borderWidth: 1, borderRadius: 18, opacity: 0.22 },
+  diceDiamond: { position: 'absolute', width: 240, height: 240, alignSelf: 'center', top: -34, borderWidth: 1, transform: [{ rotate: '45deg' }], opacity: 0.36 },
+  diceDiamondInner: { position: 'absolute', width: 140, height: 140, alignSelf: 'center', top: 16, borderWidth: 1, transform: [{ rotate: '45deg' }], opacity: 0.2 },
+  plinkoHalo: { position: 'absolute', width: 260, height: 260, alignSelf: 'center', top: -92, borderWidth: 1, borderRadius: 130, opacity: 0.4 },
+  plinkoMatrix: { position: 'absolute', right: 12, bottom: 14, width: 102, flexDirection: 'row', flexWrap: 'wrap', gap: 8, opacity: 0.42 },
+  matrixDot: { width: 5, height: 5, borderRadius: 3 },
+  minesSweep: { position: 'absolute', height: '180%', width: '16%', left: '18%', top: '-40%', opacity: 0.18 },
+  minesMesh: { position: 'absolute', left: 18, right: 18, top: 16, bottom: 16, flexDirection: 'row', flexWrap: 'wrap', gap: 8, opacity: 0.16 },
+  meshCell: { width: '22%', aspectRatio: 1, borderWidth: 1, transform: [{ rotate: '45deg' }] },
+  scratchRay: { position: 'absolute', width: '150%', height: 3, left: '-30%', top: '42%', opacity: 0.45 },
+  scratchRayAlt: { position: 'absolute', width: '100%', height: 2, left: '4%', top: '62%', opacity: 0.45 },
   innerRim: { ...StyleSheet.absoluteFillObject, margin: 4, borderWidth: 1, borderRadius: radius.md, opacity: 0.55 },
-  cabinetPlate: {
-    position: 'absolute',
-    top: 7,
-    right: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderWidth: 1,
-    borderRadius: radius.pill,
-    opacity: 0.86,
-  },
-  cabinetPlateLabel: { fontWeight: '900', letterSpacing: 0.8, fontSize: 8 },
-  plateMarks: { flexDirection: 'row', gap: 2 },
-  plateMark: { width: 3, height: 3, borderRadius: 2 },
   boardSheen: { position: 'absolute', left: 0, right: 0, top: 0, height: '34%' },
   /*
    * Tight on purpose. Plinko's pegs and Mines' 25 tiles are the two tallest

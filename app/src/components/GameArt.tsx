@@ -460,14 +460,24 @@ const ART: Record<string, () => React.JSX.Element> = {
  * shows up immediately as a missing tile in the lobby, which is the cheapest
  * possible way to be wrong.
  */
-const TILED = new Set([
-  'juwa-classic-slots', 'slot-emerald-nights', 'slot-royal-flush', 'slot-ocean-drift',
-  'slot-sunset-strip', 'slot-midnight-gold', 'slot-neon-alley', 'slot-desert-mirage',
-  'slot-frost-peak', 'slot-jade-temple', 'slot-carnival-row', 'slot-jungle-run',
-  'slot-city-lights', 'slot-spice-market', 'slot-aurora-borealis', 'slot-dragons-hoard',
-  'slot-vault-breaker', 'slot-supernova', 'slot-pharaohs-vault', 'slot-storm-chaser',
-  'slot-lucky-sevens', 'slot-triple-bar', 'slot-fruit-stand',
-]);
+const TILE_ART: Record<string, string> = {
+  'juwa-classic-slots': 'juwa-classic-slots.jpg',
+  'slot-emerald-nights': 'slot-emerald-nights.jpg', 'slot-royal-flush': 'slot-royal-flush.jpg',
+  'slot-ocean-drift': 'slot-ocean-drift.jpg', 'slot-sunset-strip': 'slot-sunset-strip.jpg',
+  'slot-midnight-gold': 'slot-midnight-gold.jpg', 'slot-neon-alley': 'slot-neon-alley.jpg',
+  'slot-desert-mirage': 'slot-desert-mirage.jpg', 'slot-frost-peak': 'slot-frost-peak.jpg',
+  'slot-jade-temple': 'slot-jade-temple.jpg', 'slot-carnival-row': 'slot-carnival-row.jpg',
+  'slot-jungle-run': 'slot-jungle-run.jpg', 'slot-city-lights': 'slot-city-lights.jpg',
+  'slot-spice-market': 'slot-spice-market.jpg', 'slot-aurora-borealis': 'slot-aurora-borealis.jpg',
+  'slot-dragons-hoard': 'slot-dragons-hoard.jpg', 'slot-vault-breaker': 'slot-vault-breaker.jpg',
+  'slot-supernova': 'slot-supernova.jpg', 'slot-pharaohs-vault': 'slot-pharaohs-vault.jpg',
+  'slot-storm-chaser': 'slot-storm-chaser.jpg', 'slot-lucky-sevens': 'slot-lucky-sevens.jpg',
+  'slot-triple-bar': 'slot-triple-bar.jpg', 'slot-fruit-stand': 'slot-fruit-stand.jpg',
+  // The instant games use original cinematic key art rather than miniature
+  // SVG icons, so the lobby promises the same visual quality as play.
+  'juwa-crash': 'juwa-crash.png', 'juwa-limbo': 'juwa-limbo.png', 'juwa-dice': 'juwa-dice.png',
+  'juwa-plinko': 'juwa-plinko.png', 'juwa-mines': 'juwa-mines.png', 'juwa-scratch': 'juwa-scratch.png',
+};
 
 /**
  * Whether this game has photographic tile artwork.
@@ -477,7 +487,7 @@ const TILED = new Set([
  * card has to know which it is looking at before deciding where to put the name.
  */
 export function hasTileArt(gameId: string): boolean {
-  return TILED.has(gameId);
+  return gameId in TILE_ART;
 }
 
 export function GameArt({
@@ -489,10 +499,11 @@ export function GameArt({
   accent: string;
   theme?: SlotTheme;
 }) {
-  if (TILED.has(gameId)) {
+  const tile = TILE_ART[gameId];
+  if (tile) {
     return (
       <Image
-        source={{ uri: `/art/tiles/${gameId}.jpg` }}
+        source={{ uri: `/art/tiles/${tile}` }}
         style={StyleSheet.absoluteFill}
         // `cover`: the tile was cropped to the card's exact aspect already, so
         // this only absorbs rounding. `contain` would letterbox on a hair's

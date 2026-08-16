@@ -1169,6 +1169,7 @@ export function GoldenScratchScreen() {
   const announce = useSettlementAnnouncer();
   const { handle, celebrate } = useCelebration();
   const ticket = state.round?.state as { multiplier: number; prizes: readonly number[] } | undefined;
+  const needsReveal = !!ticket && !revealed;
 
   const buy = async () => {
     setRevealed(false);
@@ -1186,11 +1187,18 @@ export function GoldenScratchScreen() {
     <InstantLayout
       game={game}
       state={state}
-      action={<PlayButton label={state.busy ? 'Minting card…' : `Buy card · ${format(state.bet, 'GC')}`} onPress={() => void buy()} disabled={state.busy} colour={game.accent} />}
+      action={
+        <PlayButton
+          label={state.busy ? 'Minting card…' : needsReveal ? 'Reveal your prize' : `Buy card · ${format(state.bet, 'GC')}`}
+          onPress={() => (needsReveal ? reveal() : void buy())}
+          disabled={state.busy}
+          colour={game.accent}
+        />
+      }
     >
       <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet}>
         <Txt variant="caption" color="#FFE8A6">GOLDEN SCRATCH</Txt>
-        <ScratchCard ticket={ticket} revealed={revealed} onReveal={reveal} />
+        <ScratchCard ticket={ticket} ticketId={state.round?.roundId} revealed={revealed} onReveal={reveal} />
         <View style={shell.result}>
           {!ticket ? (
             <Txt variant="bodySmall" color={colors.text.secondary}>Buy a card, then scratch to reveal your prize.</Txt>
@@ -1207,36 +1215,67 @@ export function GoldenScratchScreen() {
   );
 }
 
-function ScratchCard({ ticket, revealed, onReveal }: { ticket?: { multiplier: number; prizes: readonly number[] }; revealed: boolean; onReveal: () => void }) {
-  const coating = useRef(new Animated.Value(0)).current;
-  const reduced = usePrefersReducedMotion();
-  useEffect(() => {
-    if (!revealed) {
-      coating.setValue(0);
-      return;
-    }
-    Animated.timing(coating, { toValue: 1, duration: reduced ? 0 : 540, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
-  }, [revealed, reduced, coating]);
-  const opacity = coating.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
-  const scale = coating.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] });
+function ScratchCard({
+  ticket,
+  ticketId,
+  revealed,
+  onReveal,
+}: {
+  ticket?: { multiplier: number; prizes: readonly number[] };
+  ticketId?: string;
+  revealed: boolean;
+  onReveal: () => void;
+}) {
+  // A whole-card tap had no physical feedback in Safari and looked broken.
+  // Three foil panels make the interaction unmistakable, and `onPressIn`
+  // fires on touch-down rather than waiting for Safari's click synthesis.
+  const [scratched, setScratched] = useState(0);
+  const announced = useRef(false);
 
+  useEffect(() => {
+    setScratched(0);
+    announced.current = false;
+  }, [ticketId]);
+
+  useEffect(() => {
+    if (scratched < 3 || announced.current) return;
+    announced.current = true;
+    onReveal();
+  }, [scratched, onReveal]);
+
+  const scratchNext = () => {
+    if (!ticket || revealed || scratched >= 3) return;
+    sounds.coinLock();
+    setScratched((current) => Math.min(3, current + 1));
+  };
+
+  const prizes = ticket?.prizes ?? [0, 0, 0];
   return (
-    <Pressable style={local.scratchCard} disabled={!ticket || revealed} onPress={onReveal} accessibilityRole="button" accessibilityLabel={revealed ? 'Prize revealed' : 'Scratch card to reveal prize'}>
-      <LinearGradient colors={['#FFF4BE', '#C98B16', '#5A2508']} style={StyleSheet.absoluteFill} />
+    <Pressable
+      style={local.scratchCard}
+      disabled={!ticket || revealed}
+      onPressIn={scratchNext}
+      accessibilityRole="button"
+      accessibilityLabel={revealed ? 'Prize revealed' : `Scratch gold foil, ${3 - scratched} panels remaining`}
+    >
+      <LinearGradient colors={['#FFF4BE', '#C98B16', '#4A1607']} style={StyleSheet.absoluteFill} />
       <View style={local.scratchInner}>
-        {(ticket?.prizes ?? [0, 0, 0]).map((prize, index) => (
-          <View key={index} style={local.scratchPrize}>
-            <Txt variant="h2" color="#2B1605">{prize > 0 ? `${prize}×` : '—'}</Txt>
-          </View>
-        ))}
+        {prizes.map((prize, index) => {
+          const uncovered = revealed || index < scratched;
+          return (
+            <View key={index} style={local.scratchPrize}>
+              <Txt variant="h2" color="#2B1605">{uncovered ? (prize > 0 ? `${prize}×` : '—') : '✦'}</Txt>
+              {!uncovered ? (
+                <View pointerEvents="none" style={local.scratchFoil}>
+                  <LinearGradient colors={['#FFF4B5', '#D7961A', '#7A3007']} style={StyleSheet.absoluteFill} />
+                  <Txt variant="caption" color="#FFF8D9">RUB</Txt>
+                </View>
+              ) : null}
+            </View>
+          );
+        })}
       </View>
-      {!revealed ? (
-        <Animated.View pointerEvents="none" style={[local.scratchCoating, { opacity, transform: [{ scale }] }]}>
-          <LinearGradient colors={['#FFE9A0', '#B7740A', '#6D2B09']} style={StyleSheet.absoluteFill} />
-          <Txt variant="h3" color="#FFF6CF">SCRATCH</Txt>
-          <Txt variant="caption" color="#FFF6CF">TAP TO REVEAL</Txt>
-        </Animated.View>
-      ) : null}
+      {!revealed ? <Txt variant="caption" color="#FFF6CF">RUB THE GOLD FOIL · {Math.max(0, 3 - scratched)} LEFT</Txt> : null}
     </Pressable>
   );
 }
@@ -1446,11 +1485,13 @@ const local = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(82,35,4,0.58)',
     backgroundColor: 'rgba(255,247,209,0.72)',
+    overflow: 'hidden',
   },
-  scratchCoating: {
+  scratchFoil: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
+    borderWidth: 1,
+    borderColor: '#FFF0A0',
   },
 });
