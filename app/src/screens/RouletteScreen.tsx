@@ -10,6 +10,7 @@ import { playCue, playLoop, preloadSamples, sounds, spinNow, unlock, useSoundSet
 import { ROULETTE_SOUNDS } from '../api/sound-sets';
 import { ROULETTE_BED, useAmbientBed } from '../ambience';
 import { RouletteWheel, type WheelPhase } from '../components/RouletteWheel';
+import { Fireworks, type FireworksHandle } from '../components/Fireworks';
 import { usePrefersReducedMotion } from '../motion';
 import { ROULETTE_GAME_ID } from '../api/games';
 import {
@@ -156,6 +157,9 @@ export function RouletteScreen() {
   const [wheelPhase, setWheelPhase] = useState<WheelPhase>('idle');
   const [wheelTarget, setWheelTarget] = useState<number | null>(null);
   const [wheelPlan, setWheelPlan] = useState({ from: 0, duration: WHEEL_LAND_SECONDS });
+  /** Gold coins and ribbons thrown only after the ball visibly lands. */
+  const celebration = useRef<FireworksHandle | null>(null);
+  const [celebrationStage, setCelebrationStage] = useState({ width: WHEEL_SIZE, height: 310 });
   /** Resolved by the wheel's own stop, so the readout can never run ahead. */
   const wheelStopped = useRef<(() => void) | null>(null);
   /**
@@ -407,8 +411,19 @@ export function RouletteScreen() {
 
       const payout = result.settlement?.payout ?? 0;
       setTimeout(() => {
-        if (payout > total) sounds.bigWin();
-        else if (payout > 0) sounds.win();
+        if (payout > total) {
+          const multiple = payout / Math.max(total, 1);
+          // The burst is deliberately tied to the ball's landing rather than
+          // the server response: the table never celebrates information the
+          // player has not seen yet.
+          if (multiple >= 10) {
+            sounds.bigWin();
+            celebration.current?.blast(1);
+          } else {
+            sounds.win();
+            celebration.current?.fire(Math.max(0.25, Math.min(0.8, (multiple - 1) / 4)));
+          }
+        }
         else sounds.lose();
       }, 220);
     } catch (caught) {
@@ -520,9 +535,13 @@ export function RouletteScreen() {
       {/* The result. Wrapped because the measurement has to be of the whole
           cluster and `Card` takes no onLayout of its own. */}
       <View
+        style={styles.wheelStage}
         onLayout={(event) => {
-          const { y, height } = event.nativeEvent.layout;
+          const { y, height, width } = event.nativeEvent.layout;
           cardBottom.current = y + height;
+          setCelebrationStage((current) =>
+            current.width === width && current.height === height ? current : { width, height },
+          );
         }}
       >
       <Card style={styles.wheel}>
@@ -587,6 +606,13 @@ export function RouletteScreen() {
           )}
         </View>
       </Card>
+      {/* The shared casino celebration language, over the wheel but never in
+          the way of its controls.  This is the only table that was missing it. */}
+      <Fireworks
+        width={celebrationStage.width}
+        height={celebrationStage.height}
+        controller={celebration}
+      />
       </View>
 
       {/* Chip denomination */}
@@ -795,6 +821,9 @@ const styles = StyleSheet.create({
     borderColor: colors.surface.border,
   },
   wheel: { alignItems: 'center', gap: spacing.sm, borderColor: colors.gold.dark },
+  // Fireworks uses absolute fill, so the wrapper establishes a stage exactly
+  // around the wheel/result cluster rather than across the whole scroll view.
+  wheelStage: { position: 'relative' },
   ball: {
     width: 56,
     height: 56,

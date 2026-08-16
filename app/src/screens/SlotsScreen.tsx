@@ -33,6 +33,7 @@ import {
 } from '../components/GameRules';
 import { REEL_GAP, WinLines, litCells, useWinCycle } from '../components/WinLines';
 import { CabinetGlass, ReelFrame, SlotConsole, SpinLever } from '../components/SlotControls';
+import { CabinetAtmosphere } from '../components/CabinetAtmosphere';
 import { cabinetFor, roomFor } from '../api/cabinets';
 import { hasTileArt } from '../components/GameArt';
 import { WinOverlay, useCabinetShake } from '../components/WinOverlay';
@@ -1642,6 +1643,9 @@ export function SlotsScreen() {
             <View style={styles.roomScrim} pointerEvents="none" />
           </>
         ) : null}
+        {/* A shared physical-cabinet layer: marquee warmth and a slow glass
+            reflection, without replacing the individual game's own room. */}
+        <CabinetAtmosphere />
         <View
           style={[styles.reels, styles.reelsFill]}
           onLayout={(e) => setReelsWidth(e.nativeEvent.layout.width)}
