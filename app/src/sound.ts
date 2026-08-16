@@ -591,6 +591,8 @@ export function stopBed(): void {
 export interface SoundSet {
   /** The reels turning. */
   spin?: string;
+  /** Seamless mechanical reel bed, held through an anticipation stop. */
+  loop?: string;
   /** The handle, on the machines that have one. */
   lever?: string;
   /** An ordinary win. */
@@ -641,6 +643,20 @@ export function playCue(url: string, gain = 0.6): void {
 }
 
 let currentSet: SoundSet = {};
+
+// A spin has both an acceleration cue and a sustained mechanism. Keep the
+// latter here so an interrupted round cannot leave it running under idle reels.
+let stopReelLoop: (() => void) | null = null;
+let reelLoopTimer: ReturnType<typeof setTimeout> | null = null;
+
+function stopActiveReelLoop(): void {
+  if (reelLoopTimer !== null) {
+    clearTimeout(reelLoopTimer);
+    reelLoopTimer = null;
+  }
+  stopReelLoop?.();
+  stopReelLoop = null;
+}
 
 export function useSoundSet(set: SoundSet): void {
   currentSet = set;
@@ -767,12 +783,26 @@ export const sounds = {
 
   /** The reel starting to move: a soft rising whoosh. */
   spinStart(): void {
-    // The recording runs for the whole spin rather than just its start, so the
-    // synthesised whoosh is NOT layered under it — two spin sounds at once is
-    // one spin sound and a mistake.
-    if (playSample(currentSet.spin, { gain: 0.4 })) return;
+    stopActiveReelLoop();
+    // The short sample gives the motor its pickup. The continuous loop arrives
+    // after that attack at a lower level, so an anticipation hold stays alive
+    // without turning into two full-volume whirrs at once.
+    const played = playSample(currentSet.spin, { gain: 0.34 });
+    if (currentSet.loop) {
+      const loop = currentSet.loop;
+      reelLoopTimer = setTimeout(() => {
+        reelLoopTimer = null;
+        stopReelLoop = playLoop(loop, 0.16);
+      }, 720);
+    }
+    if (played) return;
     noise({ duration: 0.35, gain: 0.14, frequency: 700, q: 0.7, type: 'lowpass' });
     tone(180, { type: 'sine', duration: 0.3, gain: 0.14, sweepTo: 420 });
+  },
+
+  /** Fade the motor underneath the final reel's physical stop. */
+  reelLoopStop(): void {
+    stopActiveReelLoop();
   },
 
   /**

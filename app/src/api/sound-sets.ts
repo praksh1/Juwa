@@ -85,6 +85,12 @@ const SPIN = [
   `${A}/reel-spin-3.mp3`,
   `${A}/reel-spin-4.mp3`,
 ];
+const LOOP = [
+  `${A}/reel-loop-1.mp3`,
+  `${A}/reel-loop-2.mp3`,
+  `${A}/reel-loop-3.mp3`,
+  `${A}/reel-loop-4.mp3`,
+];
 const LEVER = [`${A}/lever-1.mp3`, `${A}/lever-2.mp3`, `${A}/lever-3.mp3`, `${A}/lever-4.mp3`];
 
 /*
@@ -163,6 +169,7 @@ function set(
   return {
     bed: BEDS[bed]![variant % 4]!,
     spin: SPIN[spin % SPIN.length]!,
+    loop: LOOP[spin % LOOP.length]!,
     win: WIN[win % WIN.length]!,
     big: BIG[big % BIG.length]!,
     mega: MEGA[mega % MEGA.length]!,
@@ -309,6 +316,7 @@ export const BLACKJACK_SOUNDS: SoundSet = {
 export const ALL_SOUND_FILES: string[] = [
   ...new Set([
     ...SPIN,
+    ...LOOP,
     ...LEVER,
     ...WIN,
     ...BIG,

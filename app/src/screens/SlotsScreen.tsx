@@ -557,6 +557,7 @@ export function SlotsScreen() {
      */
     const bed = set.bed;
     return () => {
+      sounds.reelLoopStop();
       if (bed) stopBedIfPlaying(bed);
     };
   }, [gameId]);
@@ -825,6 +826,7 @@ export function SlotsScreen() {
   const handleReelLanded = useCallback(
     (index: number) => {
       if (index === REELS - 1) {
+        sounds.reelLoopStop();
         landingResolver.current?.();
         landingResolver.current = null;
       }
@@ -1115,6 +1117,7 @@ export function SlotsScreen() {
      */
     coins.current?.clear();
     screenCoins.current?.clear();
+    sounds.reelLoopStop();
     // On the same clock the reels and the stop sounds use, so the floor below
     // is measured against the moment the reels actually started turning.
     const startedTurningAt = spinNow();
@@ -1447,6 +1450,7 @@ export function SlotsScreen() {
       setReelPhase('idle');
     } catch (caught) {
       if (superseded()) return;
+      sounds.reelLoopStop();
       setReelPhase('idle');
       setPhase('idle');
       sounds.error();
