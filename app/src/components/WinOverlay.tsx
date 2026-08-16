@@ -93,9 +93,9 @@ export function WinOverlay({
   /**
    * The area the fireworks have to play in.
    *
-   * Measured rather than taken from the window: this layer fills the CABINET,
-   * not the screen, and a shell that launches from the bottom of the phone
-   * would spend most of its rise behind the bet controls.
+   * Measured rather than taken from the window: this layer fills the live game
+   * stage. The celebration is intentionally allowed over the cabinet, header
+   * and console, but stays inside the app instead of escaping into browser UI.
    */
   const [stage, setStage] = React.useState({ width: 0, height: 0 });
 
@@ -360,17 +360,66 @@ function starburst(cx: number, cy: number, r: number, points: number): string {
  * make someone put a phone down. Silent under reduced motion.
  */
 export function useCabinetShake(tier: WinTier, round: number): Animated.Value {
+  return useWinShake(tier, round, 'cabinet');
+}
+
+/**
+ * A lighter impact reserved for a screen-level celebration. The cabinet still
+ * has its own mechanical nudge; this is the coordinated jolt that makes a
+ * Big Win feel as though the phone's entire game stage reacted to it.
+ */
+export function useScreenShake(tier: WinTier, round: number): Animated.Value {
+  return useWinShake(tier, round, 'screen');
+}
+
+function useWinShake(
+  tier: WinTier,
+  round: number,
+  scope: 'cabinet' | 'screen',
+): Animated.Value {
   const offset = useRef(new Animated.Value(0)).current;
   const reducedMotion = usePrefersReducedMotion();
 
   useEffect(() => {
-    if (reducedMotion || tier === 'none') return;
+    // A whole-page movement is an event, not a response to every ordinary
+    // line win. Keeping it to the three headline tiers makes the impact rare.
+    if (reducedMotion || tier === 'none' || (scope === 'screen' && (tier === 'win' || tier === 'burst'))) return;
 
     // A real cabinet answers every win with a physical response. Small wins
     // only get a two-pixel nudge; large tiers still hit hard enough to feel
     // like the machine has landed on its own feet.
-    const amplitude = tier === 'win' ? 2 : tier === 'burst' ? 4 : tier === 'big' ? 7 : tier === 'mega' ? 11 : 14;
-    const shakes = tier === 'win' ? 2 : tier === 'burst' ? 4 : tier === 'big' ? 6 : tier === 'mega' ? 9 : 11;
+    const amplitude =
+      scope === 'screen'
+        ? tier === 'big'
+          ? 2
+          : tier === 'mega'
+            ? 4
+            : 6
+        : tier === 'win'
+          ? 2
+          : tier === 'burst'
+            ? 4
+            : tier === 'big'
+              ? 7
+              : tier === 'mega'
+                ? 11
+                : 14;
+    const shakes =
+      scope === 'screen'
+        ? tier === 'big'
+          ? 4
+          : tier === 'mega'
+            ? 6
+            : 8
+        : tier === 'win'
+          ? 2
+          : tier === 'burst'
+            ? 4
+            : tier === 'big'
+              ? 6
+              : tier === 'mega'
+                ? 9
+                : 11;
     const sequence = Array.from({ length: shakes }, (_, i) =>
       Animated.timing(offset, {
         toValue: (i % 2 === 0 ? 1 : -1) * amplitude * (1 - i / shakes),
@@ -388,7 +437,7 @@ export function useCabinetShake(tier: WinTier, round: number): Animated.Value {
       animation.stop();
       offset.setValue(0);
     };
-  }, [tier, round, reducedMotion, offset]);
+  }, [tier, round, scope, reducedMotion, offset]);
 
   return offset;
 }

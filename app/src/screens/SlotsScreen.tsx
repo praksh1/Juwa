@@ -36,7 +36,7 @@ import { CabinetGlass, ReelFrame, SlotConsole, SpinLever } from '../components/S
 import { CabinetAtmosphere } from '../components/CabinetAtmosphere';
 import { cabinetFor, roomFor } from '../api/cabinets';
 import { hasTileArt } from '../components/GameArt';
-import { WinOverlay, useCabinetShake } from '../components/WinOverlay';
+import { WinOverlay, useCabinetShake, useScreenShake } from '../components/WinOverlay';
 import { DragonRoar, DRAGON_GAME_ID } from '../components/DragonRoar';
 import { HoldSpinRound } from '../components/HoldSpinRound';
 import { PrizeWheel } from '../components/PrizeWheel';
@@ -432,7 +432,10 @@ export function SlotsScreen() {
    * the number was written on.
    */
   const coins = useRef<FireworksHandle | null>(null);
+  /** Full-stage effects belong to headline wins, not the reel cabinet. */
+  const screenCoins = useRef<FireworksHandle | null>(null);
   const [cabinetSize, setCabinetSize] = useState({ width: 0, height: 0 });
+  const [screenSize, setScreenSize] = useState({ width: 0, height: 0 });
 
   /**
    * Free-spins state.
@@ -573,6 +576,7 @@ export function SlotsScreen() {
   });
   const celebrationRound = useRef(0);
   const shake = useCabinetShake(celebration.tier, celebration.round);
+  const screenShake = useScreenShake(celebration.tier, celebration.round);
 
   /**
    * How long auto-spin waits before the next round.
@@ -785,7 +789,10 @@ export function SlotsScreen() {
     if (tier === 'burst') coins.current?.blast(0.45);
     else if (tier !== 'win') {
       const power = tier === 'jackpot' ? 1 : tier === 'mega' ? 0.78 : 0.55;
-      coins.current?.blast(power);
+      // These are deliberately mounted at the screen root. A headline win is
+      // bigger than the reel window: coins cross the balance strip, banner and
+      // console together instead of being trapped inside a card.
+      screenCoins.current?.blast(power);
       /*
        * The rain runs for the whole banner, not just the roll-up.
        *
@@ -800,7 +807,7 @@ export function SlotsScreen() {
        * So the rain covers the celebration rather than the count. It stops
        * with the card.
        */
-      coins.current?.pour(power, celebrationDuration(tier) / 1000);
+      screenCoins.current?.pour(power, celebrationDuration(tier) / 1000);
     }
   }, []);
 
@@ -1082,6 +1089,7 @@ export function SlotsScreen() {
      * celebration belongs to the spin that earned it.
      */
     coins.current?.clear();
+    screenCoins.current?.clear();
     // On the same clock the reels and the stop sounds use, so the floor below
     // is measured against the moment the reels actually started turning.
     const startedTurningAt = spinNow();
@@ -1468,12 +1476,23 @@ export function SlotsScreen() {
   }, [auto, spinning, roundActive, bet, balance, spin, autoDelay]);
 
   return (
-    <View style={styles.root} ref={screenRef}>
+    <View
+      style={styles.root}
+      ref={screenRef}
+      onLayout={(event) => {
+        const { width, height } = event.nativeEvent.layout;
+        setScreenSize((current) =>
+          Math.abs(current.width - width) < 1 && Math.abs(current.height - height) < 1
+            ? current
+            : { width, height },
+        );
+      }}
+    >
       {showRules && details && paytable ? (
         <RulesIntro game={details} model={paytable} bet={bet} onPlay={() => setShowRules(false)} />
       ) : null}
       <ScrollView
-        style={styles.scroll}
+        style={[styles.scroll, { transform: [{ translateX: screenShake }] }]}
         contentContainerStyle={styles.screen}
         showsVerticalScrollIndicator
         contentInsetAdjustmentBehavior="automatic"
@@ -1927,12 +1946,6 @@ export function SlotsScreen() {
             {...(paytable?.freeSpinMultiplier ? { multiplier: paytable.freeSpinMultiplier } : {})}
           />
         ) : null}
-        <WinOverlay
-          tier={celebration.tier}
-          amount={celebration.amount}
-          round={celebration.round}
-          onDone={() => setCelebration((c) => ({ ...c, tier: 'none' }))}
-        />
       </Card>
 
       <View style={compact ? styles.controlsColumn : undefined}>
@@ -1968,6 +1981,24 @@ export function SlotsScreen() {
             : 'Every result is provably fair.'}
       </Txt>
       </ScrollView>
+
+      {/*
+        Headline wins own the whole game stage. Unlike the cabinet rain above,
+        this layer is not clipped by the slot card: it can cross the header,
+        reel window and console at once, exactly when the fanfare and the light
+        jolt land. Ordinary wins keep their feedback inside the machine.
+      */}
+      <View style={styles.screenEffects} pointerEvents="none">
+        {screenSize.width > 0 ? (
+          <Fireworks width={screenSize.width} height={screenSize.height} controller={screenCoins} />
+        ) : null}
+        <WinOverlay
+          tier={celebration.tier}
+          amount={celebration.amount}
+          round={celebration.round}
+          onDone={() => setCelebration((c) => ({ ...c, tier: 'none' }))}
+        />
+      </View>
 
       {/*
         The collect: the win, carried into the balance as coins.
@@ -2031,8 +2062,9 @@ export function SlotsScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.surface.base },
+  root: { flex: 1, backgroundColor: colors.surface.base, overflow: 'hidden' },
   scroll: { flex: 1 },
+  screenEffects: { ...StyleSheet.absoluteFillObject, zIndex: 20 },
   screen: {
     flexGrow: 1,
     backgroundColor: colors.surface.base,
