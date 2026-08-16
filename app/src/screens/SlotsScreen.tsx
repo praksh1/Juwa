@@ -32,9 +32,10 @@ import {
   rulesDismissed,
 } from '../components/GameRules';
 import { REEL_GAP, WinLines, litCells, useWinCycle } from '../components/WinLines';
-import { CabinetGlass, ReelFrame, SlotConsole, SpinLever } from '../components/SlotControls';
+import { ReelFrame, SlotConsole, SpinLever } from '../components/SlotControls';
 import { CabinetAtmosphere } from '../components/CabinetAtmosphere';
 import { DragonMarquee } from '../components/DragonMarquee';
+import { ThemedMarquee } from '../components/ThemedMarquee';
 import { cabinetFor, roomFor } from '../api/cabinets';
 import { hasTileArt } from '../components/GameArt';
 import { WinOverlay, useCabinetShake, useScreenShake } from '../components/WinOverlay';
@@ -1635,7 +1636,7 @@ export function SlotsScreen() {
           dragonHoard ? (
             <DragonMarquee height={glassHeight} />
           ) : (
-            <CabinetGlass name={details.name} material={material} height={glassHeight} />
+            <ThemedMarquee gameId={gameId} name={details.name} height={glassHeight} theme={details.theme} />
           )
         ) : null}
         <Animated.View style={[styles.reelBay, compact && styles.reelBayCompact, bayStyle]}>
