@@ -56,6 +56,8 @@ export interface SlotControlsProps {
   auto: boolean;
   onToggleAuto: () => void;
   compact?: boolean;
+  /** Keeps the portrait control row within the visible mobile game stage. */
+  dense?: boolean;
   /**
    * The game spins from a lever instead.
    *
@@ -281,6 +283,7 @@ export function SlotConsole({
   auto,
   onToggleAuto,
   compact,
+  dense = false,
   hideSpin = false,
 }: SlotControlsProps) {
   const index = options.findIndex((value) => value === bet);
@@ -290,7 +293,7 @@ export function SlotConsole({
   };
 
   return (
-    <View style={[styles.console, compact && styles.consoleCompact, compact && styles.consoleStack]}>
+    <View style={[styles.console, (compact || dense) && styles.consoleCompact, compact && styles.consoleStack]}>
       {/* Bet, with steppers. A stepper rather than five chips: the chips took a
           whole row and two of them wrapped onto a third line on a small phone. */}
       <View style={styles.consoleBlock}>
@@ -349,7 +352,7 @@ export function SlotConsole({
           }
           style={({ pressed }) => [
             styles.spinRound,
-            compact && styles.spinRoundCompact,
+            (compact || dense) && styles.spinRoundCompact,
             pressed && styles.spinPressed,
             spinning && !auto && styles.spinBusy,
           ]}

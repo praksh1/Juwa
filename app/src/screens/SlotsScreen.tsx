@@ -919,8 +919,15 @@ export function SlotsScreen() {
     // Width is stable when Safari's address bar appears or disappears. Height
     // is deliberately not a constraint: the surrounding ScrollView owns any
     // additional vertical space instead of rescaling a physical cabinet.
-    return Math.max(26, Math.min(MAX_SYMBOL_SIZE, byWidth));
-  }, [viewportWidth, reelsWidth, REELS]);
+    /*
+     * A wide display should make the cabinet wider, not turn each reel into a
+     * poster. On a laptop, and especially an iPhone held sideways, an uncapped
+     * width calculation made the reel window taller than the available game
+     * stage and forced a second scroll just to reach WIN and SPIN.
+     */
+    const stageCap = compact ? 54 : sideControls ? 76 : MAX_SYMBOL_SIZE;
+    return Math.max(26, Math.min(stageCap, byWidth));
+  }, [viewportWidth, reelsWidth, REELS, compact, sideControls]);
 
   /**
    * How tall a cell is against how wide it is.
@@ -1495,13 +1502,7 @@ export function SlotsScreen() {
       {showRules && details && paytable ? (
         <RulesIntro game={details} model={paytable} bet={bet} onPlay={() => setShowRules(false)} />
       ) : null}
-      <ScrollView
-        style={[styles.scroll, { transform: [{ translateX: screenShake }] }]}
-        contentContainerStyle={styles.screen}
-        showsVerticalScrollIndicator
-        contentInsetAdjustmentBehavior="automatic"
-      >
-      <View style={styles.header}>
+      <View style={[styles.header, styles.headerDock]}>
         {/*
           The destination of every coin the machine pays out.
 
@@ -1550,6 +1551,13 @@ export function SlotsScreen() {
         */}
         <SoundToggles compact />
       </View>
+
+      <ScrollView
+        style={[styles.scroll, { transform: [{ translateX: screenShake }] }]}
+        contentContainerStyle={styles.screen}
+        showsVerticalScrollIndicator
+        contentInsetAdjustmentBehavior="automatic"
+      >
 
       {/*
         Side by side when height is scarce.
@@ -1972,6 +1980,7 @@ export function SlotsScreen() {
           auto={auto}
           onToggleAuto={() => setAuto((on) => !on)}
           compact={sideControls}
+          dense={dragonHoard && !sideControls}
           {...(cabinet.controls === 'lever' ? { hideSpin: true } : {})}
         />
       </View>
@@ -2089,6 +2098,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  headerDock: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.surface.base,
+    zIndex: 2,
   },
   rtpPill: {
     paddingHorizontal: spacing.md,

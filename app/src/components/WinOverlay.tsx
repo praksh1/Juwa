@@ -34,8 +34,7 @@ import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet, View, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
-import { colors, radius, spacing } from '@juwa/ui';
-import { ChaseLights } from './ChaseLights';
+import { colors, spacing } from '@juwa/ui';
 import { ShellBurst } from './ShellBurst';
 import { WinMeter } from './WinMeter';
 import { usePrefersReducedMotion, celebrationDuration, type WinTier } from '../motion';
@@ -243,20 +242,6 @@ export function WinOverlay({
           { opacity: enter, transform: [{ scale: enterScale }, { scale: swell }] },
         ]}
       >
-        <LinearGradient
-          colors={
-            jackpot
-              ? // White-gold, so the top tier is not simply "the pink one
-                // again" — a jackpot has to be visibly its own event.
-                ['#FFF3CE', '#E8BC4E', '#3A2A05']
-              : mega
-                ? ['#FF3D8A', '#7C3AED', '#08070E']
-                : [colors.gold.default, '#7A6425', '#08070E']
-          }
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
         {/*
           The painted banner, in place of the words.
 
@@ -283,26 +268,7 @@ export function WinOverlay({
           The banner says what KIND of win this was; the meter says HOW MUCH,
           which is the part the player is waiting for.
         */}
-        <WinMeter amount={amount} tier={tier} />
-
-        {/*
-          The bulbs set into the frame.
-
-          Inside the card rather than around its edge, because the card clips
-          its own overflow for the shine below — lamps hung outside would be cut
-          in half. Set just in from the border, which is where a cabinet puts
-          them anyway.
-
-          This is the cheapest thing in the founder's reference video and one of
-          the loudest: a rainbow of bulbs running around the win frame. No
-          artwork, one animated value, twenty-eight interpolations of it.
-        */}
-        <ChaseLights
-          count={jackpot ? 36 : 28}
-          size={jackpot ? 8 : 7}
-          duration={jackpot ? 1_300 : mega ? 1_500 : 1_800}
-          inset={6}
-        />
+        <WinMeter amount={amount} tier={tier} bare />
 
         {/*
           The shine, over everything and clipped by the card.
@@ -457,29 +423,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   card: {
-    /*
-     * Nearly the whole screen, and the padding is now small on purpose.
-     *
-     * `alignSelf: stretch` plus a percentage width, rather than a minimum: a
-     * minWidth only sets a floor, so the card was free to shrink-wrap its
-     * contents — and its widest content was a banner that could not grow. The
-     * card ended up sized by the thing it was supposed to be sizing.
-     *
-     * The horizontal padding came down from 16 to 8 because every point of it
-     * is a point the banner does not get, and the gradient inside the frame is
-     * a backing for the art rather than a mount for it.
-     */
-    width: '96%',
-    maxWidth: 560,
-    paddingHorizontal: spacing.sm,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.lg,
-    borderRadius: radius.lg,
-    borderWidth: 2,
-    borderColor: colors.gold.light,
+    // The announcement is free in the game stage, not a modal inside a gilded
+    // window. The banner and counter have their own depth, rays and coin blast.
+    width: '100%',
+    maxWidth: 640,
     alignItems: 'center',
-    gap: spacing.sm,
-    overflow: 'hidden',
+    gap: spacing.xs,
+    overflow: 'visible',
   },
   /*
    * As wide as the card, as tall as that makes it.
@@ -488,7 +438,7 @@ const styles = StyleSheet.create({
    * fixed 138-point height allowed — a third larger, and every word inside the
    * art grows with it. See BANNER_ASPECT for why the old rule could not.
    */
-  banner: { width: '100%', aspectRatio: BANNER_ASPECT, marginBottom: spacing.sm },
+  banner: { width: '110%', maxWidth: 620, aspectRatio: BANNER_ASPECT, marginBottom: spacing.xs },
   shine: {
     position: 'absolute',
     top: -60,

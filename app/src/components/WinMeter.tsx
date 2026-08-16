@@ -42,13 +42,32 @@ export function WinMeter({
   tier,
   /** Louder for the bigger tiers, so the three moments are told apart. */
   label = 'WIN METER',
+  /** Used by full-screen celebrations that deliberately have no enclosing card. */
+  bare = false,
 }: {
   amount: number;
   tier: WinTier;
   label?: string;
+  bare?: boolean;
 }) {
   const jackpot = tier === 'jackpot';
   const mega = tier === 'mega';
+
+  if (bare) {
+    return (
+      <View style={styles.freeWrap}>
+        <Txt variant="caption" color="rgba(255,243,206,0.78)" style={styles.freeLabel}>
+          {label}
+        </Txt>
+        <CoinCounter
+          amount={amount}
+          tier={tier}
+          color={jackpot ? '#FFF6D8' : mega ? '#FFE0F0' : '#FFF3CE'}
+          style={[styles.freeDigits, jackpot ? styles.freeDigitsJackpot : null]}
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.wrap}>
@@ -92,6 +111,18 @@ export function WinMeter({
 
 const styles = StyleSheet.create({
   wrap: { alignSelf: 'stretch', alignItems: 'center' },
+  freeWrap: { alignItems: 'center', gap: 1 },
+  freeLabel: { letterSpacing: 4, fontSize: 11, lineHeight: 13, fontWeight: '900' },
+  freeDigits: {
+    fontSize: 62,
+    lineHeight: 70,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textShadowColor: 'rgba(0,0,0,0.85)',
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 10,
+  },
+  freeDigitsJackpot: { fontSize: 70, lineHeight: 78 },
   bezel: {
     borderRadius: radius.md,
     padding: 3,

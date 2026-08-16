@@ -129,9 +129,9 @@ export function rollUpDuration(tier: WinTier): number {
 export function celebrationHold(tier: WinTier): number {
   switch (tier) {
     case 'jackpot':
-      return 5_200;
+      return 6_600;
     case 'mega':
-      return 4_400;
+      return 5_600;
     case 'big':
       /*
        * Back up from 1.8s.
@@ -143,7 +143,7 @@ export function celebrationHold(tier: WinTier): number {
        * the product, and 5.2s total is still under the 3.79s fanfare plus its
        * own roll-up.
        */
-      return 3_000;
+      return 4_300;
     default:
       return 0;
   }
