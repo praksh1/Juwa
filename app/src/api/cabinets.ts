@@ -92,6 +92,24 @@ export interface CabinetSpec {
    * as a picture competing with the game.
    */
   background?: string;
+  /**
+   * Portrait framing is deliberately chosen cabinet by cabinet.
+   *
+   * A five-reel ocean game, a three-reel fruit machine with a physical handle,
+   * and a 3-4-5-4-3 video slot do not have the same usable stage.  These values
+   * cap the cell size only on a narrow upright screen; desktop and landscape
+   * continue to use their wider cabinet geometry.  Keeping the values here
+   * makes the exceptions inspectable instead of hiding a one-size-fits-all
+   * scaling rule in the screen.
+   */
+  portrait?: {
+    /** Largest symbol cell on an upright phone, in points. */
+    symbolCap: number;
+    /** Lit top-glass height on an upright phone, in points. */
+    glassHeight: number;
+    /** Width reserved inside the cabinet for a real pull handle. */
+    leverWidth?: number;
+  };
 }
 
 const BG = '/art/backgrounds';
@@ -116,37 +134,37 @@ export const CABINETS: Record<string, CabinetSpec> = {
   // Three reels and a full-width machine give these the biggest cells in the
   // catalogue, and they are the games that want them: a fruit machine's
   // symbols crowd their windows, they do not float in them.
-  'juwa-classic-slots': { controls: 'lever', frame: 'timber', symbolFill: 1.0, rowAspect: 1.06, background: `${BG}/bg03.jpg` },
-  'slot-triple-bar': { controls: 'lever', frame: 'timber', symbolFill: 1.0, rowAspect: 1.04, background: `${BG}/bg08.jpg` },
-  'slot-fruit-stand': { controls: 'lever', frame: 'timber', symbolFill: 1.0, rowAspect: 1.04, background: `${BG}/bg05.jpg` },
-  'slot-lucky-sevens': { controls: 'lever', frame: 'timber', symbolFill: 1.0, rowAspect: 1.0, background: `${BG}/bg02.jpg` },
+  'juwa-classic-slots': { controls: 'lever', frame: 'timber', symbolFill: 1.0, rowAspect: 1.06, background: `${BG}/bg03.jpg`, portrait: { symbolCap: 70, glassHeight: 38, leverWidth: 48 } },
+  'slot-triple-bar': { controls: 'lever', frame: 'timber', symbolFill: 1.0, rowAspect: 1.04, background: `${BG}/bg08.jpg`, portrait: { symbolCap: 72, glassHeight: 42, leverWidth: 50 } },
+  'slot-fruit-stand': { controls: 'lever', frame: 'timber', symbolFill: 1.0, rowAspect: 1.04, background: `${BG}/bg05.jpg`, portrait: { symbolCap: 72, glassHeight: 42, leverWidth: 50 } },
+  'slot-lucky-sevens': { controls: 'lever', frame: 'timber', symbolFill: 1.0, rowAspect: 1.0, background: `${BG}/bg02.jpg`, portrait: { symbolCap: 76, glassHeight: 42, leverWidth: 50 } },
 
   // ---- temples, tombs and hoards: gold, and a room with pillars in it ----
-  'slot-desert-mirage': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.14, background: `${BG}/egypt.jpg` },
-  'slot-pharaohs-vault': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.14, background: `${BG}/egypt.jpg` },
-  'slot-jade-temple': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.2, background: `${BG}/bg09.jpg` },
+  'slot-desert-mirage': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.14, background: `${BG}/egypt.jpg`, portrait: { symbolCap: 70, glassHeight: 38 } },
+  'slot-pharaohs-vault': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.14, background: `${BG}/egypt.jpg`, portrait: { symbolCap: 70, glassHeight: 38 } },
+  'slot-jade-temple': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.2, background: `${BG}/bg09.jpg`, portrait: { symbolCap: 68, glassHeight: 38 } },
   'slot-dragons-hoard': { controls: 'console', frame: 'gilt', symbolFill: 1.0, rowAspect: 1.1, background: `${BG}/bg10.jpg` },
-  'slot-royal-flush': { controls: 'console', frame: 'gilt', symbolFill: 0.96, rowAspect: 1.22, background: `${BG}/bg11.jpg` },
-  'slot-midnight-gold': { controls: 'console', frame: 'gilt', symbolFill: 0.96, rowAspect: 1.22, background: `${BG}/bg04.jpg` },
-  'slot-spice-market': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.14, background: `${BG}/bg06.jpg` },
-  'slot-emerald-nights': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.16, background: `${BG}/bg07.jpg` },
+  'slot-royal-flush': { controls: 'console', frame: 'gilt', symbolFill: 0.96, rowAspect: 1.22, background: `${BG}/bg11.jpg`, portrait: { symbolCap: 68, glassHeight: 38 } },
+  'slot-midnight-gold': { controls: 'console', frame: 'gilt', symbolFill: 0.96, rowAspect: 1.22, background: `${BG}/bg04.jpg`, portrait: { symbolCap: 68, glassHeight: 40 } },
+  'slot-spice-market': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.14, background: `${BG}/bg06.jpg`, portrait: { symbolCap: 70, glassHeight: 38 } },
+  'slot-emerald-nights': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.16, background: `${BG}/bg07.jpg`, portrait: { symbolCap: 68, glassHeight: 36 } },
 
   // ---- cold, electric and airless: metal rather than gold ----
-  'slot-frost-peak': { controls: 'console', frame: 'chrome', symbolFill: 0.98, rowAspect: 1.2, background: `${BG}/bg01.jpg` },
-  'slot-storm-chaser': { controls: 'console', frame: 'chrome', symbolFill: 0.96, rowAspect: 1.26, background: `${BG}/bg01.jpg` },
-  'slot-supernova': { controls: 'console', frame: 'chrome', symbolFill: 0.96, rowAspect: 1.28 },
-  'slot-aurora-borealis': { controls: 'console', frame: 'chrome', symbolFill: 0.96, rowAspect: 1.24 },
-  'slot-vault-breaker': { controls: 'console', frame: 'chrome', symbolFill: 0.98, rowAspect: 1.18, background: `${BG}/bg08.jpg` },
-  'slot-city-lights': { controls: 'console', frame: 'chrome', symbolFill: 0.96, rowAspect: 1.24 },
+  'slot-frost-peak': { controls: 'console', frame: 'chrome', symbolFill: 0.98, rowAspect: 1.2, background: `${BG}/bg01.jpg`, portrait: { symbolCap: 68, glassHeight: 38 } },
+  'slot-storm-chaser': { controls: 'console', frame: 'chrome', symbolFill: 0.96, rowAspect: 1.26, background: `${BG}/bg01.jpg`, portrait: { symbolCap: 66, glassHeight: 36 } },
+  'slot-supernova': { controls: 'console', frame: 'chrome', symbolFill: 0.96, rowAspect: 1.28, portrait: { symbolCap: 66, glassHeight: 36 } },
+  'slot-aurora-borealis': { controls: 'console', frame: 'chrome', symbolFill: 0.96, rowAspect: 1.24, portrait: { symbolCap: 67, glassHeight: 36 } },
+  'slot-vault-breaker': { controls: 'console', frame: 'chrome', symbolFill: 0.98, rowAspect: 1.18, background: `${BG}/bg08.jpg`, portrait: { symbolCap: 68, glassHeight: 36 } },
+  'slot-city-lights': { controls: 'console', frame: 'chrome', symbolFill: 0.96, rowAspect: 1.24, portrait: { symbolCap: 67, glassHeight: 36 } },
 
   // ---- the ones whose own artwork is the room ----
   // No surround, so the room is doing the work and the grid can afford a
   // little more air for it to show through.
-  'slot-neon-alley': { controls: 'console', frame: 'none', symbolFill: 0.96, rowAspect: 1.3 },
-  'slot-ocean-drift': { controls: 'console', frame: 'none', symbolFill: 0.96, rowAspect: 1.3 },
-  'slot-sunset-strip': { controls: 'console', frame: 'none', symbolFill: 0.96, rowAspect: 1.3 },
-  'slot-carnival-row': { controls: 'console', frame: 'none', symbolFill: 0.98, rowAspect: 1.26 },
-  'slot-jungle-run': { controls: 'console', frame: 'none', symbolFill: 0.98, rowAspect: 1.26 },
+  'slot-neon-alley': { controls: 'console', frame: 'none', symbolFill: 0.96, rowAspect: 1.3, portrait: { symbolCap: 66, glassHeight: 34 } },
+  'slot-ocean-drift': { controls: 'console', frame: 'none', symbolFill: 0.96, rowAspect: 1.3, portrait: { symbolCap: 65, glassHeight: 34 } },
+  'slot-sunset-strip': { controls: 'console', frame: 'none', symbolFill: 0.96, rowAspect: 1.3, portrait: { symbolCap: 66, glassHeight: 34 } },
+  'slot-carnival-row': { controls: 'console', frame: 'none', symbolFill: 0.98, rowAspect: 1.26, portrait: { symbolCap: 66, glassHeight: 34 } },
+  'slot-jungle-run': { controls: 'console', frame: 'none', symbolFill: 0.98, rowAspect: 1.26, portrait: { symbolCap: 66, glassHeight: 34 } },
 };
 
 /**

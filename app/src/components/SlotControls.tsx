@@ -118,11 +118,14 @@ export function SpinLever({
   spinning,
   disabled,
   height,
+  width = 44,
 }: {
   onSpin: () => void;
   spinning: boolean;
   disabled?: boolean;
   height: number;
+  /** Space reserved within this cabinet's own right-hand rail. */
+  width?: number;
 }) {
   const pull = useRef(new Animated.Value(0)).current;
   const bob = useRef(new Animated.Value(0)).current;
@@ -216,7 +219,7 @@ export function SpinLever({
 
   return (
     <Pressable
-      style={[styles.leverArea, { height }]}
+      style={[styles.leverArea, { height, width }]}
       accessibilityRole="button"
       accessibilityLabel={spinning ? 'Spinning' : 'Pull the lever to spin'}
       accessibilityHint="Drag the handle down, or press Enter"
@@ -551,7 +554,8 @@ const FRAMES = {
 const styles = StyleSheet.create({
   /* lever */
   leverArea: {
-    width: 38,
+    minWidth: 38,
+    flexShrink: 0,
     alignItems: 'center',
     justifyContent: 'flex-start',
     paddingTop: 4,
@@ -596,7 +600,12 @@ const styles = StyleSheet.create({
   // never rely on a horizontally clipped final control.  The small reduction
   // keeps the individual targets roomy while preserving all four letters of
   // SPIN at 320pt.
-  consoleDense: { gap: 4, paddingHorizontal: 5, justifyContent: 'space-between' },
+  consoleDense: {
+    width: '100%',
+    gap: 4,
+    paddingHorizontal: 5,
+    justifyContent: 'space-between',
+  },
   /*
    * Beside the machine, the console is a COLUMN.
    *
@@ -665,7 +674,11 @@ const styles = StyleSheet.create({
   },
 
   /* frame */
-  frame: { flex: 1, borderRadius: radius.lg, borderWidth: 2, padding: 3 },
-  frameBare: { flex: 1 },
+  // `minWidth: 0` is important beside a lever.  Without it React Native Web
+  // holds the reel frame at its intrinsic five-reel width, then pushes the
+  // physical handle beyond the card's clipped edge instead of giving the
+  // handle the rail reserved for it.
+  frame: { flex: 1, minWidth: 0, borderRadius: radius.lg, borderWidth: 2, padding: 3 },
+  frameBare: { flex: 1, minWidth: 0 },
   frameInner: { borderRadius: radius.md, overflow: 'hidden' },
 });

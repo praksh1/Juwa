@@ -904,6 +904,10 @@ export function SlotsScreen() {
   // as "compact". Keep its bet and spin rail beside the cabinet so a player
   // never has to reduce browser zoom just to reach the controls.
   const sideControls = compact || viewportWidth >= 760;
+  // These are individual cabinet fits, not a device-wide scale factor.  The
+  // profile is used only on an upright phone; wide and landscape cabinets keep
+  // their intentionally larger presentation.
+  const portraitCabinet = !sideControls ? cabinet.portrait : undefined;
   const symbolSize = useMemo(() => {
     /*
      * WIDTH MATTERS AS MUCH AS HEIGHT, and used not to count at all.
@@ -936,9 +940,13 @@ export function SlotsScreen() {
     // Only the genuinely short landscape stage needs a tight cap. A Surface
     // or laptop has room for the large physical reel face once the controls
     // live in their own rail, so do not make desktop play look miniature.
-    const stageCap = compact ? 54 : sideControls ? (viewportWidth >= 1_000 ? 104 : 88) : MAX_SYMBOL_SIZE;
+    const stageCap = compact
+      ? 54
+      : sideControls
+        ? (viewportWidth >= 1_000 ? 104 : 88)
+        : (portraitCabinet?.symbolCap ?? MAX_SYMBOL_SIZE);
     return Math.max(26, Math.min(stageCap, byWidth));
-  }, [viewportWidth, reelsWidth, REELS, compact, sideControls]);
+  }, [viewportWidth, reelsWidth, REELS, compact, sideControls, portraitCabinet?.symbolCap]);
 
   /**
    * How tall a cell is against how wide it is.
@@ -1030,9 +1038,10 @@ export function SlotsScreen() {
 
   const glassHeight = useMemo(() => {
     if (compact) return 0;
+    if (portraitCabinet) return portraitCabinet.glassHeight;
     // A width-led top box remains still when mobile-browser chrome changes.
     return Math.round(Math.max(MIN_GLASS, Math.min(MAX_GLASS, cellHeight * 0.72)));
-  }, [compact, cellHeight]);
+  }, [compact, cellHeight, portraitCabinet]);
 
   /**
    * The bonus-round re-theme.
@@ -1647,7 +1656,11 @@ export function SlotsScreen() {
           what lets a symbol read on top of one — so they work as a room the
           machine stands in rather than as a picture competing with the game.
         */}
-        <View style={[styles.machineRow, dragonHoard && styles.dragonMachineRow]}>
+        <View style={[
+          styles.machineRow,
+          cabinet.controls === 'lever' && styles.leverMachineRow,
+          dragonHoard && styles.dragonMachineRow,
+        ]}>
         <ReelFrame style={dragonHoard ? 'none' : cabinet.frame}>
         {/* The lit sign above the reels, cast in this game's own material. */}
         {glassHeight >= MIN_GLASS && details ? (
@@ -1768,6 +1781,7 @@ export function SlotsScreen() {
             spinning={spinning}
             disabled={bet > balance}
             height={cellHeight * MAX_ROWS}
+            width={portraitCabinet?.leverWidth}
           />
         ) : null}
         {/*
@@ -2264,6 +2278,9 @@ const styles = StyleSheet.create({
   reelBayCompact: { padding: spacing.xs },
   /** The machine and its lever, side by side. */
   machineRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  // A physical rail belongs inside its cabinet.  This prevents the final reel
+  // from claiming the full card width and forcing the red knob off-screen.
+  leverMachineRow: { paddingRight: 4 },
   // The reels must claim the full width of the bay. Without this they are
   // sized by their content and the machine collapses into the corner.
   reelsFill: { width: '100%' },
