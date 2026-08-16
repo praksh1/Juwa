@@ -36,8 +36,6 @@ import { ReelFrame, SlotConsole, SpinLever } from '../components/SlotControls';
 import { CabinetAtmosphere } from '../components/CabinetAtmosphere';
 import { DragonMarquee } from '../components/DragonMarquee';
 import { ThemedMarquee } from '../components/ThemedMarquee';
-import { CabinetPersonality, CabinetReward, cabinetFlavorFor } from '../components/CabinetPersonality';
-import { ScatterCallout } from '../components/ScatterCallout';
 import { cabinetFor, roomFor } from '../api/cabinets';
 import { hasTileArt } from '../components/GameArt';
 import { WinOverlay, useCabinetShake, useScreenShake } from '../components/WinOverlay';
@@ -513,7 +511,10 @@ export function SlotsScreen() {
   const [autoStarting, setAutoStarting] = useState(false);
   /** The machine this game is built as: frame, room, and which controls. */
   const cabinet = useMemo(() => cabinetFor(gameId), [gameId]);
-  const cabinetFlavor = useMemo(() => cabinetFlavorFor(gameId), [gameId]);
+  // The broad theatre reflection belongs to vintage bulb/carnival cabinets.
+  // Applying it to every theme turned a distinctive physical effect into the
+  // same diagonal light pasted over Ocean, City, Aurora, Storm and space.
+  const theatreLighting = cabinet.controls === 'lever' || gameId === 'slot-carnival-row';
   /** Dragon's Hoard has a full illustrated cabinet instead of a generic room. */
   const dragonHoard = gameId === DRAGON_GAME_ID;
   /** The room this machine stands in — its own tile unless told otherwise. */
@@ -791,13 +792,7 @@ export function SlotsScreen() {
      * they are doing different jobs — a fountain with no punch is a
      * screensaver, and a punch with nothing under it is over in a second.
      */
-    // A fountain is a treasure-machine signature, not the universal answer to
-    // a small win.  The other cabinets get one purposeful local reaction
-    // (wave, lightning, orbit, vault dial, etc.) rather than an extra pile of
-    // simultaneous particles.
-    if (tier === 'burst' && (cabinetFlavor === 'bulbs' || cabinetFlavor === 'pharaoh')) {
-      coins.current?.blast(0.45);
-    }
+    if (tier === 'burst') coins.current?.blast(0.45);
     else if (tier !== 'win') {
       const power = tier === 'jackpot' ? 1 : tier === 'mega' ? 0.78 : 0.55;
       // These are deliberately mounted at the screen root. A headline win is
@@ -820,7 +815,7 @@ export function SlotsScreen() {
        */
       screenCoins.current?.pour(power, celebrationDuration(tier) / 1000);
     }
-  }, [cabinetFlavor, paytable?.tiers]);
+  }, [paytable?.tiers]);
 
   /**
    * The reel's own stop callback. It no longer plays the sound — that was
@@ -1025,6 +1020,11 @@ export function SlotsScreen() {
     }
     return null;
   }, [paytable]);
+
+  // A tall side plaque costs the exact width a five-reel portrait machine
+  // needs.  On phones the same instruction becomes a proper cabinet strip
+  // beneath the glass; wide/landscape machines retain the side plaque.
+  const bonusBelowReels = Boolean(bonusSpec) && !dragonHoard && !sideControls;
 
   const glassHeight = useMemo(() => {
     if (compact) return 0;
@@ -1668,20 +1668,10 @@ export function SlotsScreen() {
             <View style={styles.roomScrim} pointerEvents="none" />
           </>
         ) : null}
-        {/* A shared physical-cabinet layer: marquee warmth and a slow glass
-            reflection, without replacing the individual game's own room. */}
-        <CabinetAtmosphere />
-        {/* The machine-specific mechanism is under the symbols, so it reads
-            through the glass rather than as a sticker over a result. */}
-        {details && !dragonHoard ? (
-          <CabinetPersonality
-            gameId={gameId}
-            theme={details.theme}
-            spinning={spinning}
-            tier={celebration.tier}
-            placement="glass"
-          />
-        ) : null}
+        {/* A theatre reflection suits the vintage bulb machines.  Modern
+            cabinets keep their own room clean instead of sharing one moving
+            diagonal light across the catalogue. */}
+        {theatreLighting ? <CabinetAtmosphere /> : null}
         <View
           style={[styles.reels, styles.reelsFill]}
           onLayout={(e) => setReelsWidth(e.nativeEvent.layout.width)}
@@ -1739,21 +1729,6 @@ export function SlotsScreen() {
             gameId={gameId}
             {...(details?.art ? { family: details.art } : {})}
           />
-          {details ? (
-            <CabinetReward
-              gameId={gameId}
-              theme={details.theme}
-              tier={celebration.tier}
-              round={celebration.round}
-            />
-          ) : null}
-          {details && phase === 'base' ? (
-            <ScatterCallout
-              count={visibleScatters}
-              round={reelRound}
-              accent={details.theme.accent}
-            />
-          ) : null}
         </View>
 
         {/*
@@ -1799,7 +1774,7 @@ export function SlotsScreen() {
           a player's first session contains no evidence that the game has one
           at all. See BonusMeter.
         */}
-        {bonusSpec && !dragonHoard ? (
+        {bonusSpec && !dragonHoard && !bonusBelowReels ? (
           <BonusMeter
             reward={bonusSpec.reward}
             trigger={bonusSpec.trigger}
@@ -1810,8 +1785,8 @@ export function SlotsScreen() {
           />
         ) : null}
         </View>
-        {dragonHoard && bonusSpec ? (
-          <View style={styles.dragonBonusDock}>
+        {(dragonHoard || bonusBelowReels) && bonusSpec ? (
+          <View style={[styles.dragonBonusDock, bonusBelowReels && styles.mobileBonusDock]}>
             <BonusMeter
               reward={bonusSpec.reward}
               trigger={bonusSpec.trigger}
@@ -2235,6 +2210,7 @@ const styles = StyleSheet.create({
     marginTop: -spacing.xs,
     marginBottom: spacing.xs,
   },
+  mobileBonusDock: { marginTop: spacing.xs },
   /**
    * The reel bay is recessed: darker than the cabinet, with a gold inner rule.
    * A slot machine's reels sit BEHIND glass, and that inset is most of what

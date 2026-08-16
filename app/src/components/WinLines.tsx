@@ -282,6 +282,16 @@ export function WinLines({
     Animated.timing(fade, { toValue: 1, duration: 220, useNativeDriver: true }).start();
   }, [phaseKey, phase.kind, fade]);
 
+  /*
+   * A traced payline is useful only when it reads as a single deliberate line.
+   * On the modern multi-row machines it became a giant M, O or zig-zag drawn
+   * over the result — visual noise rather than proof of a win.  Their paying
+   * symbols are already given the premium gold cell treatment by Reel, so no
+   * second shape is necessary.  Dragon's Hoard is intentionally left exactly
+   * as it was before this pass, per the requested scope.
+   */
+  if (gameId && gameId !== 'slot-dragons-hoard') return null;
+
   if (width <= 0 || shown.length === 0) return null;
 
   const reelWidth = (width - REEL_GAP * (reels - 1)) / reels;
