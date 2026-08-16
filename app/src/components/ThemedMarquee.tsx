@@ -106,7 +106,17 @@ export function ThemedMarquee({ gameId, name, height, theme }: { gameId: string;
   }, [flavor, pulse, reduced, sweep]);
 
   const title = name.toUpperCase();
-  const titleLength = Math.min(260, Math.max(110, title.length * 16));
+  // These are sign faces, not merely recoloured copies.  Neon/city cabinets
+  // use a clean lit face, temples use a taller engraved face, while classic
+  // and carnival machines keep their chunky arcade lettering.
+  const modernFace = ['city', 'neon', 'nova', 'storm', 'frost', 'aurora'].includes(flavor);
+  const engravedFace = ['jade', 'sand', 'pharaoh', 'spice', 'vault'].includes(flavor);
+  const titleSize = modernFace ? 25 : engravedFace ? 28 : flavor === 'ripple' ? 26 : 30;
+  const titleLength = Math.min(266, Math.max(106, title.length * (modernFace ? 14 : 16)));
+  const titleFont = modernFace ? 'Arial Black, sans-serif' : engravedFace ? 'Georgia, serif' : 'Impact, Arial Black, sans-serif';
+  const titleY = modernFace ? 39 : engravedFace ? 40 : 38;
+  const titleShadowY = titleY + 4;
+  const movingBulb = ['bulbs', 'carnival', 'neon', 'sunset'].includes(flavor);
   const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.38, 0.92] });
   const travel = Math.max(320, width);
   const x = sweep.interpolate({ inputRange: [0, 1], outputRange: [-90, travel + 90] });
@@ -114,7 +124,10 @@ export function ThemedMarquee({ gameId, name, height, theme }: { gameId: string;
 
   return (
     <View style={[styles.wrap, { height }]} onLayout={(event) => setWidth(event.nativeEvent.layout.width)} pointerEvents="none" accessibilityLabel={name}>
-      <LinearGradient colors={[theme.primary, theme.secondary, theme.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+      <LinearGradient
+        colors={modernFace ? ['#08121F', theme.primary, '#070914'] : engravedFace ? [theme.secondary, '#120D11', theme.primary] : [theme.primary, theme.secondary, theme.primary]}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill}
+      />
       <Animated.View style={[styles.decor, { opacity }]}>
         <Svg width="100%" height="100%" viewBox="0 0 300 60" preserveAspectRatio="none">
           {decor(flavor, theme.accent, theme.secondary)}
@@ -128,14 +141,14 @@ export function ThemedMarquee({ gameId, name, height, theme }: { gameId: string;
             <Stop offset="1" stopColor={theme.secondary} />
           </SvgLinearGradient>
         </Defs>
-        <Rect x="2" y="2" width="296" height="56" rx="6" fill="none" stroke={theme.accent} strokeWidth="1.5" strokeOpacity="0.9" />
-        <Rect x="6" y="6" width="288" height="48" rx="4" fill="none" stroke="rgba(0,0,0,0.52)" strokeWidth="2" />
-        <SvgText x="150" y="42" fontSize="29" fontWeight="900" fontFamily="Impact, Arial Black, sans-serif" textAnchor="middle" letterSpacing="1.4" textLength={titleLength} lengthAdjust="spacingAndGlyphs" fill="rgba(0,0,0,0.8)" stroke="rgba(0,0,0,0.82)" strokeWidth="5.5">{title}</SvgText>
-        <SvgText x="150" y="38" fontSize="29" fontWeight="900" fontFamily="Impact, Arial Black, sans-serif" textAnchor="middle" letterSpacing="1.4" textLength={titleLength} lengthAdjust="spacingAndGlyphs" fill={`url(#${id})`} stroke={theme.accent} strokeWidth="1.05">{title}</SvgText>
+        {modernFace ? <Rect x="2" y="2" width="296" height="56" rx="2" fill="none" stroke={theme.accent} strokeWidth="1.2" strokeOpacity="0.9" /> : <Rect x="2" y="2" width="296" height="56" rx="8" fill="none" stroke={theme.accent} strokeWidth="1.8" strokeOpacity="0.9" />}
+        {engravedFace ? <Path d="M8 53 L27 8 H273 L292 53" fill="none" stroke="rgba(0,0,0,0.58)" strokeWidth="2" /> : <Rect x="6" y="6" width="288" height="48" rx="4" fill="none" stroke="rgba(0,0,0,0.52)" strokeWidth="2" />}
+        {!modernFace ? <SvgText x="150" y={titleShadowY} fontSize={titleSize} fontWeight="900" fontFamily={titleFont} textAnchor="middle" letterSpacing="1.4" textLength={titleLength} lengthAdjust="spacingAndGlyphs" fill="rgba(0,0,0,0.8)" stroke="rgba(0,0,0,0.82)" strokeWidth="5.5">{title}</SvgText> : null}
+        <SvgText x="150" y={titleY} fontSize={titleSize} fontWeight="900" fontFamily={titleFont} textAnchor="middle" letterSpacing={modernFace ? '2.1' : '1.4'} textLength={titleLength} lengthAdjust="spacingAndGlyphs" fill={modernFace ? theme.accent : `url(#${id})`} stroke={modernFace ? 'rgba(255,255,255,0.78)' : theme.accent} strokeWidth={modernFace ? '0.55' : '1.05'}>{title}</SvgText>
       </Svg>
-      <Animated.View style={[styles.shine, { transform: [{ translateX: x }, { rotate: '18deg' }] }]}>
+      {movingBulb ? <Animated.View style={[styles.shine, { transform: [{ translateX: x }, { rotate: '18deg' }] }]}>
         <LinearGradient colors={['transparent', 'rgba(255,255,255,0.5)', 'transparent']} style={StyleSheet.absoluteFill} />
-      </Animated.View>
+      </Animated.View> : null}
     </View>
   );
 }

@@ -293,24 +293,25 @@ export function SlotConsole({
   };
 
   return (
-    <View style={[styles.console, (compact || dense) && styles.consoleCompact, compact && styles.consoleStack]}>
+    <View style={[styles.console, (compact || dense) && styles.consoleCompact, compact && styles.consoleStack, dense && styles.consoleDense]}>
       {/* Bet, with steppers. A stepper rather than five chips: the chips took a
           whole row and two of them wrapped onto a third line on a small phone. */}
-      <View style={styles.consoleBlock}>
+      <View style={[styles.consoleBlock, dense && styles.consoleBlockDense]}>
         <Txt variant="caption" color={colors.text.muted}>TOTAL BET</Txt>
-        <View style={styles.stepper}>
-          <StepButton label="−" onPress={() => step(-1)} disabled={spinning || index <= 0} />
+        <View style={[styles.stepper, dense && styles.stepperDense]}>
+          <StepButton label="−" onPress={() => step(-1)} compact={dense} disabled={spinning || index <= 0} />
           <Txt variant="money" color={colors.gold.light}>{format(bet, 'GC')}</Txt>
           <StepButton
             label="+"
             onPress={() => step(1)}
+            compact={dense}
             disabled={spinning || index >= options.length - 1}
           />
         </View>
       </View>
 
       {/* The win, in the middle, where every cabinet puts it. */}
-      <View style={[styles.consoleBlock, compact ? styles.consoleCentreStack : styles.consoleCentre]}>
+      <View style={[styles.consoleBlock, compact ? styles.consoleCentreStack : styles.consoleCentre, dense && styles.consoleBlockDense]}>
         <Txt variant="caption" color={colors.text.muted}>WIN</Txt>
         <Txt
           variant="money"
@@ -329,13 +330,13 @@ export function SlotConsole({
         also already the largest thing in the header two inches above, so the
         console was competing with itself to repeat something.
       */}
-      <View style={styles.consoleRight}>
+      <View style={[styles.consoleRight, dense && styles.consoleRightDense]}>
         <Pressable
           onPress={onToggleAuto}
           accessibilityRole="button"
           accessibilityState={{ selected: auto }}
           accessibilityLabel={auto ? 'Stop auto spin' : 'Start auto spin'}
-          style={[styles.autoButton, auto && styles.autoButtonOn]}
+          style={[styles.autoButton, dense && styles.autoButtonDense, auto && styles.autoButtonOn]}
         >
           <Txt variant="caption" color={auto ? '#1A1206' : colors.text.secondary}>
             AUTO
@@ -353,6 +354,7 @@ export function SlotConsole({
           style={({ pressed }) => [
             styles.spinRound,
             (compact || dense) && styles.spinRoundCompact,
+            dense && styles.spinRoundDense,
             pressed && styles.spinPressed,
             spinning && !auto && styles.spinBusy,
           ]}
@@ -372,10 +374,12 @@ function StepButton({
   label,
   onPress,
   disabled,
+  compact = false,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  compact?: boolean;
 }) {
   return (
     <Pressable
@@ -383,7 +387,7 @@ function StepButton({
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={label === '+' ? 'Increase bet' : 'Decrease bet'}
-      style={[styles.step, disabled && styles.stepDim]}
+      style={[styles.step, compact && styles.stepDense, disabled && styles.stepDim]}
     >
       <Txt variant="bodySmall" color={colors.text.primary}>{label}</Txt>
     </Pressable>
@@ -588,6 +592,11 @@ const styles = StyleSheet.create({
     borderColor: colors.gold.dark,
   },
   consoleCompact: { paddingVertical: spacing.xs },
+  // Portrait uses a dock, so this row must fit in the *visible* safe width —
+  // never rely on a horizontally clipped final control.  The small reduction
+  // keeps the individual targets roomy while preserving all four letters of
+  // SPIN at 320pt.
+  consoleDense: { gap: 4, paddingHorizontal: 5, justifyContent: 'space-between' },
   /*
    * Beside the machine, the console is a COLUMN.
    *
@@ -598,11 +607,14 @@ const styles = StyleSheet.create({
    */
   consoleStack: { flexDirection: 'column', alignItems: 'stretch', gap: spacing.xs },
   consoleBlock: { alignItems: 'center', gap: 2 },
+  consoleBlockDense: { flexShrink: 1, minWidth: 0 },
   consoleCentre: { flex: 1 },
   // `flex: 1` in a column would stretch the WIN block down the whole rail.
   consoleCentreStack: { flexGrow: 0 },
   consoleRight: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs },
+  consoleRightDense: { gap: 4, flexShrink: 0 },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  stepperDense: { gap: 3 },
   step: {
     width: 28,
     height: 28,
@@ -614,6 +626,7 @@ const styles = StyleSheet.create({
     borderColor: colors.surface.border,
   },
   stepDim: { opacity: 0.35 },
+  stepDense: { width: 24, height: 24, borderRadius: 12 },
   autoButton: {
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
@@ -624,6 +637,7 @@ const styles = StyleSheet.create({
     borderColor: colors.surface.border,
     backgroundColor: colors.surface.overlay,
   },
+  autoButtonDense: { paddingHorizontal: 7, minHeight: 42 },
   autoButtonOn: { backgroundColor: colors.gold.default, borderColor: colors.gold.light },
   spinRound: {
     width: 76,
@@ -636,6 +650,7 @@ const styles = StyleSheet.create({
     borderColor: colors.gold.light,
   },
   spinRoundCompact: { width: 60, height: 60, borderRadius: 30 },
+  spinRoundDense: { width: 56, height: 56, borderRadius: 28 },
   spinPressed: { transform: [{ scale: 0.94 }] },
   spinBusy: { opacity: 0.6 },
   spinLabel: { ...typography.bodySmall, fontWeight: '900', letterSpacing: 1, color: '#1A1206' },
