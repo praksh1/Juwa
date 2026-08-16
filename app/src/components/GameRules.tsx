@@ -384,10 +384,13 @@ export function PaytableButton({
   game,
   model,
   bet,
+  compact = false,
 }: {
   game: SlotGame;
   model: SlotModelInfo;
   bet: Minor;
+  /** An icon-only entry point for very narrow in-game headers. */
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -396,11 +399,11 @@ export function PaytableButton({
         onPress={() => setOpen(true)}
         accessibilityRole="button"
         accessibilityLabel="Paytable"
-        style={styles.infoButton}
+        style={[styles.infoButton, compact && styles.infoButtonCompact]}
         hitSlop={10}
       >
         <Txt variant="caption" color={colors.text.secondary}>
-          ⓘ Paytable
+          {compact ? 'ⓘ' : 'ⓘ Paytable'}
         </Txt>
       </Pressable>
 
@@ -504,4 +507,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignSelf: 'center',
   },
+  infoButtonCompact: { width: 28, paddingHorizontal: 0, alignItems: 'center' },
 });

@@ -904,6 +904,10 @@ export function SlotsScreen() {
   // as "compact". Keep its bet and spin rail beside the cabinet so a player
   // never has to reduce browser zoom just to reach the controls.
   const sideControls = compact || viewportWidth >= 760;
+  // Safari can report the narrow visual viewport while its controls are
+  // expanded. Keep every header action reachable instead of letting the sound
+  // switch or the last part of the cabinet extend off the right edge.
+  const narrowHeader = !sideControls && viewportWidth < 440;
   // These are individual cabinet fits, not a device-wide scale factor.  The
   // profile is used only on an upright phone; wide and landscape cabinets keep
   // their intentionally larger presentation.
@@ -963,10 +967,10 @@ export function SlotsScreen() {
    * grid stops being a grid.
    */
   const cellHeight = useMemo(() => {
-    const want = cabinet.rowAspect ?? DEFAULT_ROW_ASPECT;
+    const want = portraitCabinet?.rowAspect ?? cabinet.rowAspect ?? DEFAULT_ROW_ASPECT;
     const aspect = Math.min(MAX_ROW_ASPECT, Math.max(MIN_ROW_ASPECT, want));
     return Math.max(symbolSize, Math.round(symbolSize * aspect));
-  }, [symbolSize, cabinet.rowAspect]);
+  }, [symbolSize, cabinet.rowAspect, portraitCabinet?.rowAspect]);
 
   /**
    * What is left of the screen once the reels and the controls are paid for.
@@ -1558,7 +1562,7 @@ export function SlotsScreen() {
       {showRules && details && paytable ? (
         <RulesIntro game={details} model={paytable} bet={bet} onPlay={() => setShowRules(false)} />
       ) : null}
-      <View style={[styles.header, styles.headerDock]}>
+      <View style={[styles.header, styles.headerDock, narrowHeader && styles.headerDockNarrow]}>
         {/*
           The destination of every coin the machine pays out.
 
@@ -1583,7 +1587,7 @@ export function SlotsScreen() {
           Not a <Badge>: Badge renders dark text for a light chip, which on a
           dark chip is unreadable. This is a muted informational pill instead.
         */}
-        <View style={styles.rtpPill}>
+        <View style={[styles.rtpPill, narrowHeader && styles.rtpPillNarrow]}>
           <Txt variant="caption" color={colors.text.secondary}>
             RTP {((details?.rtp ?? 0.96) * 100).toFixed(2)}%
           </Txt>
@@ -1594,7 +1598,7 @@ export function SlotsScreen() {
           a player who does not should barely notice it is there.
         */}
         {details && paytable ? (
-          <PaytableButton game={details} model={paytable} bet={bet} />
+          <PaytableButton game={details} model={paytable} bet={bet} compact={narrowHeader} />
         ) : null}
         {/*
           Music and effects, right here in the header.
@@ -2161,6 +2165,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface.base,
     zIndex: 2,
   },
+  headerDockNarrow: { paddingHorizontal: spacing.sm },
   mobileConsoleDock: {
     position: 'absolute',
     // The last version was a comfortable-looking 16pt inset but spent the
@@ -2196,19 +2201,27 @@ const styles = StyleSheet.create({
      * margin cancels the screen's padding for this one card, because the reels
      * are the content and nothing else on the page competes with them.
      */
-    marginHorizontal: -spacing.lg,
+    // Leave a genuine safe edge on narrow Safari.  The old edge-to-edge card
+    // was two border widths wider than the viewport, which is why the final
+    // letter of SPIN, the last reel and lever labels were shaved off together.
+    marginHorizontal: -spacing.sm,
     padding: 2,
     overflow: 'hidden',
     borderColor: colors.gold.dark,
     borderWidth: 2,
     backgroundColor: '#0B1330',
   },
+  rtpPillNarrow: { paddingHorizontal: spacing.sm },
   /*
    * Dragon's Hoard is the first purpose-built cabinet.  The larger inset is
    * intentional: it gives the dragon, ruby metalwork and coin tray a visible
    * job around the reels instead of shrinking them into a decorative border.
    */
   dragonMachine: {
+    // Dragon's Hoard has purpose-built cabinet art whose pillars deliberately
+    // meet the screen edge; retain that presentation rather than narrowing it
+    // with the general safe-edge rule.
+    marginHorizontal: -spacing.lg,
     padding: 0,
     gap: 0,
     borderWidth: 0,
@@ -2280,7 +2293,7 @@ const styles = StyleSheet.create({
   machineRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   // A physical rail belongs inside its cabinet.  This prevents the final reel
   // from claiming the full card width and forcing the red knob off-screen.
-  leverMachineRow: { paddingRight: 4 },
+  leverMachineRow: { paddingRight: spacing.sm },
   // The reels must claim the full width of the bay. Without this they are
   // sized by their content and the machine collapses into the corner.
   reelsFill: { width: '100%' },
