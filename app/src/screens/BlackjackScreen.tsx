@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Image, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
@@ -309,6 +309,7 @@ export function BlackjackScreen() {
 
   return (
     <View style={styles.screen}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <View>
           <Txt variant="caption" color={colors.text.muted}>
@@ -481,6 +482,19 @@ export function BlackjackScreen() {
         <Fireworks width={tableSize.width} height={tableSize.height} controller={sparks} />
       </View>
 
+      </ScrollView>
+
+      {/* The betting rail is deliberately outside the scroll view. A player
+          should never lose their stake chips after a hand settles. */}
+      <View style={styles.tableDock}>
+      {settled ? (
+        <View style={styles.payoutReadout}>
+          <Txt variant="caption" color="#CBA75A">LAST HAND</Txt>
+          <Txt variant="bodySmall" color={(round?.settlement?.payout ?? 0) > 0 ? colors.feedback.winBright : colors.feedback.loss}>
+            {(round?.settlement?.payout ?? 0) > 0 ? `PAYS ${format(minor(round?.settlement?.payout ?? 0), 'GC')}` : 'NO WIN · DEAL AGAIN'}
+          </Txt>
+        </View>
+      ) : null}
       {/* Bet selection is only meaningful between hands. */}
       {!inHand ? (
         <View style={styles.betRow}>
@@ -530,6 +544,7 @@ export function BlackjackScreen() {
           style={styles.deal}
         />
       )}
+      </View>
     </View>
   );
 }
@@ -538,10 +553,8 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.surface.base,
-    padding: spacing.lg,
-    gap: spacing.lg,
-    justifyContent: 'center',
   },
+  content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: 190 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   rtpPill: {
     paddingHorizontal: spacing.md,
@@ -598,4 +611,6 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', justifyContent: 'center' },
   actionButton: { flexGrow: 1, minWidth: 100 },
   deal: { minHeight: 56 },
+  tableDock: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.md, gap: spacing.sm, backgroundColor: '#0B0C14', borderTopWidth: 1, borderTopColor: '#886522' },
+  payoutReadout: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.sm },
 });

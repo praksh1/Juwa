@@ -719,6 +719,24 @@ export function RouletteScreen() {
 
     </ScrollView>
 
+      {/* Once bets are down, the wheel owns the room. The felt remains behind
+          this glass stage rather than competing with the spin. */}
+      {spinning ? (
+        <View style={styles.spinStage} pointerEvents="none">
+          <LinearGradient colors={['rgba(3,4,11,0.96)', 'rgba(27,8,3,0.94)', 'rgba(3,4,11,0.98)']} style={StyleSheet.absoluteFill} />
+          <Image source={{ uri: '/art/tiles/juwa-roulette-eu.png' }} resizeMode="cover" style={styles.spinArtwork} />
+          <View style={styles.spinCrown}><Txt variant="caption" color="#FFE8A7">NO MORE BETS · BALL IN MOTION</Txt></View>
+          <RouletteWheel
+            size={292}
+            phase={wheelPhase}
+            target={wheelTarget}
+            landFrom={wheelPlan.from}
+            landDuration={wheelPlan.duration}
+          />
+          <Txt variant="h3" color="#FFE7A3">THE TABLE IS LIVE</Txt>
+        </View>
+      ) : null}
+
       {/*
         THE DOCK.
 
@@ -838,6 +856,9 @@ const styles = StyleSheet.create({
   wheelArtwork: { ...StyleSheet.absoluteFillObject, opacity: 0.32 },
   wheelShell: { overflow: 'hidden', borderRadius: 24, borderWidth: 2, borderColor: '#C99C35', padding: spacing.md, shadowColor: '#E7B33F', shadowOpacity: 0.38, shadowRadius: 22, shadowOffset: { width: 0, height: 8 } },
   wheelCrown: { alignSelf: 'center', paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.sm, borderWidth: 1, borderColor: 'rgba(255,224,143,0.68)', backgroundColor: 'rgba(12,5,2,0.72)' },
+  spinStage: { ...StyleSheet.absoluteFillObject, zIndex: 8, alignItems: 'center', justifyContent: 'center', gap: spacing.md, overflow: 'hidden' },
+  spinArtwork: { ...StyleSheet.absoluteFillObject, opacity: 0.24 },
+  spinCrown: { paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.sm, borderWidth: 1, borderColor: '#E1B555', backgroundColor: 'rgba(13,7,4,0.86)' },
   ball: {
     width: 56,
     height: 56,

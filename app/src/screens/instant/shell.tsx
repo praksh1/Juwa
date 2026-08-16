@@ -18,7 +18,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Image, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { format, minor, type Minor } from '@juwa/money';
 import { publishBalance } from '../../api/usePlayer';
@@ -259,32 +259,6 @@ export function InstantLayout({
         the screen at exactly the moment it is the only thing the player wants.
         Dimming them kept the cost and removed the use.
       */}
-      <View style={styles.chips} pointerEvents="auto">
-        {(stakeLocked ? [] : state.options).map((option) => {
-          const selected = option === state.bet;
-          return (
-            <Pressable
-              key={option}
-              onPress={() => {
-                unlock();
-                sounds.tap();
-                state.setBet(option);
-              }}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              style={[styles.chip, selected && { backgroundColor: game.accent }]}
-            >
-              <Txt
-                variant="bodySmall"
-                color={selected ? colors.surface.base : colors.text.secondary}
-              >
-                {format(option, 'GC')}
-              </Txt>
-            </Pressable>
-          );
-        })}
-      </View>
-
       {footer}
 
       {state.error ? (
@@ -311,7 +285,29 @@ export function InstantLayout({
         The scroll reserves the matching height, so nothing is permanently
         hidden behind it.
       */}
-      {action ? <View style={styles.dock}>{action}</View> : null}
+      {action ? <View style={styles.dock}>
+        {!stakeLocked ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dockChips}>
+          {state.options.map((option) => {
+            const selected = option === state.bet;
+            return (
+              <Pressable
+                key={option}
+                onPress={() => {
+                  unlock();
+                  sounds.tap();
+                  state.setBet(option);
+                }}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                style={[styles.dockChip, selected && { backgroundColor: game.accent, borderColor: lighten(game.accent) }]}
+              >
+                <Txt variant="caption" color={selected ? colors.surface.base : colors.text.secondary}>{format(option, 'GC')}</Txt>
+              </Pressable>
+            );
+          })}
+        </ScrollView> : null}
+        {action}
+      </View> : null}
     </View>
   );
 }
@@ -697,7 +693,7 @@ export function useSettlementAnnouncer(): (round: RoundResponse | null) => void 
 }
 
 /** The pinned button (58) plus the dock's own padding, top and bottom. */
-const DOCK_HEIGHT = 58 + 24;
+const DOCK_HEIGHT = 58 + 24 + 48;
 
 export const styles = StyleSheet.create({
   frame: { flex: 1 },
@@ -709,12 +705,14 @@ export const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
+    paddingTop: spacing.sm,
     paddingBottom: spacing.md,
     backgroundColor: colors.surface.raised,
     borderTopWidth: 1,
     borderTopColor: colors.surface.border,
   },
+  dockChips: { gap: spacing.sm, paddingBottom: spacing.sm, paddingHorizontal: 1 },
+  dockChip: { minHeight: 34, minWidth: 76, paddingHorizontal: spacing.md, borderRadius: 10, borderWidth: 1, borderColor: '#3A3446', backgroundColor: '#15131D', justifyContent: 'center', alignItems: 'center' },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   rtpPill: {
     paddingHorizontal: spacing.md,

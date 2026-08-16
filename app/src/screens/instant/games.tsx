@@ -163,8 +163,15 @@ export function CrashScreen() {
     >
       <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet}>
         <View style={local.crashDeck}>
-          <Txt variant="caption" color="#FFE6A0">FLIGHT DECK · LIVE TELEMETRY</Txt>
-          <View style={local.crashLights}>{[0, 1, 2, 3, 4].map((light) => <View key={light} style={[local.crashLight, { backgroundColor: light < 3 ? '#F8C95A' : '#7A2C11' }]} />)}</View>
+          <View>
+            <Txt variant="caption" color="#D6B76B">AUTO CASH OUT</Txt>
+            <Txt variant="bodySmall" color="#FFF0B4">{target.toFixed(2)}×</Txt>
+          </View>
+          <View style={local.crashStatus}>
+            <Txt variant="caption" color={running ? '#A6FFD0' : result ? (won ? '#A6FFD0' : '#FFAAA1') : '#FFE6A0'}>
+              {running ? 'ASCENDING' : result ? (won ? 'CASHED OUT' : 'FLIGHT LOST') : 'READY'}
+            </Txt>
+          </View>
         </View>
         <CrashCurve
           progress={Math.min(1, (shown - 1) / Math.max(0.6, target * 1.6 - 1))}
@@ -199,10 +206,12 @@ export function CrashScreen() {
               Climbing…
             </Txt>
           ) : result ? (
-            <Txt variant="bodySmall" color={colors.text.muted}>
-              {won
-                ? `Cashed out at ${target.toFixed(2)}× — ${format(minor(state.round!.settlement?.payout ?? 0), 'GC')}`
-                : `Crashed at ${result.crashPoint.toFixed(2)}× — you needed ${target.toFixed(2)}×`}
+            won ? <View style={local.winReadout}>
+              <Txt variant="caption" color="#B9FFD9">AUTO CASH OUT · {target.toFixed(2)}×</Txt>
+              <Txt variant="h2" color={colors.feedback.winBright}>{format(minor(state.round!.settlement?.payout ?? 0), 'GC')}</Txt>
+              <Txt variant="bodySmall" color={colors.text.secondary}>The flight reached {result.crashPoint.toFixed(2)}×</Txt>
+            </View> : <Txt variant="bodySmall" color={colors.text.muted}>
+              Crashed at {result.crashPoint.toFixed(2)}× — you needed {target.toFixed(2)}×
             </Txt>
           ) : (
             <Txt variant="bodySmall" color={colors.text.muted}>
@@ -455,11 +464,10 @@ export function LimboScreen() {
               Drawing…
             </Txt>
           ) : settled ? (
-            <Txt variant="bodySmall" color={colors.text.muted}>
-              {result!.won
-                ? `Beat ${target.toFixed(2)}× — ${format(minor(state.round!.settlement?.payout ?? 0), 'GC')}`
-                : `Short of ${target.toFixed(2)}×`}
-            </Txt>
+            result!.won ? <View style={local.winReadout}>
+              <Txt variant="caption" color="#A8FFF5">TARGET CLEARED · {target.toFixed(2)}×</Txt>
+              <Txt variant="h2" color={colors.feedback.winBright}>{format(minor(state.round!.settlement?.payout ?? 0), 'GC')}</Txt>
+            </View> : <Txt variant="bodySmall" color={colors.text.muted}>Short of {target.toFixed(2)}×</Txt>
           ) : (
             <Txt variant="bodySmall" color={colors.text.muted}>
               Win if the number drawn is at least your target.
@@ -642,11 +650,10 @@ export function DiceScreen() {
               Rolling…
             </Txt>
           ) : settled ? (
-            <Txt variant="bodySmall" color={colors.text.muted}>
-              {result!.won
-                ? `Rolled ${result!.roll.toFixed(2)} — ${format(minor(state.round!.settlement?.payout ?? 0), 'GC')}`
-                : `Rolled ${result!.roll.toFixed(2)} — no win`}
-            </Txt>
+            result!.won ? <View style={local.winReadout}>
+              <Txt variant="caption" color="#E8FFC4">WINNING ROLL · {result!.roll.toFixed(2)}</Txt>
+              <Txt variant="h2" color={colors.feedback.winBright}>{format(minor(state.round!.settlement?.payout ?? 0), 'GC')}</Txt>
+            </View> : <Txt variant="bodySmall" color={colors.text.muted}>Rolled {result!.roll.toFixed(2)} — no win</Txt>
           ) : (
             <Txt variant="bodySmall" color={colors.text.muted}>
               Rolls 0.00 to 99.99.
@@ -730,7 +737,9 @@ function DiceTumbler({ accent, rolling }: { accent: string; rolling: boolean }) 
       turn.setValue(0);
       return undefined;
     }
-    const spin = Animated.loop(Animated.timing(turn, { toValue: 1, duration: 520, easing: Easing.linear, useNativeDriver: true }));
+    // A slow, heavy tumble has anticipation. A 500ms spinner read as a loading
+    // icon; this deliberately gives the die the movie-style hang time.
+    const spin = Animated.loop(Animated.timing(turn, { toValue: 1, duration: 1280, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }));
     spin.start();
     return () => spin.stop();
   }, [rolling, reduced, turn]);
@@ -1454,6 +1463,7 @@ function MineTile({
 
 const local = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', justifyContent: 'center' },
+  winReadout: { alignItems: 'center', gap: 2, paddingVertical: 2 },
   targets: { flexDirection: 'row', gap: spacing.xs, flexWrap: 'wrap', justifyContent: 'center' },
   target: {
     minHeight: 44,
@@ -1546,9 +1556,8 @@ const local = StyleSheet.create({
   },
   dicePips: { width: 31, height: 31, flexDirection: 'row', flexWrap: 'wrap', gap: 4, justifyContent: 'center', alignItems: 'center' },
   dicePip: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#271709' },
-  crashDeck: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.sm },
-  crashLights: { flexDirection: 'row', gap: 4 },
-  crashLight: { width: 7, height: 7, borderRadius: 4, shadowColor: '#F8C95A', shadowOpacity: 0.9, shadowRadius: 5 },
+  crashDeck: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.sm, paddingBottom: 3, borderBottomWidth: 1, borderBottomColor: 'rgba(244,190,78,0.28)' },
+  crashStatus: { paddingHorizontal: spacing.sm, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(248,201,90,0.52)', backgroundColor: 'rgba(19,8,3,0.56)' },
   limboHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'center', paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(111,240,244,0.65)', backgroundColor: 'rgba(1,19,29,0.72)' },
   limboSeal: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#67E8F9' },
   limboPulse: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#5EEAD4', shadowColor: '#5EEAD4', shadowOpacity: 1, shadowRadius: 7 },
