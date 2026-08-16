@@ -87,6 +87,16 @@ export const ROULETTE_BED = '/audio/bed-classic-3.mp3';
  */
 export const INSTANT_BED = '/audio/bed-deep-2.mp3';
 
+/** Individual rooms for the instant games, not one shared background loop. */
+export const INSTANT_BEDS: Record<string, string> = {
+  'juwa-crash': '/audio/bed-deep-4.mp3',
+  'juwa-limbo': '/audio/bed-ice-3.mp3',
+  'juwa-dice': '/audio/bed-classic-4.mp3',
+  'juwa-plinko': '/audio/bed-neon-4.mp3',
+  'juwa-mines': '/audio/bed-deep-1.mp3',
+  'juwa-scratch': '/audio/bed-egypt-4.mp3',
+};
+
 /**
  * The blackjack table.
  *

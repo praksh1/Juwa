@@ -112,9 +112,9 @@ const STOPS = [
   `${A}/reel-stop-4.mp3`,
 ];
 const TAP = `${A}/ui-tap-2.mp3`;
-const TICK = `${A}/coin-tick-3.mp3`;
+const TICKS = [`${A}/coin-tick-1.mp3`, `${A}/coin-tick-2.mp3`, `${A}/coin-tick-3.mp3`, `${A}/coin-tick-4.mp3`];
 const SCATTER = `${A}/scatter-land-1.mp3`;
-const COIN_LOCK = `${A}/coin-lock-2.mp3`;
+const COIN_LOCKS = [`${A}/coin-lock-1.mp3`, `${A}/coin-lock-2.mp3`, `${A}/coin-lock-3.mp3`];
 const CASCADE = `${A}/cascade-1.mp3`;
 /*
  * `near-miss-4` is discarded: it decodes at a peak of 0.046, which is silence
@@ -180,10 +180,14 @@ function set(
     // Shared by every game — see the note on STOPS.
     stops: STOPS,
     tap: TAP,
-    tick: TICK,
+    // The payout counter is deliberately varied as well. It is the sound
+    // players hear while coins travel into the balance, so one identical
+    // synthetic "ching" across every cabinet made twenty-three wins feel like
+    // one machine.
+    tick: TICKS[(variant + win) % TICKS.length]!,
     scatter: SCATTER,
     nearMiss: NEAR_MISS,
-    coinLock: COIN_LOCK,
+    coinLock: COIN_LOCKS[(variant + big) % COIN_LOCKS.length]!,
     cascade: CASCADE,
     ...(lever === undefined ? {} : { lever: LEVER[lever % LEVER.length]! }),
   };
@@ -270,13 +274,18 @@ export const ROULETTE_SOUNDS = {
  * a win should sound like a win wherever the player is standing.
  */
 export const INSTANT_SOUNDS: SoundSet = {
-  win: WIN[2]!,
-  big: BIG[1]!,
-  mega: MEGA[2]!,
-  bonus: `${A}/bonus-trigger-2.mp3`,
-  coinLock: `${A}/coin-lock-2.mp3`,
-  tick: `${A}/coin-tick-2.mp3`,
-  tap: `${A}/ui-tap-1.mp3`,
+  win: WIN[2]!, big: BIG[1]!, mega: MEGA[2]!, bonus: `${A}/bonus-trigger-2.mp3`,
+  coinLock: `${A}/coin-lock-2.mp3`, tick: `${A}/coin-tick-2.mp3`, tap: `${A}/ui-tap-1.mp3`,
+};
+
+/** Each instant stage has its own recorded mechanical and reward identity. */
+export const INSTANT_SOUND_SETS: Record<string, SoundSet> = {
+  'juwa-crash': { win: WIN[4]!, big: BIG[3]!, mega: MEGA[0]!, bonus: `${A}/bonus-trigger-3.mp3`, coinLock: `${A}/coin-lock-3.mp3`, tick: `${A}/coin-tick-4.mp3`, tap: `${A}/ui-tap-3.mp3` },
+  'juwa-limbo': { win: WIN[0]!, big: BIG[2]!, mega: MEGA[3]!, bonus: `${A}/bonus-trigger-1.mp3`, coinLock: `${A}/coin-lock-1.mp3`, tick: `${A}/coin-tick-1.mp3`, tap: `${A}/ui-tap-2.mp3` },
+  'juwa-dice': { win: WIN[1]!, big: BIG[0]!, mega: MEGA[1]!, bonus: `${A}/bonus-trigger-1.mp3`, coinLock: `${A}/coin-lock-1.mp3`, tick: `${A}/coin-tick-3.mp3`, tap: `${A}/ui-tap-2.mp3` },
+  'juwa-plinko': { win: WIN[3]!, big: BIG[1]!, mega: MEGA[2]!, bonus: `${A}/bonus-trigger-2.mp3`, coinLock: `${A}/coin-lock-2.mp3`, tick: `${A}/coin-tick-2.mp3`, tap: `${A}/ui-tap-1.mp3` },
+  'juwa-mines': { win: WIN[2]!, big: BIG[3]!, mega: MEGA[0]!, bonus: `${A}/bonus-trigger-3.mp3`, coinLock: `${A}/coin-lock-3.mp3`, tick: `${A}/coin-tick-4.mp3`, tap: `${A}/ui-tap-3.mp3` },
+  'juwa-scratch': { win: WIN[4]!, big: BIG[2]!, mega: MEGA[3]!, bonus: `${A}/bonus-trigger-2.mp3`, coinLock: `${A}/coin-lock-1.mp3`, tick: `${A}/coin-tick-1.mp3`, tap: `${A}/ui-tap-1.mp3` },
 };
 
 /**
@@ -322,6 +331,7 @@ export const ALL_SOUND_FILES: string[] = [
     ...MEGA,
     ...Object.values(ROULETTE_SOUNDS),
     ...(Object.values(INSTANT_SOUNDS).filter((v) => typeof v === 'string') as string[]),
+    ...Object.values(INSTANT_SOUND_SETS).flatMap((set) => Object.values(set).filter((v): v is string => typeof v === 'string')),
     ...(Object.values(BLACKJACK_SOUNDS).filter((v) => typeof v === 'string') as string[]),
   ]),
 ];

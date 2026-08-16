@@ -27,10 +27,10 @@ import { colors, radius, spacing } from '@juwa/ui';
 import { Screen, Txt } from '../../components/primitives';
 import { SoundToggles } from '../../components/SoundToggles';
 import { HowToPlayButton } from '../../components/HowToPlay';
-import { INSTANT_BED, useAmbientBed } from '../../ambience';
+import { INSTANT_BED, INSTANT_BEDS, useAmbientBed } from '../../ambience';
 import { INSTANT_RULES } from './rules';
 import { sounds, unlock, useSoundSet } from '../../sound';
-import { INSTANT_SOUNDS } from '../../api/sound-sets';
+import { INSTANT_SOUNDS, INSTANT_SOUND_SETS } from '../../api/sound-sets';
 import { Fireworks, type FireworksHandle } from '../../components/Fireworks';
 import { usePrefersReducedMotion } from '../../motion';
 import { PlayApiError, createPlayApi, type PlayApi, type RoundResponse } from '../../api/client';
@@ -204,7 +204,7 @@ export function InstantLayout({
    * families, which is what a game with a rising multiplier needs: anything
    * with a tune fights the tension the number is building.
    */
-  useAmbientBed(INSTANT_BED);
+  useAmbientBed(INSTANT_BEDS[game.id] ?? INSTANT_BED);
 
   /*
    * Recorded wins, not the synthesised fallback.
@@ -215,8 +215,8 @@ export function InstantLayout({
    * INSTANT_SOUNDS.
    */
   useEffect(() => {
-    useSoundSet(INSTANT_SOUNDS);
-  }, []);
+    useSoundSet(INSTANT_SOUND_SETS[game.id] ?? INSTANT_SOUNDS);
+  }, [game.id]);
 
   return (
     <View style={styles.frame}>

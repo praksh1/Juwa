@@ -10,7 +10,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, PanResponder, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Easing, Image, PanResponder, Pressable, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, {
   Circle,
@@ -207,7 +207,7 @@ export function CrashScreen() {
           ) : result ? (
             won ? <View style={local.winReadout}>
               <Txt variant="caption" color="#B9FFD9">AUTO CASH OUT · {target.toFixed(2)}×</Txt>
-              <Txt variant="display" color={colors.feedback.winBright}>{format(minor(state.round!.settlement?.payout ?? 0), 'GC')}</Txt>
+              <Txt variant="display" color={colors.feedback.winBright}>WON {format(minor(state.round!.settlement?.payout ?? 0), 'GC')}</Txt>
               <Txt variant="bodySmall" color={colors.text.secondary}>The flight reached {result.crashPoint.toFixed(2)}×</Txt>
             </View> : <Txt variant="bodySmall" color={colors.text.muted}>
               Crashed at {result.crashPoint.toFixed(2)}× — you needed {target.toFixed(2)}×
@@ -435,7 +435,7 @@ export function LimboScreen() {
           ) : settled ? (
             result!.won ? <View style={local.winReadout}>
               <Txt variant="caption" color="#A8FFF5">TARGET CLEARED · {target.toFixed(2)}×</Txt>
-              <Txt variant="h2" color={colors.feedback.winBright}>{format(minor(state.round!.settlement?.payout ?? 0), 'GC')}</Txt>
+              <Txt variant="h2" color={colors.feedback.winBright}>WON {format(minor(state.round!.settlement?.payout ?? 0), 'GC')}</Txt>
             </View> : <Txt variant="bodySmall" color={colors.text.muted}>Short of {target.toFixed(2)}×</Txt>
           ) : (
             <Txt variant="bodySmall" color={colors.text.muted}>
@@ -577,7 +577,7 @@ export function DiceScreen() {
           is legible at a glance: this much of the line wins, that much loses,
           and the marker is where it came in.
         */}
-        <DiceTumbler accent={game.accent} rolling={rolling} />
+        <DiceVault accent={game.accent} rolling={rolling} value={result || rolling ? display : null} />
         <DiceTrack
           target={target}
           direction={direction}
@@ -621,7 +621,7 @@ export function DiceScreen() {
           ) : settled ? (
             result!.won ? <View style={local.winReadout}>
               <Txt variant="caption" color="#E8FFC4">WINNING ROLL · {result!.roll.toFixed(2)}</Txt>
-              <Txt variant="h2" color={colors.feedback.winBright}>{format(minor(state.round!.settlement?.payout ?? 0), 'GC')}</Txt>
+              <Txt variant="h2" color={colors.feedback.winBright}>WON {format(minor(state.round!.settlement?.payout ?? 0), 'GC')}</Txt>
             </View> : <Txt variant="bodySmall" color={colors.text.muted}>Rolled {result!.roll.toFixed(2)} — no win</Txt>
           ) : (
             <Txt variant="bodySmall" color={colors.text.muted}>
@@ -696,8 +696,8 @@ function DiceTrack({
   );
 }
 
-/** A small cut-glass die makes Dice read as a table game before a number lands. */
-function DiceTumbler({ accent, rolling }: { accent: string; rolling: boolean }) {
+/** A glass vault that brings the lobby tile's cut-crystal dice into the game. */
+function DiceVault({ accent, rolling, value }: { accent: string; rolling: boolean; value: number | null }) {
   const turn = useRef(new Animated.Value(0)).current;
   const reduced = usePrefersReducedMotion();
 
@@ -714,14 +714,20 @@ function DiceTumbler({ accent, rolling }: { accent: string; rolling: boolean }) 
   }, [rolling, reduced, turn]);
 
   const rotate = turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
-  return (
-    <Animated.View style={[local.diceTumbler, { borderColor: accent, transform: [{ rotate }] }]}>
-      <LinearGradient colors={['#F9F5D5', '#D5B35B', '#60410D']} style={StyleSheet.absoluteFill} />
-      <View style={local.dicePips} pointerEvents="none">
-        {[0, 1, 2, 3, 4].map((pip) => <View key={pip} style={local.dicePip} />)}
-      </View>
+  return <View style={local.diceVault}>
+    <Image source={{ uri: '/art/tiles/juwa-dice.png' }} resizeMode="cover" style={StyleSheet.absoluteFill} />
+    <LinearGradient colors={['rgba(1,13,2,0.18)', 'rgba(1,8,2,0.54)']} style={StyleSheet.absoluteFill} />
+    <View style={local.diceVaultLabel}><Txt variant="caption" color="#E8FFC4">CRYSTAL ROLL CHAMBER</Txt></View>
+    <Animated.View style={[local.diceCrystal, local.diceCrystalRear, { borderColor: accent, transform: [{ rotate: rotate }, { rotateX: '16deg' }] }]}>
+      <LinearGradient colors={['rgba(210,255,137,0.92)', 'rgba(16,111,44,0.78)', 'rgba(2,27,11,0.94)']} style={StyleSheet.absoluteFill} />
+      <View style={local.dicePips} pointerEvents="none">{[0, 1, 2, 3].map((pip) => <View key={pip} style={local.dicePip} />)}</View>
     </Animated.View>
-  );
+    <Animated.View style={[local.diceCrystal, { borderColor: '#E8FFC4', transform: [{ rotate: rotate }, { rotateY: '18deg' }] }]}>
+      <LinearGradient colors={['#F4FFD7', '#42C76B', '#073E1A']} style={StyleSheet.absoluteFill} />
+      <View style={local.dicePips} pointerEvents="none">{[0, 1, 2, 3, 4].map((pip) => <View key={pip} style={local.dicePip} />)}</View>
+    </Animated.View>
+    <View style={local.diceRollReadout}><Txt variant="h2" color="#F4FFD7">{value === null ? 'READY' : value.toFixed(2)}</Txt><Txt variant="caption" color="#C3F78E">ROLL INDEX</Txt></View>
+  </View>;
 }
 
 // ------------------------------------------------------------------ plinko
@@ -786,7 +792,7 @@ export function PlinkoScreen() {
           <Txt variant="caption" color="#FFE4FF">LUMEN PEG ARRAY</Txt>
           <Txt variant="caption" color="#F4A9FF">PATH RECORDER</Txt>
         </View>
-        <PlinkoBoard
+        <PlinkoVault
           rows={rows}
           path={result?.path}
           accent={game.accent}
@@ -863,7 +869,7 @@ export function PlinkoScreen() {
                 variant="h2"
                 color={result!.multiplier >= 1 ? colors.feedback.winBright : colors.text.muted}
               >
-                {result!.multiplier}× · {format(minor(state.round!.settlement?.payout ?? 0), 'GC')}
+                WON {format(minor(state.round!.settlement?.payout ?? 0), 'GC')} · {result!.multiplier}×
               </Txt>
             )}
           </View>
@@ -923,14 +929,15 @@ function useDrop() {
 }
 
 /**
- * The pegs, and the path the ball actually took.
+ * The lobby's glass peg chamber is the actual drop board. The ball follows the
+ * server-returned path over that cabinet art; it is not a generic dot pyramid.
  *
  * The path is drawn from the server's own left/right list rather than
  * simulated, so what the player watches is the round that was settled — which
  * is the whole reason the engine returns each bounce rather than just the
  * bucket.
  */
-function PlinkoBoard({
+function PlinkoVault({
   rows,
   path,
   accent,
@@ -943,62 +950,29 @@ function PlinkoBoard({
   step: number;
 }) {
   const width = 300;
-  const height = rows * PEG_PITCH + 20;
-  const gap = width / (rows + 2);
-
-  const pegs: { x: number; y: number; row: number }[] = [];
-  for (let r = 0; r < rows; r++) {
-    for (let i = 0; i <= r; i++) {
-      pegs.push({ x: width / 2 + (i - r / 2) * gap, y: 12 + r * PEG_PITCH, row: r });
-    }
-  }
-
-  // The trail, truncated to where the ball has actually got to.
+  const height = 218;
+  const gap = 16;
+  // The path is truncated to the bounces the player has actually seen.
   const shown = path ? path.slice(0, Math.max(0, step)) : [];
-  let trail = '';
-  let ball: { x: number; y: number } | null = null;
+  let x = width / 2;
   if (path && step > 0) {
-    let x = width / 2;
-    trail = `M ${x} 4`;
     for (let r = 0; r < shown.length; r++) {
       x += (shown[r] === 'R' ? 0.5 : -0.5) * gap;
-      trail += ` L ${x} ${12 + r * PEG_PITCH}`;
     }
-    ball = { x, y: 12 + (shown.length - 1) * PEG_PITCH };
   }
+  const y = 28 + Math.min(rows, shown.length) * 12;
 
-  return (
-    <Svg width={width} height={height}>
-      <Defs>
-        <SvgLinearGradient id="plinko-trail" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={accent} stopOpacity="0.15" />
-          <Stop offset="1" stopColor={accent} stopOpacity="1" />
-        </SvgLinearGradient>
-      </Defs>
+  return <View style={[local.plinkoVault, { height }]}>
+    <Image source={{ uri: '/art/tiles/juwa-plinko.png' }} resizeMode="cover" style={StyleSheet.absoluteFill} />
+    <LinearGradient colors={['rgba(19,2,26,0.08)', 'rgba(12,0,20,0.38)']} style={StyleSheet.absoluteFill} />
+    <View style={local.plinkoGlass} pointerEvents="none" />
+    {path && step > 0 ? <><View style={[local.plinkoOrbGlow, { left: x - 17, top: y - 17, backgroundColor: accent }]} /><View style={[local.plinkoOrb, { left: x - 7, top: y - 7 }]} /></> : null}
+    <Txt variant="caption" color="#FFE4FF" style={local.plinkoVaultLabel}>{droppingLabel(step, rows)}</Txt>
+  </View>;
+}
 
-      {pegs.map((peg, i) => (
-        <Circle
-          key={i}
-          cx={peg.x}
-          cy={peg.y}
-          // The row the ball is passing through lights up, so the eye has
-          // somewhere to be during the fall rather than hunting for the ball.
-          r={ball && peg.row === shown.length - 1 ? 2.6 : 1.8}
-          fill={ball && peg.row === shown.length - 1 ? '#FFF5C2' : '#C99A37'}
-          opacity={ball && peg.row === shown.length - 1 ? 1 : 0.78}
-        />
-      ))}
-      {trail ? (
-        <Path d={trail} stroke="url(#plinko-trail)" strokeWidth={2} fill="none" strokeLinecap="round" />
-      ) : null}
-      {ball ? (
-        <>
-          <Circle cx={ball.x} cy={ball.y} r={7} fill={accent} opacity={0.28} />
-          <Circle cx={ball.x} cy={ball.y} r={4} fill="#FFFFFF" />
-        </>
-      ) : null}
-    </Svg>
-  );
+function droppingLabel(step: number, rows: number): string {
+  return step > 0 && step < rows ? `BOUNCE ${step} OF ${rows}` : step >= rows ? 'PATH LOCKED' : 'READY TO DROP';
 }
 
 // ------------------------------------------------------------------- mines
@@ -1096,7 +1070,10 @@ export function MinesScreen() {
           <Txt variant="caption" color="#C6F7FF">DEEP VAULT · CLEAR THE GRID</Txt>
           <Txt variant="caption" color="#71DFFF">{open ? 'ARMED' : 'STANDBY'}</Txt>
         </View>
-        <View style={local.grid}>
+        <View style={local.mineVault}>
+          <Image source={{ uri: '/art/tiles/juwa-mines.png' }} resizeMode="cover" style={StyleSheet.absoluteFill} />
+          <LinearGradient colors={['rgba(1,10,19,0.12)', 'rgba(1,8,17,0.46)']} style={StyleSheet.absoluteFill} />
+          <View style={local.grid}>
           {Array.from({ length: MINES_TILES }, (_, tile) => (
             <MineTile
               key={tile}
@@ -1107,6 +1084,7 @@ export function MinesScreen() {
               onPress={() => state.act({ type: 'reveal', tile })}
             />
           ))}
+          </View>
         </View>
 
         {open ? (
@@ -1152,7 +1130,7 @@ export function MinesScreen() {
             >
               {board?.bust
                 ? 'Hit a mine'
-                : format(minor(state.round!.settlement?.payout ?? 0), 'GC')}
+                : `WON ${format(minor(state.round!.settlement?.payout ?? 0), 'GC')}`}
             </Txt>
           </View>
         ) : null}
@@ -1208,7 +1186,7 @@ export function GoldenScratchScreen() {
             <Txt variant="bodySmall" color="#FFE8A6">Match all 3 prize windows to win. Drag across the gold foil.</Txt>
           ) : (
             <Txt variant="h2" color={ticket.multiplier > 0 ? colors.feedback.winBright : colors.feedback.error}>
-              {ticket.multiplier > 0 ? `${ticket.multiplier}× · ${format(minor(state.round!.settlement?.payout ?? 0), 'GC')}` : 'No prize this card'}
+              {ticket.multiplier > 0 ? `WON ${format(minor(state.round!.settlement?.payout ?? 0), 'GC')} · ${ticket.multiplier}×` : 'No prize this card'}
             </Txt>
           )}
         </View>
@@ -1270,6 +1248,7 @@ function ScratchCard({
         onMoveShouldSetPanResponderCapture: () => !!ticket && !revealed,
         onPanResponderGrant: () => {
           lastScrubDistance.current = 0;
+          scratchNext();
         },
         onPanResponderMove: (_event, gesture) => {
           const distance = Math.abs(gesture.dx) + Math.abs(gesture.dy);
@@ -1297,6 +1276,7 @@ function ScratchCard({
       {...scratchPan.panHandlers}
       accessibilityRole="button"
       accessibilityLabel={revealed ? 'Prize revealed' : `Scratch gold foil, ${Math.max(0, 6 - scratched)} rubs remaining`}
+      onPressIn={scratchNext}
     >
       <LinearGradient colors={['#FFF4BE', '#C98B16', '#4A1607']} style={StyleSheet.absoluteFill} />
       <View style={local.scratchInner}>
@@ -1420,6 +1400,7 @@ function MineTile({
         <View style={local.tileGloss} pointerEvents="none" />
         {status === 'mine' ? <>
           <Animated.View pointerEvents="none" style={[local.mineBlast, { opacity: blast, transform: [{ scale: blast.interpolate({ inputRange: [0, 1], outputRange: [0.25, 2.5] }) }] }]} />
+          <Animated.View pointerEvents="none" style={[local.mineShockwave, { opacity: blast.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0.92, 0] }), transform: [{ scale: blast.interpolate({ inputRange: [0, 1], outputRange: [0.3, 4.2] }) }] }]} />
           <View pointerEvents="none" style={local.mineCore} />
         </> : null}
         <Txt variant="bodySmall" color={colors.surface.base}>
@@ -1468,16 +1449,17 @@ const local = StyleSheet.create({
   bucketLanded: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#FFF6D0', shadowColor: '#FFF6D0', shadowOpacity: 1, shadowRadius: 6 },
   payoutLegend: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing.sm },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, width: 5 * 44, justifyContent: 'center' },
+  mineVault: { width: '100%', minHeight: 250, borderRadius: radius.lg, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(125,211,252,0.52)', shadowColor: '#38BDF8', shadowOpacity: 0.45, shadowRadius: 18, shadowOffset: { width: 0, height: 6 } },
   tile: {
     // 40, not 48: five rows of tiles is the tallest single element in these
     // games, and every point a row buys back five overall — which is what
     // brings the Bet button back onto a 700-point screen.
     width: 40,
     height: 40,
-    borderRadius: radius.sm,
+    borderRadius: 9,
     backgroundColor: '#081522',
-    borderWidth: 1,
-    borderColor: '#497184',
+    borderWidth: 2,
+    borderColor: '#6ED7FF',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -1491,7 +1473,8 @@ const local = StyleSheet.create({
     height: '48%',
     backgroundColor: 'rgba(255,255,255,0.09)',
   },
-  mineBlast: { position: 'absolute', width: 22, height: 22, borderRadius: 11, backgroundColor: '#FFEF88', shadowColor: '#FF4D21', shadowOpacity: 1, shadowRadius: 16 },
+  mineBlast: { position: 'absolute', width: 28, height: 28, borderRadius: 14, backgroundColor: '#FFEF88', shadowColor: '#FF4D21', shadowOpacity: 1, shadowRadius: 20 },
+  mineShockwave: { position: 'absolute', width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: '#FFB15B', shadowColor: '#FF4D21', shadowOpacity: 0.9, shadowRadius: 18 },
   mineCore: { position: 'absolute', width: 10, height: 10, borderRadius: 5, backgroundColor: '#FFEF88', shadowColor: '#FF4D21', shadowOpacity: 1, shadowRadius: 10 },
   /** The drawn number in Limbo, given fixed height so the panel cannot jump. */
   limboFace: {
@@ -1517,17 +1500,13 @@ const local = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.15)',
     transform: [{ rotate: '-20deg' }],
   },
-  diceTumbler: {
-    width: 54,
-    height: 54,
-    borderRadius: 14,
-    borderWidth: 2,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  diceVault: { width: '100%', height: 172, borderRadius: radius.lg, borderWidth: 1, borderColor: 'rgba(190,255,120,0.5)', overflow: 'hidden', alignItems: 'center', justifyContent: 'center', shadowColor: '#76EF42', shadowOpacity: 0.45, shadowRadius: 17, shadowOffset: { width: 0, height: 6 } },
+  diceVaultLabel: { position: 'absolute', top: 8, alignSelf: 'center', paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(232,255,196,0.6)', backgroundColor: 'rgba(3,16,4,0.68)' },
+  diceCrystal: { width: 72, height: 72, borderRadius: 18, borderWidth: 2, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', shadowColor: '#C8FF8F', shadowOpacity: 0.62, shadowRadius: 16, shadowOffset: { width: 0, height: 7 } },
+  diceCrystalRear: { position: 'absolute', left: 55, top: 66, opacity: 0.8, transform: [{ rotate: '-18deg' }] },
   dicePips: { width: 31, height: 31, flexDirection: 'row', flexWrap: 'wrap', gap: 4, justifyContent: 'center', alignItems: 'center' },
   dicePip: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#271709' },
+  diceRollReadout: { position: 'absolute', right: spacing.md, bottom: spacing.sm, alignItems: 'flex-end', paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.sm, borderWidth: 1, borderColor: 'rgba(226,255,177,0.62)', backgroundColor: 'rgba(2,17,5,0.72)' },
   crashDeck: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.sm, paddingBottom: 3, borderBottomWidth: 1, borderBottomColor: 'rgba(244,190,78,0.28)' },
   crashStatus: { paddingHorizontal: spacing.sm, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(248,201,90,0.52)', backgroundColor: 'rgba(19,8,3,0.56)' },
   limboHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'center', paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(111,240,244,0.65)', backgroundColor: 'rgba(1,19,29,0.72)' },
@@ -1535,6 +1514,11 @@ const local = StyleSheet.create({
   limboPulse: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#5EEAD4', shadowColor: '#5EEAD4', shadowOpacity: 1, shadowRadius: 7 },
   diceHeader: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: 'rgba(215,249,157,0.3)', paddingBottom: 5 },
   plinkoHeader: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: 'rgba(245,183,255,0.34)', paddingBottom: 5 },
+  plinkoVault: { width: 300, alignSelf: 'center', overflow: 'hidden', borderRadius: radius.lg, borderWidth: 1, borderColor: 'rgba(245,183,255,0.64)', shadowColor: '#E879F9', shadowOpacity: 0.5, shadowRadius: 18, shadowOffset: { width: 0, height: 6 } },
+  plinkoGlass: { ...StyleSheet.absoluteFillObject, borderWidth: 1, borderColor: 'rgba(255,230,255,0.28)', borderRadius: radius.lg },
+  plinkoOrbGlow: { position: 'absolute', width: 34, height: 34, borderRadius: 17, opacity: 0.42, shadowColor: '#FFFFFF', shadowOpacity: 0.92, shadowRadius: 13 },
+  plinkoOrb: { position: 'absolute', width: 14, height: 14, borderRadius: 7, backgroundColor: '#FFF5FF', borderWidth: 2, borderColor: '#F7A2FF', shadowColor: '#FFFFFF', shadowOpacity: 1, shadowRadius: 8 },
+  plinkoVaultLabel: { position: 'absolute', top: 8, left: 10, paddingHorizontal: 7, paddingVertical: 3, borderRadius: radius.sm, backgroundColor: 'rgba(24,4,32,0.72)' },
   minesHeader: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xs },
   minesIndicator: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#79E7FF', shadowColor: '#79E7FF', shadowOpacity: 1, shadowRadius: 8 },
   scratchCard: {

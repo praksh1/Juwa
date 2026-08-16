@@ -940,10 +940,25 @@ export const sounds = {
 
   /** Coins landing. Deliberately metallic and slightly detuned. */
   coins(count = 5): void {
+    /*
+     * The coin animation is shared by the cabinets, but its voice is not.
+     * `tick` belongs to the installed machine's sound set, so a dragon hoard
+     * can chime differently from a neon game while the same coins visibly fly
+     * to the balance. The synth below remains the no-download fallback.
+     */
+    const tick = currentSet.tick;
     for (let i = 0; i < count; i++) {
       const at = i * 0.055 + Math.random() * 0.02;
-      tone(1400 + Math.random() * 700, { type: 'square', at, duration: 0.05, gain: 0.1 });
-      noise({ at, duration: 0.03, gain: 0.07, frequency: 5000, q: 2 });
+      if (tick) {
+        setTimeout(() => {
+          if (playSample(tick, { gain: 0.22, rate: 0.86 + Math.random() * 0.22 })) return;
+          tone(1400 + Math.random() * 700, { type: 'square', duration: 0.05, gain: 0.1 });
+          noise({ duration: 0.03, gain: 0.07, frequency: 5000, q: 2 });
+        }, at * 1000);
+      } else {
+        tone(1400 + Math.random() * 700, { type: 'square', at, duration: 0.05, gain: 0.1 });
+        noise({ at, duration: 0.03, gain: 0.07, frequency: 5000, q: 2 });
+      }
     }
   },
 
