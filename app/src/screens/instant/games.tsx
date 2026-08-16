@@ -16,6 +16,7 @@ import Svg, {
   Circle,
   Defs,
   LinearGradient as SvgLinearGradient,
+  Mask,
   Path,
   Rect,
   Stop,
@@ -570,16 +571,11 @@ export function DiceScreen() {
           <Txt variant="caption" color="#EEFFC3">CUT-GLASS DICE VAULT</Txt>
           <Txt variant="caption" color="#B7D95A">RISK INSTRUMENT</Txt>
         </View>
-        {/*
-          The track — the single most useful thing that was missing.
-
-          UNDER 25 and OVER 90 are abstractions until you can see the winning
-          band and where the roll landed relative to it. With the bar, the bet
-          is legible at a glance: this much of the line wins, that much loses,
-          and the marker is where it came in.
-        */}
+        {/* The risk is now a dimensional dial: the active arc says exactly
+            which part of the 0–100 space wins without reverting to an old
+            spreadsheet-like progress bar. */}
         <DiceVault accent={game.accent} rolling={rolling} value={result || rolling ? display : null} />
-        <DiceTrack
+        <DiceDial
           target={target}
           direction={direction}
           accent={game.accent}
@@ -636,14 +632,13 @@ export function DiceScreen() {
 }
 
 /**
- * The line, the winning band, and where the roll landed.
+ * The target instrument.
  *
- * The band is drawn in the accent and the losing side is left dark, so the
- * shape of the bet is the shape of the picture: choosing OVER 90 visibly
- * leaves you a sliver, which is the point that the payout figure alone does
- * not make.
+ * A physical game needs a physical-looking control.  This deliberately uses
+ * one thick lit arc and an exact moving needle instead of the former flat
+ * horizontal progress bar, while still making the win region auditable.
  */
-function DiceTrack({
+function DiceDial({
   target,
   direction,
   accent,
@@ -656,44 +651,50 @@ function DiceTrack({
   roll: number | null;
   won: boolean | null;
 }) {
-  const W = 264;
-  const H = 34;
-  const x = (value: number) => (value / 100) * W;
-  const bandX = direction === 'under' ? 0 : x(target);
-  const bandW = direction === 'under' ? x(target) : W - x(target);
+  const size = 168;
+  const c = size / 2;
+  const r = 59;
+  const point = (value: number, radius = r) => {
+    const degrees = 135 + (value / 100) * 270;
+    const angle = (degrees * Math.PI) / 180;
+    return { x: c + Math.cos(angle) * radius, y: c + Math.sin(angle) * radius };
+  };
+  const arc = (from: number, to: number) => {
+    const start = point(from);
+    const end = point(to);
+    const large = to - from > 50 ? 1 : 0;
+    return `M${start.x},${start.y} A${r},${r} 0 ${large} 1 ${end.x},${end.y}`;
+  };
+  const winningFrom = direction === 'under' ? 0 : target;
+  const winningTo = direction === 'under' ? target : 100;
+  const targetPoint = point(target);
+  const rollPoint = roll === null ? null : point(roll, r - 10);
 
   return (
-    <Svg width={W} height={H + 18}>
+    <View style={local.diceDialShell}>
+    <Svg width={size} height={size}>
       <Defs>
-        <SvgLinearGradient id="dice-band" x1="0" y1="0" x2="0" y2="1">
+        <SvgLinearGradient id="dice-band" x1="0" y1="0" x2="1" y2="1">
           <Stop offset="0" stopColor={accent} stopOpacity="0.85" />
-          <Stop offset="1" stopColor={accent} stopOpacity="0.42" />
+          <Stop offset="1" stopColor="#ECFCCB" stopOpacity="0.98" />
         </SvgLinearGradient>
       </Defs>
-
-      <Rect x={0} y={0} width={W} height={H} rx={8} fill="rgba(255,255,255,0.06)" />
-      <Rect x={bandX} y={0} width={bandW} height={H} rx={8} fill="url(#dice-band)" />
-      {/* The line itself, so the boundary is exact rather than implied by the
-          edge of a rounded rectangle. */}
-      <Path d={`M${x(target)},0 L${x(target)},${H}`} stroke="#FFFFFF" strokeWidth={1.5} />
-
-      {roll !== null ? (
-        <>
-          <Path
-            d={`M${x(roll)},${H + 2} L${x(roll) - 5},${H + 14} L${x(roll) + 5},${H + 14} Z`}
-            fill={won === null ? '#FFFFFF' : won ? colors.feedback.winBright : colors.feedback.error}
-          />
-          <Circle
-            cx={x(roll)}
-            cy={H / 2}
-            r={5}
-            fill={won === null ? '#FFFFFF' : won ? colors.feedback.winBright : colors.feedback.error}
-            stroke="#05091A"
-            strokeWidth={1.5}
-          />
-        </>
-      ) : null}
+      <Circle cx={c} cy={c} r={r} fill="rgba(2,13,8,0.55)" stroke="rgba(221,255,165,0.13)" strokeWidth={18} />
+      <Path d={arc(0, 100)} fill="none" stroke="rgba(8,22,12,0.86)" strokeWidth={12} strokeLinecap="round" />
+      <Path d={arc(winningFrom, winningTo)} fill="none" stroke="url(#dice-band)" strokeWidth={12} strokeLinecap="round" />
+      <Circle cx={c} cy={c} r={40} fill="rgba(4,23,10,0.88)" stroke="rgba(224,255,185,0.3)" strokeWidth={1} />
+      <Circle cx={targetPoint.x} cy={targetPoint.y} r={5} fill="#FFFBD2" stroke={accent} strokeWidth={2} />
+      {rollPoint ? <>
+        <Path d={`M${c},${c} L${rollPoint.x},${rollPoint.y}`} stroke={won === null ? '#FFFFFF' : won ? colors.feedback.winBright : colors.feedback.error} strokeWidth={3} strokeLinecap="round" />
+        <Circle cx={rollPoint.x} cy={rollPoint.y} r={5} fill={won === null ? '#FFFFFF' : won ? colors.feedback.winBright : colors.feedback.error} stroke="#07140A" strokeWidth={2} />
+      </> : null}
     </Svg>
+    <View pointerEvents="none" style={local.diceDialReadout}>
+      <Txt variant="caption" color="#D8F7B6">{direction.toUpperCase()}</Txt>
+      <Txt variant="h2" color="#F3FFE2">{target}</Txt>
+      <Txt variant="caption" color="#BBD19F">TARGET</Txt>
+    </View>
+    </View>
   );
 }
 
@@ -1001,7 +1002,7 @@ export function MinesScreen() {
   const revealCount = board?.revealed.length ?? 0;
   const lastReveal = useRef(0);
   useEffect(() => {
-    if (revealCount > lastReveal.current) sounds.coinLock();
+    if (revealCount > lastReveal.current) sounds.mineSafe();
     lastReveal.current = revealCount;
   }, [revealCount]);
 
@@ -1010,7 +1011,7 @@ export function MinesScreen() {
   useEffect(() => {
     if (bust && !bustedOnce.current) {
       bustedOnce.current = true;
-      sounds.error();
+      sounds.mineBlast();
     }
     if (!bust) bustedOnce.current = false;
   }, [bust]);
@@ -1046,9 +1047,12 @@ export function MinesScreen() {
           <Txt variant="caption" color="#71DFFF">{open ? 'ARMED' : 'STANDBY'}</Txt>
         </View>
         <View style={local.mineVault}>
-          <Image source={{ uri: '/art/tiles/juwa-mines.png' }} resizeMode="cover" style={StyleSheet.absoluteFill} />
-          <LinearGradient colors={['rgba(1,10,19,0.12)', 'rgba(1,8,17,0.46)']} style={StyleSheet.absoluteFill} />
-          <View style={local.grid}>
+          <Image source={{ uri: '/art/tiles/juwa-mines.png' }} resizeMode="contain" style={StyleSheet.absoluteFill} />
+          {/* The tile is not wallpaper: its illustrated twenty-five-cell vault
+              is the actual playfield.  The transparent hit faces sit on that
+              machinery and light up only when the server opens a cell. */}
+          <LinearGradient colors={['rgba(1,10,19,0.02)', 'rgba(1,8,17,0.18)']} style={StyleSheet.absoluteFill} />
+          <View style={local.mineBoard}>
           {Array.from({ length: MINES_TILES }, (_, tile) => (
             <MineTile
               key={tile}
@@ -1181,37 +1185,51 @@ function ScratchCard({
   revealed: boolean;
   onReveal: () => void;
 }) {
-  // This is deliberately stroke based instead of a sequence of taps. Safari
-  // synthesises a click late, which made the former ticket feel like a button
-  // that happened to be labelled "scratch". Here finger travel progressively
-  // tears away visible foil strips; a short press still starts the reveal for
-  // keyboard and mouse users.
+  // A scratch card is a physical surface. Keep every real finger point, then
+  // punch those circles out of a gold SVG mask. The underlying prizes therefore
+  // appear exactly where the finger travelled — not in pre-counted strips.
   const [scratched, setScratched] = useState(0);
+  const [points, setPoints] = useState<{ id: number; x: number; y: number }[]>([]);
+  const [dust, setDust] = useState<{ id: number; x: number; y: number }[]>([]);
   const announced = useRef(false);
-  const lastScrubDistance = useRef(0);
-  const lastScratchAt = useRef(0);
+  const marks = useRef(new Set<number>());
+  const previous = useRef<{ x: number; y: number } | null>(null);
+  const serial = useRef(0);
 
   useEffect(() => {
     setScratched(0);
+    setPoints([]);
+    setDust([]);
     announced.current = false;
-    lastScrubDistance.current = 0;
+    marks.current.clear();
+    previous.current = null;
   }, [ticketId]);
 
   useEffect(() => {
-    if (scratched < 6 || announced.current) return;
+    // Five zones plus a real sweep across the foil prevent a single tap from
+    // opening a card while keeping the last few strokes satisfying rather than
+    // making the player scrub every empty pixel.
+    if (scratched < 5 || points.length < 12 || announced.current) return;
     announced.current = true;
     onReveal();
-  }, [scratched, onReveal]);
+  }, [scratched, points.length, onReveal]);
 
-  const scratchNext = () => {
+  const scratchAt = (x: number, y: number) => {
     if (!ticket || revealed) return;
-    const now = Date.now();
-    // Pressable and PanResponder both receive a touch-down on web. Treat that
-    // as one scrape, not two, while still accepting successive motion strokes.
-    if (now - lastScratchAt.current < 70) return;
-    lastScratchAt.current = now;
-    sounds.coinLock();
-    setScratched((current) => Math.min(6, current + 1));
+    // The prize windows occupy this in-card foil plate; let gestures outside
+    // it pass without creating invisible progress.
+    if (x < 12 || x > 270 || y < 24 || y > 109) return;
+    const last = previous.current;
+    if (last && Math.hypot(last.x - x, last.y - y) < 9) return;
+    previous.current = { x, y };
+    const point = { id: ++serial.current, x, y };
+    setPoints((current) => [...current.slice(-150), point]);
+    setDust((current) => [...current.slice(-22), point]);
+    const column = Math.max(0, Math.min(2, Math.floor((x - 12) / 86)));
+    const row = y < 67 ? 0 : 1;
+    marks.current.add(row * 3 + column);
+    setScratched(marks.current.size);
+    sounds.scratch();
   };
 
   const scratchPan = useMemo(
@@ -1221,18 +1239,11 @@ function ScratchCard({
         onStartShouldSetPanResponderCapture: () => !!ticket && !revealed,
         onMoveShouldSetPanResponder: () => !!ticket && !revealed,
         onMoveShouldSetPanResponderCapture: () => !!ticket && !revealed,
-        onPanResponderGrant: () => {
-          lastScrubDistance.current = 0;
-          scratchNext();
+        onPanResponderGrant: (event) => {
+          scratchAt(event.nativeEvent.locationX, event.nativeEvent.locationY);
         },
-        onPanResponderMove: (_event, gesture) => {
-          const distance = Math.abs(gesture.dx) + Math.abs(gesture.dy);
-          // Each 34pt of finger travel removes another physical foil strip.
-          // That makes a long drag materially different from tapping.
-          if (distance - lastScrubDistance.current >= 34) {
-            lastScrubDistance.current = distance;
-            scratchNext();
-          }
+        onPanResponderMove: (event) => {
+          scratchAt(event.nativeEvent.locationX, event.nativeEvent.locationY);
         },
         // The scratch surface owns the drag. Without this, Safari hands a
         // vertical stroke to the page and the player scrolls instead of
@@ -1250,36 +1261,50 @@ function ScratchCard({
       disabled={!ticket || revealed}
       {...scratchPan.panHandlers}
       accessibilityRole="button"
-      accessibilityLabel={revealed ? 'Prize revealed' : `Scratch gold foil, ${Math.max(0, 6 - scratched)} rubs remaining`}
-      onPressIn={scratchNext}
+      accessibilityLabel={revealed ? 'Prize revealed' : 'Rub across the gold foil to scratch the prize windows'}
     >
       <LinearGradient colors={['#FFF4BE', '#C98B16', '#4A1607']} style={StyleSheet.absoluteFill} />
       <View style={local.scratchInner}>
-        {prizes.map((prize, index) => {
-          const stripStart = index * 2;
-          const uncovered = revealed || scratched >= stripStart + 2;
-          const foilRemaining = Math.max(0, Math.min(2, stripStart + 2 - scratched));
-          return (
-            <View key={index} style={local.scratchPrize}>
-              <Txt variant="h2" color="#2B1605">{uncovered ? (prize > 0 ? `${prize}×` : '—') : '✦'}</Txt>
-              {!uncovered ? (
-                <View pointerEvents="none" style={local.scratchFoil}>
-                  <LinearGradient colors={['#FFF4B5', '#D7961A', '#7A3007']} style={StyleSheet.absoluteFill} />
-                  <View style={local.scratchGrain}>
-                    {Array.from({ length: foilRemaining * 4 }, (_, grain) => (
-                      <View key={grain} style={[local.scratchFlake, { transform: [{ rotate: `${grain % 2 ? -18 : 22}deg` }] }]} />
-                    ))}
-                  </View>
-                  <Txt variant="caption" color="#FFF8D9">SCRATCH</Txt>
-                </View>
-              ) : null}
-            </View>
-          );
-        })}
+        {prizes.map((prize, index) => <View key={index} style={local.scratchPrize}>
+          <Txt variant="h2" color="#2B1605">{prize > 0 ? `${prize}×` : '—'}</Txt>
+        </View>)}
       </View>
-      {!revealed ? <Txt variant="caption" color="#FFF6CF">DRAG ACROSS THE FOIL · {Math.max(0, 6 - scratched)} SCRAPES LEFT</Txt> : null}
+      {!revealed ? <Svg width={282} height={138} style={local.scratchFoilCanvas} pointerEvents="none">
+        <Defs>
+          <SvgLinearGradient id="scratch-foil" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor="#FFF7BF" />
+            <Stop offset="0.38" stopColor="#E7AE31" />
+            <Stop offset="0.74" stopColor="#9C4A08" />
+            <Stop offset="1" stopColor="#FFD95A" />
+          </SvgLinearGradient>
+          <Mask id="scratched-foil" x="0" y="0" width="282" height="138">
+            <Rect x="12" y="24" width="258" height="85" rx="14" fill="#FFFFFF" />
+            {points.map((point) => <Circle key={point.id} cx={point.x} cy={point.y} r="17" fill="#000000" />)}
+          </Mask>
+        </Defs>
+        <Rect x="12" y="24" width="258" height="85" rx="14" fill="url(#scratch-foil)" mask="url(#scratched-foil)" />
+        <Path d="M20,37 L255,37 M20,101 L255,101" stroke="rgba(255,255,235,0.6)" strokeWidth="1" />
+      </Svg> : null}
+      {!revealed ? dust.map((flake) => <ScratchFlake key={flake.id} x={flake.x} y={flake.y} id={flake.id} />) : null}
+      {!revealed ? <Txt variant="caption" color="#FFF6CF" style={local.scratchInstruction}>RUB THE GOLD FOIL TO REVEAL</Txt> : null}
     </Pressable>
   );
+}
+
+/** Small foil flakes trail away from every actual scratch point. */
+function ScratchFlake({ x, y, id }: { x: number; y: number; id: number }) {
+  const fall = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    fall.setValue(0);
+    Animated.timing(fall, { toValue: 1, duration: 520, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+  }, [fall, id]);
+  const dx = ((id % 5) - 2) * 5;
+  return <Animated.View pointerEvents="none" style={[local.scratchDust, {
+    left: x - 2,
+    top: y - 2,
+    opacity: fall.interpolate({ inputRange: [0, 0.6, 1], outputRange: [0.95, 0.7, 0] }),
+    transform: [{ translateX: fall.interpolate({ inputRange: [0, 1], outputRange: [0, dx] }) }, { translateY: fall.interpolate({ inputRange: [0, 1], outputRange: [0, 22] }) }, { rotate: `${(id % 4) * 27}deg` }],
+  }]} />;
 }
 
 /**
@@ -1310,6 +1335,7 @@ function MineTile({
   const flip = useRef(new Animated.Value(0)).current;
   const shake = useRef(new Animated.Value(0)).current;
   const blast = useRef(new Animated.Value(0)).current;
+  const safe = useRef(new Animated.Value(0)).current;
   const reduced = usePrefersReducedMotion();
   const previous = useRef(status);
 
@@ -1339,7 +1365,14 @@ function MineTile({
         Animated.timing(blast, { toValue: 0, duration: 650, useNativeDriver: true }),
       ]).start();
     }
-  }, [status, reduced, flip, shake, blast]);
+    if (status === 'safe') {
+      safe.setValue(0);
+      Animated.sequence([
+        Animated.timing(safe, { toValue: 1, duration: 150, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.timing(safe, { toValue: 0, duration: 620, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ]).start();
+    }
+  }, [status, reduced, flip, shake, blast, safe]);
 
   // Squashes towards zero width at the midpoint — the read of a card turning.
   const scaleX = flip.interpolate({ inputRange: [0, 1], outputRange: [1, 0.08] });
@@ -1350,6 +1383,7 @@ function MineTile({
       <Pressable
         disabled={disabled}
         onPress={onPress}
+        hitSlop={8}
         accessibilityRole="button"
         accessibilityLabel={`Tile ${index + 1}`}
         style={({ pressed }) => [
@@ -1362,10 +1396,10 @@ function MineTile({
         <LinearGradient
           colors={
             status === 'safe'
-              ? ['#E7FFFF', accent, '#075A70']
-              : status === 'mine'
-                ? ['#FFB2A8', '#D63838', '#560812']
-                : ['#18374A', '#0B1B28', '#040A10']
+              ? ['rgba(231,255,255,0.96)', accent, 'rgba(7,90,112,0.88)']
+            : status === 'mine'
+              ? ['#FFB2A8', '#D63838', '#560812']
+              : ['rgba(24,55,74,0.12)', 'rgba(11,27,40,0.08)', 'rgba(4,10,16,0.16)']
           }
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
@@ -1373,9 +1407,14 @@ function MineTile({
         {/* The lit face, so an unopened tile is a moulded object rather than a
             grey square — the same treatment the roulette felt cells get. */}
         <View style={local.tileGloss} pointerEvents="none" />
+        {status === 'safe' ? <>
+          <Animated.View pointerEvents="none" style={[local.mineSafeHalo, { opacity: safe.interpolate({ inputRange: [0, 0.24, 1], outputRange: [0, 0.85, 0] }), transform: [{ scale: safe.interpolate({ inputRange: [0, 1], outputRange: [0.35, 2.4] }) }] }]} />
+          <View pointerEvents="none" style={local.mineSafeCore} />
+        </> : null}
         {status === 'mine' ? <>
-          <Animated.View pointerEvents="none" style={[local.mineBlast, { opacity: blast, transform: [{ scale: blast.interpolate({ inputRange: [0, 1], outputRange: [0.25, 2.5] }) }] }]} />
-          <Animated.View pointerEvents="none" style={[local.mineShockwave, { opacity: blast.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0.92, 0] }), transform: [{ scale: blast.interpolate({ inputRange: [0, 1], outputRange: [0.3, 4.2] }) }] }]} />
+          <Animated.View pointerEvents="none" style={[local.mineBlast, { opacity: blast, transform: [{ scale: blast.interpolate({ inputRange: [0, 1], outputRange: [0.25, 2.8] }) }] }]} />
+          <Animated.View pointerEvents="none" style={[local.mineShockwave, { opacity: blast.interpolate({ inputRange: [0, 0.32, 1], outputRange: [0, 0.96, 0] }), transform: [{ scale: blast.interpolate({ inputRange: [0, 1], outputRange: [0.25, 4.8] }) }] }]} />
+          {[-1, 1].flatMap((y) => [-1, 1].map((x) => ({ x, y }))).map((spark) => <Animated.View key={`${spark.x}-${spark.y}`} pointerEvents="none" style={[local.mineSpark, { opacity: blast.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 1, 0] }), transform: [{ translateX: blast.interpolate({ inputRange: [0, 1], outputRange: [0, spark.x * 27] }) }, { translateY: blast.interpolate({ inputRange: [0, 1], outputRange: [0, spark.y * 27] }) }, { scale: blast.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1.25] }) }] }]} />)}
           <View pointerEvents="none" style={local.mineCore} />
         </> : null}
         <Txt variant="bodySmall" color={colors.surface.base}>
@@ -1409,17 +1448,17 @@ const local = StyleSheet.create({
     backgroundColor: colors.surface.overlay,
   },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, width: 5 * 44, justifyContent: 'center' },
-  mineVault: { width: '100%', minHeight: 250, borderRadius: radius.lg, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(125,211,252,0.52)', shadowColor: '#38BDF8', shadowOpacity: 0.45, shadowRadius: 18, shadowOffset: { width: 0, height: 6 } },
+  mineVault: { width: 282, height: 282, alignSelf: 'center', borderRadius: radius.lg, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(125,211,252,0.62)', backgroundColor: '#04090E', shadowColor: '#38BDF8', shadowOpacity: 0.45, shadowRadius: 18, shadowOffset: { width: 0, height: 6 } },
+  mineBoard: { position: 'absolute', left: 53, top: 110, width: 176, height: 115, flexDirection: 'row', flexWrap: 'wrap', gap: 2, alignContent: 'space-between', justifyContent: 'center' },
   tile: {
-    // 40, not 48: five rows of tiles is the tallest single element in these
-    // games, and every point a row buys back five overall — which is what
-    // brings the Bet button back onto a 700-point screen.
-    width: 40,
-    height: 40,
-    borderRadius: 9,
-    backgroundColor: '#081522',
-    borderWidth: 2,
-    borderColor: '#6ED7FF',
+    // These match the visible cell faces in the vault tile, so the player's
+    // finger is opening the illustrated machine rather than a generic grid.
+    width: 33,
+    height: 21,
+    borderRadius: 5,
+    backgroundColor: 'rgba(5,18,28,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(110,215,255,0.42)',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -1433,8 +1472,11 @@ const local = StyleSheet.create({
     height: '48%',
     backgroundColor: 'rgba(255,255,255,0.09)',
   },
-  mineBlast: { position: 'absolute', width: 28, height: 28, borderRadius: 14, backgroundColor: '#FFEF88', shadowColor: '#FF4D21', shadowOpacity: 1, shadowRadius: 20 },
+  mineSafeHalo: { position: 'absolute', width: 18, height: 18, borderRadius: 9, backgroundColor: '#95F7FF', shadowColor: '#52E8FF', shadowOpacity: 1, shadowRadius: 14 },
+  mineSafeCore: { position: 'absolute', width: 8, height: 8, borderRadius: 4, backgroundColor: '#EDFFFF', borderWidth: 1, borderColor: '#74E8FF', shadowColor: '#9CFBFF', shadowOpacity: 1, shadowRadius: 9 },
+  mineBlast: { position: 'absolute', width: 30, height: 30, borderRadius: 15, backgroundColor: '#FFF4A8', shadowColor: '#FF4D21', shadowOpacity: 1, shadowRadius: 24 },
   mineShockwave: { position: 'absolute', width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: '#FFB15B', shadowColor: '#FF4D21', shadowOpacity: 0.9, shadowRadius: 18 },
+  mineSpark: { position: 'absolute', width: 5, height: 5, borderRadius: 3, backgroundColor: '#FFE27A', shadowColor: '#FF5C28', shadowOpacity: 1, shadowRadius: 7 },
   mineCore: { position: 'absolute', width: 10, height: 10, borderRadius: 5, backgroundColor: '#FFEF88', shadowColor: '#FF4D21', shadowOpacity: 1, shadowRadius: 10 },
   /** The drawn number in Limbo, given fixed height so the panel cannot jump. */
   limboFace: {
@@ -1462,6 +1504,8 @@ const local = StyleSheet.create({
   },
   diceVault: { width: '100%', height: 172, borderRadius: radius.lg, borderWidth: 1, borderColor: 'rgba(190,255,120,0.5)', overflow: 'hidden', alignItems: 'center', justifyContent: 'center', shadowColor: '#76EF42', shadowOpacity: 0.45, shadowRadius: 17, shadowOffset: { width: 0, height: 6 } },
   diceVaultLabel: { position: 'absolute', top: 8, alignSelf: 'center', paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(232,255,196,0.6)', backgroundColor: 'rgba(3,16,4,0.68)' },
+  diceDialShell: { width: 168, height: 168, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', borderRadius: 84, borderWidth: 1, borderColor: 'rgba(202,255,146,0.32)', backgroundColor: 'rgba(3,19,8,0.74)', shadowColor: '#A3E635', shadowOpacity: 0.35, shadowRadius: 16, shadowOffset: { width: 0, height: 5 } },
+  diceDialReadout: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   diceCrystal: { width: 72, height: 72, borderRadius: 18, borderWidth: 2, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', shadowColor: '#C8FF8F', shadowOpacity: 0.62, shadowRadius: 16, shadowOffset: { width: 0, height: 7 } },
   diceCrystalRear: { position: 'absolute', left: 55, top: 66, opacity: 0.8, transform: [{ rotate: '-18deg' }] },
   dicePips: { width: 31, height: 31, flexDirection: 'row', flexWrap: 'wrap', gap: 4, justifyContent: 'center', alignItems: 'center' },
@@ -1493,16 +1537,16 @@ const local = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#FFE7A1',
     overflow: 'hidden',
+    position: 'relative',
     justifyContent: 'center',
     shadowColor: '#F6C84C',
     shadowOpacity: 0.62,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 4 },
   },
-  scratchInner: { flexDirection: 'row', gap: spacing.xs, padding: spacing.md },
+  scratchInner: { position: 'absolute', left: 12, right: 12, top: 24, height: 85, flexDirection: 'row', gap: spacing.xs },
   scratchPrize: {
     flex: 1,
-    minHeight: 72,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radius.md,
@@ -1511,20 +1555,7 @@ const local = StyleSheet.create({
     backgroundColor: 'rgba(255,247,209,0.72)',
     overflow: 'hidden',
   },
-  scratchFoil: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#FFF0A0',
-  },
-  scratchGrain: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 7,
-    padding: 8,
-    opacity: 0.72,
-  },
-  scratchFlake: { width: 24, height: 2, borderRadius: 2, backgroundColor: 'rgba(76, 28, 4, 0.58)' },
+  scratchFoilCanvas: { position: 'absolute', left: 0, top: 0 },
+  scratchInstruction: { position: 'absolute', top: 7, alignSelf: 'center', textShadowColor: 'rgba(66,24,1,0.9)', textShadowRadius: 3 },
+  scratchDust: { position: 'absolute', width: 4, height: 7, borderRadius: 1, backgroundColor: '#FFE178', borderWidth: 1, borderColor: '#8D4F08', shadowColor: '#FFF4B0', shadowOpacity: 0.9, shadowRadius: 4 },
 });

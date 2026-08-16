@@ -887,6 +887,24 @@ export const sounds = {
     tone(210, { type: 'square', duration: 0.12, gain: 0.26, sweepTo: 150 });
   },
 
+  /** A clean crystal confirmation for an opened safe Mine vault cell. */
+  mineSafe(): void {
+    tone(740, { type: 'sine', duration: 0.09, gain: 0.18, sweepTo: 980 });
+    tone(1480, { type: 'triangle', at: 0.045, duration: 0.13, gain: 0.11 });
+  },
+
+  /** A short, weighty blast — low impact plus the bright rupture on top. */
+  mineBlast(): void {
+    noise({ duration: 0.42, gain: 0.34, frequency: 170, q: 0.65, type: 'lowpass' });
+    tone(78, { type: 'sawtooth', duration: 0.34, gain: 0.25, sweepTo: 34 });
+    noise({ at: 0.035, duration: 0.18, gain: 0.2, frequency: 3100, q: 0.9, type: 'bandpass' });
+  },
+
+  /** Fine metallic noise under a finger moving across a scratch-card foil. */
+  scratch(): void {
+    noise({ duration: 0.035, gain: 0.07, frequency: 4200, q: 0.72, type: 'bandpass' });
+  },
+
   /** Winning symbols clearing on a tumble. */
   cascade(): void {
     if (playSample(currentSet.cascade, { gain: 0.6 })) return;
