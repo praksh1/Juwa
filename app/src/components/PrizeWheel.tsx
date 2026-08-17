@@ -116,6 +116,9 @@ export function PrizeWheel({ segments, index, stake, width, height, onDone }: Pr
   const pulse = useRef(new Animated.Value(0)).current;
   const flash = useRef(new Animated.Value(0)).current;
   const confetti = useRef<FireworksHandle | null>(null);
+  const landed = useRef(false);
+  const spinWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flashLoop = useRef<Animated.CompositeAnimation | null>(null);
   const [phase, setPhase] = useState<Phase>('ready');
   const [armed, setArmed] = useState(false);
 
@@ -171,6 +174,12 @@ export function PrizeWheel({ segments, index, stake, width, height, onDone }: Pr
   }, [armed, phase, pulse, reduced]);
 
   const land = useCallback(() => {
+    if (landed.current) return;
+    landed.current = true;
+    if (spinWatchdog.current) {
+      clearTimeout(spinWatchdog.current);
+      spinWatchdog.current = null;
+    }
     setPhase('landed');
     /*
      * Loud in proportion to the prize. The top segment on this wheel is fifty
@@ -184,14 +193,22 @@ export function PrizeWheel({ segments, index, stake, width, height, onDone }: Pr
 
     if (!reduced) {
       flash.setValue(0);
-      Animated.loop(
+      flashLoop.current = Animated.loop(
         Animated.sequence([
           Animated.timing(flash, { toValue: 1, duration: 480, easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
           Animated.timing(flash, { toValue: 0, duration: 480, easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
         ]),
-      ).start();
+      );
+      flashLoop.current.start();
     }
   }, [best, flash, multiple, reduced]);
+
+  useEffect(() => () => {
+    landed.current = true;
+    if (spinWatchdog.current) clearTimeout(spinWatchdog.current);
+    flashLoop.current?.stop();
+    turn.stopAnimation();
+  }, [turn]);
 
   /*
    * A ref, not the phase, guards the throw.
@@ -212,12 +229,20 @@ export function PrizeWheel({ segments, index, stake, width, height, onDone }: Pr
       turn.setValue(landing);
       // The state still changes for somebody who asked for less motion — only
       // the movement is removed. See motion.ts.
-      setTimeout(land, 400);
+      spinWatchdog.current = setTimeout(land, 400);
       return;
     }
 
     sounds.lever();
     turn.setValue(0);
+    // SVG animation completion callbacks can be dropped by a browser tab
+    // transition. The watchdog lands the already-decided server result rather
+    // than leaving a wheel rotating forever with the round locked behind it.
+    spinWatchdog.current = setTimeout(() => {
+      turn.setValue(landing);
+      land();
+    }, SPIN_MS + 650);
+
     Animated.timing(turn, {
       toValue: landing,
       duration: SPIN_MS,
@@ -230,7 +255,8 @@ export function PrizeWheel({ segments, index, stake, width, height, onDone }: Pr
       // finished having moved nothing.
       useNativeDriver: false,
     }).start(({ finished: ok }) => {
-      if (ok) land();
+      if (!ok) turn.setValue(landing);
+      land();
     });
   }, [land, landing, reduced, turn]);
 

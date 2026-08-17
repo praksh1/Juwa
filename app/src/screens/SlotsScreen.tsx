@@ -829,6 +829,7 @@ export function SlotsScreen() {
     (index: number) => {
       if (index === REELS - 1) {
         sounds.reelLoopStop();
+        setAnticipating([]);
         landingResolver.current?.();
         landingResolver.current = null;
       }
@@ -1104,6 +1105,9 @@ export function SlotsScreen() {
     const token = ++spinToken.current;
     setError(null);
     setRound(null);
+    // A near-miss glow is presentation state for exactly one landing. Clear it
+    // before the next reel loop begins as well as when the last reel settles.
+    setAnticipating([]);
     setRoundActive(true);
 
     /*
@@ -1490,6 +1494,7 @@ export function SlotsScreen() {
        * would start a third on top of it.
        */
       if (!superseded()) setRoundActive(false);
+      if (!superseded()) setAnticipating([]);
     }
   }, [api, balance, bet, spinning, celebrate, collect]);
 
@@ -2135,6 +2140,7 @@ export function SlotsScreen() {
       */}
       {phase === 'feature' && feature?.kind === 'wheel' ? (
         <PrizeWheel
+          key={`${round?.roundId ?? 'round'}-${feature.index}`}
           segments={wheelSegments}
           index={feature.index}
           stake={bet}

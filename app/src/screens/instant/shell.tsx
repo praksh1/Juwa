@@ -18,7 +18,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Animated, Image, Pressable, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { format, minor, type Minor } from '@juwa/money';
 import { publishBalance } from '../../api/usePlayer';
@@ -335,11 +335,14 @@ export function Board({
   /** Set on the frame a win is revealed — the panel flares and throws sparks. */
   celebrate,
   cabinet = 'crash',
+  bodyStyle,
 }: {
   accent: string;
   children: React.ReactNode;
   celebrate?: CelebrationHandle;
   cabinet?: InstantCabinet;
+  /** Per-game geometry. Tall playfields may reclaim side padding without changing every cabinet. */
+  bodyStyle?: StyleProp<ViewStyle>;
 }) {
   const [size, setSize] = useState({ width: 320, height: 320 });
   const flare = useRef(new Animated.Value(0)).current;
@@ -415,7 +418,7 @@ export function Board({
           style={StyleSheet.absoluteFill}
         />
       </View>
-      <View style={styles.boardBody}>{children}</View>
+      <View style={[styles.boardBody, bodyStyle]}>{children}</View>
       {celebrate ? (
         <Fireworks
           width={size.width}

@@ -504,7 +504,11 @@ export function Reel({
         })}
       </Animated.View>
 
-      {anticipating ? (
+      {/* Anticipation belongs only to a reel that is physically moving. The
+          parent also clears the flag at settlement, but this local guard
+          prevents a stopped reel from carrying a pink wash into the next spin
+          even if a render and the settlement callback cross in one frame. */}
+      {anticipating && moving ? (
         <>
           {!reduceMotion ? (
             <Animated.View

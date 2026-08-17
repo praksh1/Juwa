@@ -818,7 +818,10 @@ export function PlinkoScreen() {
   // the response would answer the question the fall is asking.
   const presentationComplete = !!state.round && state.round.roundId === revealedRoundId;
   const landedBucket = presentationComplete && result ? result.bucket : null;
-  const boardWidth = viewportWidth >= 760 ? 420 : Math.min(300, viewportWidth - 36);
+  // Plinko is the game, not decoration around the game. Its panel alone uses
+  // the wider Board body below, so the chamber can grow without changing the
+  // other instant cabinets or overflowing a narrow iPhone.
+  const boardWidth = viewportWidth >= 760 ? 470 : Math.min(330, viewportWidth - 60);
 
   return (
     <InstantLayout game={game} state={state}
@@ -839,7 +842,7 @@ export function PlinkoScreen() {
           />
       }
     >
-      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet}>
+      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet} bodyStyle={local.expandedGameBody}>
         <View style={local.plinkoHeader}>
           <Txt variant="caption" color="#FFE4FF">LUMEN PEG ARRAY</Txt>
           <Txt variant="caption" color="#F4A9FF">PATH RECORDER</Txt>
@@ -934,7 +937,10 @@ function PlinkoVault({
   outcome?: { multiplier: number; payout: number };
   width: number;
 }) {
-  const height = Math.round(width * 0.68);
+  // A phone has spare height below the chamber, so use it for the soul of the
+  // game. Wide/Surface layouts keep the shallower ratio to protect their much
+  // scarcer vertical space.
+  const height = Math.round(width * (width < 400 ? 0.82 : 0.68));
   const gap = width / 18.75;
   // The path is truncated to the bounces the player has actually seen.
   const shown = path ? path.slice(0, Math.max(0, step)) : [];
@@ -947,7 +953,10 @@ function PlinkoVault({
   const y = height * 0.14 + Math.min(rows, shown.length) * ((height * 0.72) / Math.max(rows, 1));
 
   return <View style={[local.plinkoVault, { width, height }]}>
-    <Image source={{ uri: '/art/tiles/juwa-plinko.png' }} resizeMode="cover" style={StyleSheet.absoluteFill} />
+    {/* A painted chamber is present on the first frame. `fadeDuration={0}`
+        prevents the web image element's default arrival flash on iOS. */}
+    <LinearGradient colors={['#34103E', '#16051F', '#07020C']} style={StyleSheet.absoluteFill} />
+    <Image source={{ uri: '/art/tiles/juwa-plinko.png' }} resizeMode="cover" fadeDuration={0} style={StyleSheet.absoluteFill} />
     <LinearGradient colors={['rgba(19,2,26,0.08)', 'rgba(12,0,20,0.38)']} style={StyleSheet.absoluteFill} />
     <View style={local.plinkoGlass} pointerEvents="none" />
     {path && step > 0 ? <><View style={[local.plinkoOrbGlow, { left: x - 17, top: y - 17, backgroundColor: accent }]} /><View style={[local.plinkoOrb, { left: x - 7, top: y - 7 }]} /></> : null}
@@ -973,9 +982,14 @@ const MINE_COUNTS = [1, 3, 5, 10, 24];
 export function MinesScreen() {
   const game = GAMES['mines']!;
   const state = useInstantGame(game);
-  const { width: viewportWidth } = useWindowDimensions();
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const [mines, setMines] = useState(3);
-  const mineSize = viewportWidth >= 760 ? 390 : Math.min(260, viewportWidth - 40);
+  // The square can reach 440 on a tall desktop, while a short Surface gets a
+  // height-derived cap so its lower cells never sit underneath the pinned
+  // controls. Phones still gain almost forty points over the previous vault.
+  const mineSize = viewportWidth >= 760
+    ? Math.min(440, Math.max(288, viewportHeight - 478))
+    : Math.min(298, viewportWidth - 60);
   const mineScale = mineSize / 282;
 
   const board = state.round?.state as
@@ -1071,7 +1085,7 @@ export function MinesScreen() {
         )
       }
     >
-      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet}>
+      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet} bodyStyle={local.expandedGameBody}>
         <View style={local.minesHeader}>
           <View style={local.minesIndicator} />
           <Txt variant="caption" color="#C6F7FF">DEEP VAULT · CLEAR THE GRID</Txt>
@@ -1079,9 +1093,10 @@ export function MinesScreen() {
         </View>
         <View style={[local.mineVault, { width: mineSize, height: mineSize }]}>
           <Image source={{ uri: '/art/tiles/juwa-mines.png' }} resizeMode="contain" style={StyleSheet.absoluteFill} />
-          {/* The tile is not wallpaper: its illustrated twenty-five-cell vault
-              is the actual playfield.  The transparent hit faces sit on that
-              machinery and light up only when the server opens a cell. */}
+          {/* The illustrated twenty-five-cell vault is the actual playfield.
+              The hit targets are visually absent until the server opens one;
+              drawing a second glass grid over this art made every cell look
+              doubled and clouded. */}
           <LinearGradient colors={['rgba(1,10,19,0.02)', 'rgba(1,8,17,0.18)']} style={StyleSheet.absoluteFill} />
           <View style={[local.mineBoard, {
             left: 53 * mineScale,
@@ -1150,15 +1165,24 @@ export function GoldenScratchScreen() {
   const needsReveal = !!ticket && !revealed;
 
   const buy = async () => {
-    setRevealed(false);
-    await state.play({ type: 'buy-card' });
+    const round = await state.play({ type: 'buy-card' });
+    // Keep the old, completed card intact while the next card is being minted.
+    // The new round id keys ScratchCard below, so its foil is pristine on the
+    // very first frame rather than being reset one effect later.
+    if (round) setRevealed(false);
   };
   const reveal = () => {
     if (!ticket || revealed) return;
     setRevealed(true);
-    sounds.coinLock();
-    announce(state.round);
-    celebrate(state.round);
+    if (ticket.multiplier > 0) {
+      sounds.coinLock();
+      announce(state.round);
+      celebrate(state.round);
+    } else {
+      // A loss should close softly. The former settlement sting sounded like
+      // an error alarm and made an ordinary no-match feel punitive.
+      sounds.cardFlip();
+    }
   };
 
   return (
@@ -1167,7 +1191,7 @@ export function GoldenScratchScreen() {
       state={state}
       action={
         !needsReveal ? <PlayButton
-          label={state.busy ? 'Minting card…' : `Buy card · ${format(state.bet, 'GC')}`}
+          label={state.busy ? 'Minting card…' : revealed && ticket ? `Play another · ${format(state.bet, 'GC')}` : `Buy card · ${format(state.bet, 'GC')}`}
           onPress={() => void buy()}
           disabled={state.busy}
           colour={game.accent}
@@ -1176,15 +1200,15 @@ export function GoldenScratchScreen() {
     >
       <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet}>
         <Txt variant="caption" color="#FFE8A6">GOLDEN SCRATCH</Txt>
-        <ScratchCard ticket={ticket} ticketId={state.round?.roundId} revealed={revealed} onReveal={reveal} />
+        <ScratchCard key={state.round?.roundId ?? 'empty-card'} ticket={ticket} ticketId={state.round?.roundId} revealed={revealed} onReveal={reveal} />
         <View style={shell.result}>
           {!ticket ? (
             <Txt variant="bodySmall" color={colors.text.secondary}>Buy a card, then drag across the foil to reveal it.</Txt>
           ) : !revealed ? (
             <Txt variant="bodySmall" color="#FFE8A6">Match all 3 prize windows to win. Drag across the gold foil.</Txt>
           ) : (
-            <Txt variant="h2" color={ticket.multiplier > 0 ? colors.feedback.winBright : colors.feedback.error}>
-              {ticket.multiplier > 0 ? `WON ${format(minor(state.round!.settlement?.payout ?? 0), 'GC')} · ${ticket.multiplier}×` : 'No prize this card'}
+            <Txt variant="h2" color={ticket.multiplier > 0 ? colors.feedback.winBright : '#F3D58A'}>
+              {ticket.multiplier > 0 ? `WON ${format(minor(state.round!.settlement?.payout ?? 0), 'GC')} · ${ticket.multiplier}×` : 'THE NEXT CARD COULD SHINE'}
             </Txt>
           )}
         </View>
@@ -1451,25 +1475,24 @@ function MineTile({
         style={({ pressed }) => [
           local.tile,
           { width: 33 * scale, height: 21 * scale, borderRadius: 5 * scale },
+          status === 'hidden' && local.tileHidden,
           status === 'safe' && { borderColor: '#E9FBFF' },
           status === 'mine' && { borderColor: '#FFD0D0' },
           pressed && status === 'hidden' && local.tilePressed,
         ]}
       >
-        <LinearGradient
+        {status !== 'hidden' ? <LinearGradient
           colors={
             status === 'safe'
               ? ['rgba(231,255,255,0.96)', accent, 'rgba(7,90,112,0.88)']
-            : status === 'mine'
-              ? ['#FFB2A8', '#D63838', '#560812']
-              : ['rgba(24,55,74,0.12)', 'rgba(11,27,40,0.08)', 'rgba(4,10,16,0.16)']
+              : ['#FFB2A8', '#D63838', '#560812']
           }
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
-        />
+        /> : null}
         {/* The lit face, so an unopened tile is a moulded object rather than a
             grey square — the same treatment the roulette felt cells get. */}
-        <View style={local.tileGloss} pointerEvents="none" />
+        {status !== 'hidden' ? <View style={local.tileGloss} pointerEvents="none" /> : null}
         {status === 'safe' ? <>
           <Animated.View pointerEvents="none" style={[local.mineSafeHalo, { opacity: safe.interpolate({ inputRange: [0, 0.24, 1], outputRange: [0, 0.85, 0] }), transform: [{ scale: safe.interpolate({ inputRange: [0, 1], outputRange: [0.35, 2.4] }) }] }]} />
           <View pointerEvents="none" style={local.mineSafeCore} />
@@ -1490,6 +1513,7 @@ function MineTile({
 
 const local = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', justifyContent: 'center' },
+  expandedGameBody: { paddingHorizontal: 6 },
   winReadout: { alignItems: 'center', gap: 2, paddingVertical: 2 },
   dockChoices: { flexDirection: 'row', gap: 6, paddingHorizontal: 2, alignItems: 'center' },
   dockChoice: { minHeight: 32, minWidth: 64, paddingHorizontal: 10, borderRadius: 11, borderWidth: 1, borderColor: '#3A3446', backgroundColor: '#15131D', alignItems: 'center', justifyContent: 'center' },
@@ -1528,7 +1552,8 @@ const local = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  tilePressed: { backgroundColor: colors.surface.raised },
+  tileHidden: { backgroundColor: 'transparent', borderWidth: 0 },
+  tilePressed: { backgroundColor: 'rgba(100,225,255,0.12)' },
   tileGloss: {
     position: 'absolute',
     left: 0,
@@ -1594,7 +1619,7 @@ const local = StyleSheet.create({
   limboPulse: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#5EEAD4', shadowColor: '#5EEAD4', shadowOpacity: 1, shadowRadius: 7 },
   diceHeader: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: 'rgba(215,249,157,0.3)', paddingBottom: 5 },
   plinkoHeader: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: 'rgba(245,183,255,0.34)', paddingBottom: 5 },
-  plinkoVault: { alignSelf: 'center', overflow: 'hidden', borderRadius: radius.lg, borderWidth: 1, borderColor: 'rgba(245,183,255,0.64)', shadowColor: '#E879F9', shadowOpacity: 0.5, shadowRadius: 18, shadowOffset: { width: 0, height: 6 } },
+  plinkoVault: { alignSelf: 'center', overflow: 'hidden', borderRadius: radius.lg, borderWidth: 1, borderColor: 'rgba(245,183,255,0.64)', backgroundColor: '#16051F', shadowColor: '#E879F9', shadowOpacity: 0.5, shadowRadius: 18, shadowOffset: { width: 0, height: 6 } },
   plinkoBuckets: { position: 'absolute', left: 9, right: 9, bottom: 8, flexDirection: 'row', gap: 2 },
   plinkoBucket: { flex: 1, height: 10, borderRadius: 4, backgroundColor: 'rgba(255,240,255,0.22)' },
   plinkoOutcome: { position: 'absolute', right: 9, top: 8, alignItems: 'flex-end', paddingHorizontal: 6, paddingVertical: 3, borderRadius: radius.sm, borderWidth: 1, borderColor: 'rgba(255,220,255,0.54)', backgroundColor: 'rgba(23,3,34,0.8)' },

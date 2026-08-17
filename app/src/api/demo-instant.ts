@@ -174,7 +174,10 @@ export function demoPlaceBet(
       const multiplier = drawPrize();
       return {
         status: 'settled',
-        state: { multiplier, prizes: [drawPrize(), drawPrize(), multiplier] },
+        // Match the real engine: a paid card shows three equal prizes and a
+        // losing card shows three blanks. Decoy multipliers made the demo say
+        // “no win” underneath what visibly looked like a winning ticket.
+        state: { multiplier, prizes: [multiplier, multiplier, multiplier] },
         availableActions: [],
         payout: multiplier > 0 ? Math.floor(stake * multiplier) : 0,
         multiplier,
