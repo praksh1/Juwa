@@ -18,6 +18,7 @@ import Svg, {
   LinearGradient as SvgLinearGradient,
   Mask,
   Path,
+  Polygon,
   Rect,
   Stop,
 } from 'react-native-svg';
@@ -1018,42 +1019,114 @@ const MINE_COUNTS = [1, 3, 5, 10, 24];
  * row. Keeping interaction and reveal geometry on the same map prevents a
  * selected tile from appearing beside the cell the player touched.
  */
-const MINE_TILE_ROWS = [
-  { left: 61.2, top: 111.5, width: 154.2, height: 19.5, gap: 2.0, inset: 2.3 },
-  { left: 59.2, top: 133.0, width: 158.6, height: 20.1, gap: 2.0, inset: 1.9 },
-  { left: 57.0, top: 155.2, width: 163.3, height: 20.8, gap: 2.0, inset: 1.5 },
-  { left: 54.6, top: 178.2, width: 168.4, height: 21.6, gap: 2.0, inset: 1.0 },
-  { left: 52.0, top: 202.1, width: 174.2, height: 22.2, gap: 2.0, inset: 0.5 },
+const MINE_ART_SIZE = 1254;
+const MINE_TILE_POINTS = [
+  [[306, 501], [425, 498], [421, 568], [293, 573]],
+  [[433, 498], [554, 496], [553, 567], [429, 568]],
+  [[563, 496], [680, 495], [686, 567], [560, 567]],
+  [[689, 496], [807, 497], [816, 569], [694, 567]],
+  [[817, 499], [934, 505], [950, 575], [825, 570]],
+  [[291, 577], [423, 571], [414, 658], [277, 662]],
+  [[429, 572], [555, 570], [553, 655], [422, 657]],
+  [[561, 570], [686, 571], [693, 656], [560, 655]],
+  [[694, 571], [817, 573], [829, 660], [701, 656]],
+  [[824, 575], [951, 580], [968, 665], [836, 660]],
+  [[277, 665], [413, 661], [402, 751], [260, 755]],
+  [[421, 661], [553, 659], [551, 750], [410, 751]],
+  [[559, 659], [693, 660], [701, 750], [559, 750]],
+  [[701, 661], [830, 664], [844, 754], [710, 751]],
+  [[836, 666], [968, 670], [988, 760], [851, 754]],
+  [[258, 759], [400, 755], [390, 855], [241, 860]],
+  [[410, 755], [551, 754], [549, 854], [399, 855]],
+  [[559, 754], [701, 754], [710, 855], [558, 854]],
+  [[710, 756], [844, 759], [861, 859], [720, 855]],
+  [[851, 759], [988, 765], [1008, 866], [868, 861]],
+  [[241, 865], [389, 860], [373, 974], [219, 977]],
+  [[399, 860], [549, 859], [547, 975], [382, 974]],
+  [[557, 859], [710, 859], [722, 976], [557, 975]],
+  [[720, 861], [862, 865], [881, 978], [730, 976]],
+  [[869, 867], [1008, 872], [1030, 978], [890, 980]],
 ] as const;
 
-function mineTileGeometry(index: number, scale: number) {
-  const row = Math.floor(index / 5);
-  const column = index % 5;
-  const geometry = MINE_TILE_ROWS[row]!;
-  const bottomCell = (geometry.width - geometry.gap * 4) / 5;
-  const topWidth = geometry.width - geometry.inset * 2;
-  const topGap = geometry.gap * 0.9;
-  const topCell = (topWidth - topGap * 4) / 5;
-  const bottomLeft = geometry.left + column * (bottomCell + geometry.gap);
-  const topLeft = geometry.left + geometry.inset + column * (topCell + topGap);
-  const left = Math.min(bottomLeft, topLeft);
-  const right = Math.max(bottomLeft + bottomCell, topLeft + topCell);
-  const topLeftPercent = ((topLeft - left) / (right - left)) * 100;
-  const topRightPercent = ((topLeft + topCell - left) / (right - left)) * 100;
-  const bottomLeftPercent = ((bottomLeft - left) / (right - left)) * 100;
-  const bottomRightPercent = ((bottomLeft + bottomCell - left) / (right - left)) * 100;
+function mineTileShape(index: number) {
+  const scale = 282 / MINE_ART_SIZE;
+  const corners = MINE_TILE_POINTS[index]!.map(([x, y]) => ({ x: x * scale, y: y * scale }));
+  const xs = corners.map(({ x }) => x);
+  const ys = corners.map(({ y }) => y);
+  const left = Math.min(...xs);
+  const right = Math.max(...xs);
+  const top = Math.min(...ys);
+  const bottom = Math.max(...ys);
 
   return {
-    position: 'absolute' as const,
-    left: left * scale,
-    top: geometry.top * scale,
-    width: (right - left) * scale,
-    height: geometry.height * scale,
-    // React Native Web forwards clipPath even though native ViewStyle does not
-    // type it yet. The hit face and its glow therefore share the painted
-    // trapezoid rather than floating as a rectangular overlay.
-    clipPath: `polygon(${topLeftPercent}% 0%, ${topRightPercent}% 0%, ${bottomRightPercent}% 100%, ${bottomLeftPercent}% 100%)`,
+    left,
+    top,
+    width: right - left,
+    height: bottom - top,
+    centerX: corners.reduce((total, point) => total + point.x, 0) / corners.length,
+    centerY: corners.reduce((total, point) => total + point.y, 0) / corners.length,
+    points: corners.map(({ x, y }) => `${x},${y}`).join(' '),
   };
+}
+
+function mineTileGeometry(index: number, scale: number) {
+  const shape = mineTileShape(index);
+  return {
+    position: 'absolute' as const,
+    left: shape.left * scale,
+    top: shape.top * scale,
+    width: shape.width * scale,
+    height: shape.height * scale,
+  };
+}
+
+function MinePerspectiveFaces({ tileState }: { tileState: (tile: number) => 'hidden' | 'safe' | 'mine' }) {
+  return (
+    <Svg pointerEvents="none" width="100%" height="100%" viewBox="0 0 282 282" style={StyleSheet.absoluteFill}>
+      <Defs>
+        <SvgLinearGradient id="mine-safe-face" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor="#E9FFFF" stopOpacity="0.98" />
+          <Stop offset="0.46" stopColor="#66E8FF" stopOpacity="0.94" />
+          <Stop offset="1" stopColor="#087AA4" stopOpacity="0.9" />
+        </SvgLinearGradient>
+        <SvgLinearGradient id="mine-danger-face" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor="#FFD5A1" stopOpacity="0.98" />
+          <Stop offset="0.42" stopColor="#FF5A35" stopOpacity="0.96" />
+          <Stop offset="1" stopColor="#6D0716" stopOpacity="0.94" />
+        </SvgLinearGradient>
+      </Defs>
+      {Array.from({ length: MINES_TILES }, (_, tile) => {
+        const status = tileState(tile);
+        if (status === 'hidden') return null;
+        const shape = mineTileShape(tile);
+        const marker = 2.8 + Math.floor(tile / 5) * 0.18;
+        return (
+          <React.Fragment key={tile}>
+            <Polygon
+              points={shape.points}
+              fill={status === 'safe' ? 'url(#mine-safe-face)' : 'url(#mine-danger-face)'}
+              stroke={status === 'safe' ? '#DFFFFF' : '#FFD29C'}
+              strokeWidth={0.85}
+              strokeLinejoin="round"
+            />
+            {status === 'safe' ? (
+              <Polygon
+                points={`${shape.centerX},${shape.centerY - marker} ${shape.centerX + marker},${shape.centerY} ${shape.centerX},${shape.centerY + marker} ${shape.centerX - marker},${shape.centerY}`}
+                fill="#042033"
+                stroke="#CFFFFF"
+                strokeWidth={0.45}
+              />
+            ) : (
+              <>
+                <Circle cx={shape.centerX} cy={shape.centerY} r={marker + 0.8} fill="#2A0710" stroke="#FFE7A5" strokeWidth={0.5} />
+                <Path d={`M${shape.centerX - marker},${shape.centerY} L${shape.centerX + marker},${shape.centerY} M${shape.centerX},${shape.centerY - marker} L${shape.centerX},${shape.centerY + marker} M${shape.centerX - marker * 0.72},${shape.centerY - marker * 0.72} L${shape.centerX + marker * 0.72},${shape.centerY + marker * 0.72} M${shape.centerX + marker * 0.72},${shape.centerY - marker * 0.72} L${shape.centerX - marker * 0.72},${shape.centerY + marker * 0.72}`} stroke="#FFF2AF" strokeWidth={0.75} strokeLinecap="round" />
+              </>
+            )}
+          </React.Fragment>
+        );
+      })}
+    </Svg>
+  );
 }
 
 export function MinesScreen() {
@@ -1175,16 +1248,15 @@ export function MinesScreen() {
               drawing a second glass grid over this art made every cell look
               doubled and clouded. */}
           <LinearGradient colors={['rgba(1,10,19,0.02)', 'rgba(1,8,17,0.18)']} style={StyleSheet.absoluteFill} />
+          <MinePerspectiveFaces tileState={tileState} />
           <View style={local.mineBoard} pointerEvents="box-none">
           {Array.from({ length: MINES_TILES }, (_, tile) => (
             <MineTile
               key={tile}
               index={tile}
               status={tileState(tile)}
-              accent={game.accent}
               disabled={!open || state.busy || tileState(tile) !== 'hidden'}
               onPress={() => state.act({ type: 'reveal', tile })}
-              scale={mineScale}
               geometry={mineTileGeometry(tile, mineScale)}
             />
           ))}
@@ -1478,18 +1550,14 @@ function ScratchFlake({ x, y, id }: { x: number; y: number; id: number }) {
 function MineTile({
   index,
   status,
-  accent,
   disabled,
   onPress,
-  scale,
   geometry,
 }: {
   index: number;
   status: 'hidden' | 'safe' | 'mine';
-  accent: string;
   disabled: boolean;
   onPress: () => void;
-  scale: number;
   geometry: ReturnType<typeof mineTileGeometry>;
 }) {
   const flip = useRef(new Animated.Value(0)).current;
@@ -1549,28 +1617,11 @@ function MineTile({
         style={({ pressed }) => [
           local.tile,
           geometry as never,
-          { borderRadius: 4 * scale },
-          status === 'hidden' && local.tileHidden,
-          status === 'safe' && { borderColor: '#E9FBFF' },
-          status === 'mine' && { borderColor: '#FFD0D0' },
           pressed && status === 'hidden' && local.tilePressed,
         ]}
       >
-        {status !== 'hidden' ? <LinearGradient
-          colors={
-            status === 'safe'
-              ? ['rgba(231,255,255,0.96)', accent, 'rgba(7,90,112,0.88)']
-              : ['#FFB2A8', '#D63838', '#560812']
-          }
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        /> : null}
-        {/* The lit face, so an unopened tile is a moulded object rather than a
-            grey square — the same treatment the roulette felt cells get. */}
-        {status !== 'hidden' ? <View style={local.tileGloss} pointerEvents="none" /> : null}
         {status === 'safe' ? <>
           <Animated.View pointerEvents="none" style={[local.mineSafeHalo, { opacity: safe.interpolate({ inputRange: [0, 0.24, 1], outputRange: [0, 0.85, 0] }), transform: [{ scale: safe.interpolate({ inputRange: [0, 1], outputRange: [0.35, 2.4] }) }] }]} />
-          <View pointerEvents="none" style={local.mineSafeCore} />
         </> : null}
         {status === 'mine' ? <>
           <Animated.View pointerEvents="none" style={[local.mineBlast, { opacity: blast, transform: [{ scale: blast.interpolate({ inputRange: [0, 1], outputRange: [0.25, 2.8] }) }] }]} />
@@ -1578,9 +1629,6 @@ function MineTile({
           {[-1, 1].flatMap((y) => [-1, 1].map((x) => ({ x, y }))).map((spark) => <Animated.View key={`${spark.x}-${spark.y}`} pointerEvents="none" style={[local.mineSpark, { opacity: blast.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 1, 0] }), transform: [{ translateX: blast.interpolate({ inputRange: [0, 1], outputRange: [0, spark.x * 27] }) }, { translateY: blast.interpolate({ inputRange: [0, 1], outputRange: [0, spark.y * 27] }) }, { scale: blast.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1.25] }) }] }]} />)}
           <View pointerEvents="none" style={local.mineCore} />
         </> : null}
-        <Txt variant="bodySmall" color={colors.surface.base}>
-          {status === 'safe' ? '◆' : status === 'mine' ? '✱' : ' '}
-        </Txt>
       </Pressable>
     </Animated.View>
   );
@@ -1615,30 +1663,19 @@ const local = StyleSheet.create({
   mineVault: { width: 282, height: 282, alignSelf: 'center', borderRadius: radius.lg, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(125,211,252,0.62)', backgroundColor: '#04090E', shadowColor: '#38BDF8', shadowOpacity: 0.45, shadowRadius: 18, shadowOffset: { width: 0, height: 6 } },
   mineBoard: { ...StyleSheet.absoluteFillObject },
   tile: {
-    // These match the visible cell faces in the vault tile, so the player's
-    // finger is opening the illustrated machine rather than a generic grid.
+    // Interaction only. Visible reveals are SVG quadrilaterals fitted to the
+    // perspective in the cabinet art; keeping this face transparent prevents
+    // web browsers from substituting upright rounded rectangles.
     width: 33,
     height: 21,
-    borderRadius: 5,
-    backgroundColor: 'rgba(5,18,28,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(110,215,255,0.42)',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
+    overflow: 'visible',
   },
-  tileHidden: { backgroundColor: 'transparent', borderWidth: 0 },
   tilePressed: { backgroundColor: 'rgba(100,225,255,0.12)' },
-  tileGloss: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    height: '48%',
-    backgroundColor: 'rgba(255,255,255,0.09)',
-  },
   mineSafeHalo: { position: 'absolute', width: 18, height: 18, borderRadius: 9, backgroundColor: '#95F7FF', shadowColor: '#52E8FF', shadowOpacity: 1, shadowRadius: 14 },
-  mineSafeCore: { position: 'absolute', width: 8, height: 8, borderRadius: 4, backgroundColor: '#EDFFFF', borderWidth: 1, borderColor: '#74E8FF', shadowColor: '#9CFBFF', shadowOpacity: 1, shadowRadius: 9 },
   mineBlast: { position: 'absolute', width: 30, height: 30, borderRadius: 15, backgroundColor: '#FFF4A8', shadowColor: '#FF4D21', shadowOpacity: 1, shadowRadius: 24 },
   mineShockwave: { position: 'absolute', width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: '#FFB15B', shadowColor: '#FF4D21', shadowOpacity: 0.9, shadowRadius: 18 },
   mineSpark: { position: 'absolute', width: 5, height: 5, borderRadius: 3, backgroundColor: '#FFE27A', shadowColor: '#FF5C28', shadowOpacity: 1, shadowRadius: 7 },
