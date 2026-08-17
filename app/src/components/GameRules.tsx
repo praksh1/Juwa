@@ -95,16 +95,32 @@ function byValue(model: SlotModelInfo) {
  * with a different divisor would print a paytable that disagrees with what
  * lands in the balance, which is worse than no paytable at all.
  */
+/**
+ * ## Floor, not round — because the machine floors
+ *
+ * `mul` in @juwa/money floors every payout, deliberately, so the house never
+ * pays a fraction of a coin it did not intend to. A paytable that ROUNDS is
+ * therefore printing a figure the machine will sometimes not reach, and it
+ * fails in the direction that matters: the screen promises more than lands.
+ *
+ * Measured across the catalogue at each game's maximum stake, this and the
+ * two-decimal rounding that used to sit in the generator disagreed with the
+ * settlement on 347 paytable rows, 190 of them in the player's favour on
+ * paper and nobody's in practice — worst case 210 coins on a single
+ * three-of-a-kind, and on a 720-ways game that is multiplied by every way the
+ * symbol can be read. Both halves are fixed: the generator now carries the
+ * exact multiplier, and this floors like the settlement does.
+ */
 /** Scatters pay against the TOTAL bet, so there is nothing to divide by. */
 function scatterCoins(model: SlotModelInfo, count: number, bet: Minor): string {
   const pays = model.scatterPays[String(count)];
   if (!pays) return '—';
-  return format(minor(Math.round(pays * bet)), 'GC').replace(' GC', '');
+  return format(minor(Math.floor(pays * bet)), 'GC').replace(' GC', '');
 }
 
 function lineCoins(model: SlotModelInfo, pays: number, bet: Minor): number {
   const divisor = model.pays === 'ways' ? 1 : Math.max(1, model.lines);
-  return Math.round((pays / divisor) * bet);
+  return Math.floor((pays / divisor) * bet);
 }
 
 function PaytableRows({

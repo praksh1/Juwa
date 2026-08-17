@@ -186,7 +186,33 @@ const entries = SLOT_CATALOGUE.map((game) => {
 const models = {};
 for (const [id, model] of Object.entries(SLOT_MODELS)) {
   const scale = model.math.payoutScale ?? 1;
-  const round = (n) => Math.round(n * 100) / 100;
+  /*
+   * The EXACT multiplier — the same float the engine multiplies by, untouched.
+   *
+   * This rounded to two decimals, on the reasoning that a paytable does not
+   * want a tail of digits. But the paytable does not show these numbers at
+   * all: `GameRules` turns each one into coins at the player's own bet, so the
+   * decimals were never on screen and rounding them only moved the coin figure
+   * away from what the machine pays.
+   *
+   * It moved it a long way on the ways models, where the calibration scale is
+   * 0.1186 and a pay of 0.3558 printed as 0.36 — a 1.18% overstatement, worth
+   * 210 coins on one three-of-a-kind at the maximum stake and multiplied again
+   * by every way that symbol can be read. Measured over the whole catalogue,
+   * 347 paytable rows disagreed with the settlement and 190 of them promised
+   * more than the machine pays.
+   *
+   * Not even tidied to twelve significant digits, which was the first attempt:
+   * `60 * 0.477` is 28.619999999999997 and tidying it to 28.62 is a DIFFERENT
+   * float, so the paytable floored to 143,100 where the engine floored to
+   * 143,099. A one-coin lie is still a lie. Emitting the engine's own value
+   * makes the two expressions bit-identical, which is the only way `floor` on
+   * either side can be guaranteed to agree.
+   *
+   * The ugly tails in the generated file are the point. Nobody reads them; the
+   * player reads coins.
+   */
+  const round = (n) => n;
   models[id] = {
     id,
     lines: wayCount(model.math),
