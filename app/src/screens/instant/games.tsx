@@ -563,6 +563,12 @@ export function DiceScreen() {
   const state = useInstantGame(game);
   const { width: viewportWidth } = useWindowDimensions();
   const wideStage = viewportWidth >= 760;
+  const diceDialSize = wideStage
+    ? 168
+    : Math.min(168, Math.max(144, (viewportWidth - 60) * 0.52));
+  const diceVaultWidth = wideStage
+    ? 280
+    : Math.min(132, Math.max(106, viewportWidth - 60 - diceDialSize - spacing.xs));
   const [target, setTarget] = useState(50);
   const [direction, setDirection] = useState<'over' | 'under'>('over');
   const result = state.round?.state as
@@ -634,14 +640,22 @@ export function DiceScreen() {
         {/* The risk is now a dimensional dial: the active arc says exactly
             which part of the 0–100 space wins without reverting to an old
             spreadsheet-like progress bar. */}
-        <View style={[local.diceStage, wideStage && local.diceStageWide]}>
-          <DiceVault accent={game.accent} rolling={rolling} value={result || rolling ? display : null} wide={wideStage} />
+        <View style={local.diceStage}>
+          <DiceVault
+            accent={game.accent}
+            rolling={rolling}
+            value={result || rolling ? display : null}
+            wide={wideStage}
+            compact={!wideStage}
+            width={diceVaultWidth}
+          />
           <DiceDial
             target={target}
             direction={direction}
             accent={game.accent}
             roll={result || rolling ? display : null}
             won={settled ? result!.won : null}
+            size={diceDialSize}
           />
         </View>
         <Txt variant="bodySmall" color={colors.text.secondary}>
@@ -683,16 +697,17 @@ function DiceDial({
   accent,
   roll,
   won,
+  size = 168,
 }: {
   target: number;
   direction: 'over' | 'under';
   accent: string;
   roll: number | null;
   won: boolean | null;
+  size?: number;
 }) {
-  const size = 168;
   const c = size / 2;
-  const r = 59;
+  const r = size * 0.351;
   const point = (value: number, radius = r) => {
     const degrees = 135 + (value / 100) * 270;
     const angle = (degrees * Math.PI) / 180;
@@ -710,7 +725,7 @@ function DiceDial({
   const rollPoint = roll === null ? null : point(roll, r - 10);
 
   return (
-    <View style={local.diceDialShell}>
+    <View style={[local.diceDialShell, { width: size, height: size, borderRadius: size / 2 }]}>
     <Svg width={size} height={size}>
       <Defs>
         <SvgLinearGradient id="dice-band" x1="0" y1="0" x2="1" y2="1">
@@ -721,7 +736,7 @@ function DiceDial({
       <Circle cx={c} cy={c} r={r} fill="rgba(2,13,8,0.55)" stroke="rgba(221,255,165,0.13)" strokeWidth={18} />
       <Path d={arc(0, 100)} fill="none" stroke="rgba(8,22,12,0.86)" strokeWidth={12} strokeLinecap="round" />
       <Path d={arc(winningFrom, winningTo)} fill="none" stroke="url(#dice-band)" strokeWidth={12} strokeLinecap="round" />
-      <Circle cx={c} cy={c} r={40} fill="rgba(4,23,10,0.88)" stroke="rgba(224,255,185,0.3)" strokeWidth={1} />
+      <Circle cx={c} cy={c} r={size * 0.238} fill="rgba(4,23,10,0.88)" stroke="rgba(224,255,185,0.3)" strokeWidth={1} />
       <Circle cx={targetPoint.x} cy={targetPoint.y} r={5} fill="#FFFBD2" stroke={accent} strokeWidth={2} />
       {rollPoint ? <>
         <Path d={`M${c},${c} L${rollPoint.x},${rollPoint.y}`} stroke={won === null ? '#FFFFFF' : won ? colors.feedback.winBright : colors.feedback.error} strokeWidth={3} strokeLinecap="round" />
@@ -738,7 +753,21 @@ function DiceDial({
 }
 
 /** A glass vault that brings the lobby tile's cut-crystal dice into the game. */
-function DiceVault({ accent, rolling, value, wide = false }: { accent: string; rolling: boolean; value: number | null; wide?: boolean }) {
+function DiceVault({
+  accent,
+  rolling,
+  value,
+  wide = false,
+  compact = false,
+  width,
+}: {
+  accent: string;
+  rolling: boolean;
+  value: number | null;
+  wide?: boolean;
+  compact?: boolean;
+  width?: number;
+}) {
   const turn = useRef(new Animated.Value(0)).current;
   const reduced = usePrefersReducedMotion();
 
@@ -755,19 +784,22 @@ function DiceVault({ accent, rolling, value, wide = false }: { accent: string; r
   }, [rolling, reduced, turn]);
 
   const rotate = turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
-  return <View style={[local.diceVault, wide && local.diceVaultWide]}>
+  return <View style={[local.diceVault, wide && local.diceVaultWide, compact && local.diceVaultCompact, width ? { width } : null]}>
     <Image source={{ uri: '/art/tiles/juwa-dice.png' }} resizeMode="cover" style={StyleSheet.absoluteFill} />
     <LinearGradient colors={['rgba(1,13,2,0.18)', 'rgba(1,8,2,0.54)']} style={StyleSheet.absoluteFill} />
-    <View style={local.diceVaultLabel}><Txt variant="caption" color="#E8FFC4">CRYSTAL ROLL CHAMBER</Txt></View>
-    <Animated.View style={[local.diceCrystal, local.diceCrystalRear, { borderColor: accent, transform: [{ rotate: rotate }, { rotateX: '16deg' }] }]}>
+    <View style={local.diceVaultLabel}><Txt variant="caption" color="#E8FFC4">{compact ? 'CRYSTAL DICE' : 'CRYSTAL ROLL CHAMBER'}</Txt></View>
+    <Animated.View style={[local.diceCrystal, compact ? local.diceCrystalCompactFirst : local.diceCrystalRear, compact && local.diceCrystalCompact, { borderColor: accent, transform: [{ rotate: rotate }, { rotateX: '16deg' }] }]}>
       <LinearGradient colors={['rgba(210,255,137,0.92)', 'rgba(16,111,44,0.78)', 'rgba(2,27,11,0.94)']} style={StyleSheet.absoluteFill} />
       <View style={local.dicePips} pointerEvents="none">{[0, 1, 2, 3].map((pip) => <View key={pip} style={local.dicePip} />)}</View>
     </Animated.View>
-    <Animated.View style={[local.diceCrystal, { borderColor: '#E8FFC4', transform: [{ rotate: rotate }, { rotateY: '18deg' }] }]}>
+    <Animated.View style={[local.diceCrystal, compact && local.diceCrystalCompact, compact && local.diceCrystalCompactSecond, { borderColor: '#E8FFC4', transform: [{ rotate: rotate }, { rotateY: '18deg' }] }]}>
       <LinearGradient colors={['#F4FFD7', '#42C76B', '#073E1A']} style={StyleSheet.absoluteFill} />
       <View style={local.dicePips} pointerEvents="none">{[0, 1, 2, 3, 4].map((pip) => <View key={pip} style={local.dicePip} />)}</View>
     </Animated.View>
-    <View style={local.diceRollReadout}><Txt variant="h2" color="#F4FFD7">{value === null ? 'READY' : value.toFixed(2)}</Txt><Txt variant="caption" color="#C3F78E">ROLL INDEX</Txt></View>
+    <View style={[local.diceRollReadout, compact && local.diceRollReadoutCompact]}>
+      <Txt variant={compact ? 'body' : 'h2'} color="#F4FFD7">{value === null ? 'READY' : value.toFixed(2)}</Txt>
+      {!compact ? <Txt variant="caption" color="#C3F78E">ROLL INDEX</Txt> : null}
+    </View>
   </View>;
 }
 
@@ -979,6 +1011,51 @@ function droppingLabel(step: number, rows: number): string {
 
 const MINE_COUNTS = [1, 3, 5, 10, 24];
 
+/**
+ * The illustrated vault is drawn in perspective, so its five rows are not a
+ * uniform CSS grid. These measurements follow the actual painted cell faces
+ * in the 282-point reference image from the narrow back row to the wider front
+ * row. Keeping interaction and reveal geometry on the same map prevents a
+ * selected tile from appearing beside the cell the player touched.
+ */
+const MINE_TILE_ROWS = [
+  { left: 61.2, top: 111.5, width: 154.2, height: 19.5, gap: 2.0, inset: 2.3 },
+  { left: 59.2, top: 133.0, width: 158.6, height: 20.1, gap: 2.0, inset: 1.9 },
+  { left: 57.0, top: 155.2, width: 163.3, height: 20.8, gap: 2.0, inset: 1.5 },
+  { left: 54.6, top: 178.2, width: 168.4, height: 21.6, gap: 2.0, inset: 1.0 },
+  { left: 52.0, top: 202.1, width: 174.2, height: 22.2, gap: 2.0, inset: 0.5 },
+] as const;
+
+function mineTileGeometry(index: number, scale: number) {
+  const row = Math.floor(index / 5);
+  const column = index % 5;
+  const geometry = MINE_TILE_ROWS[row]!;
+  const bottomCell = (geometry.width - geometry.gap * 4) / 5;
+  const topWidth = geometry.width - geometry.inset * 2;
+  const topGap = geometry.gap * 0.9;
+  const topCell = (topWidth - topGap * 4) / 5;
+  const bottomLeft = geometry.left + column * (bottomCell + geometry.gap);
+  const topLeft = geometry.left + geometry.inset + column * (topCell + topGap);
+  const left = Math.min(bottomLeft, topLeft);
+  const right = Math.max(bottomLeft + bottomCell, topLeft + topCell);
+  const topLeftPercent = ((topLeft - left) / (right - left)) * 100;
+  const topRightPercent = ((topLeft + topCell - left) / (right - left)) * 100;
+  const bottomLeftPercent = ((bottomLeft - left) / (right - left)) * 100;
+  const bottomRightPercent = ((bottomLeft + bottomCell - left) / (right - left)) * 100;
+
+  return {
+    position: 'absolute' as const,
+    left: left * scale,
+    top: geometry.top * scale,
+    width: (right - left) * scale,
+    height: geometry.height * scale,
+    // React Native Web forwards clipPath even though native ViewStyle does not
+    // type it yet. The hit face and its glow therefore share the painted
+    // trapezoid rather than floating as a rectangular overlay.
+    clipPath: `polygon(${topLeftPercent}% 0%, ${topRightPercent}% 0%, ${bottomRightPercent}% 100%, ${bottomLeftPercent}% 100%)`,
+  };
+}
+
 export function MinesScreen() {
   const game = GAMES['mines']!;
   const state = useInstantGame(game);
@@ -1098,13 +1175,7 @@ export function MinesScreen() {
               drawing a second glass grid over this art made every cell look
               doubled and clouded. */}
           <LinearGradient colors={['rgba(1,10,19,0.02)', 'rgba(1,8,17,0.18)']} style={StyleSheet.absoluteFill} />
-          <View style={[local.mineBoard, {
-            left: 53 * mineScale,
-            top: 110 * mineScale,
-            width: 176 * mineScale,
-            height: 115 * mineScale,
-            gap: 2 * mineScale,
-          }]}>
+          <View style={local.mineBoard} pointerEvents="box-none">
           {Array.from({ length: MINES_TILES }, (_, tile) => (
             <MineTile
               key={tile}
@@ -1114,6 +1185,7 @@ export function MinesScreen() {
               disabled={!open || state.busy || tileState(tile) !== 'hidden'}
               onPress={() => state.act({ type: 'reveal', tile })}
               scale={mineScale}
+              geometry={mineTileGeometry(tile, mineScale)}
             />
           ))}
           </View>
@@ -1410,6 +1482,7 @@ function MineTile({
   disabled,
   onPress,
   scale,
+  geometry,
 }: {
   index: number;
   status: 'hidden' | 'safe' | 'mine';
@@ -1417,6 +1490,7 @@ function MineTile({
   disabled: boolean;
   onPress: () => void;
   scale: number;
+  geometry: ReturnType<typeof mineTileGeometry>;
 }) {
   const flip = useRef(new Animated.Value(0)).current;
   const shake = useRef(new Animated.Value(0)).current;
@@ -1474,7 +1548,8 @@ function MineTile({
         accessibilityLabel={`Tile ${index + 1}`}
         style={({ pressed }) => [
           local.tile,
-          { width: 33 * scale, height: 21 * scale, borderRadius: 5 * scale },
+          geometry as never,
+          { borderRadius: 4 * scale },
           status === 'hidden' && local.tileHidden,
           status === 'safe' && { borderColor: '#E9FBFF' },
           status === 'mine' && { borderColor: '#FFD0D0' },
@@ -1538,7 +1613,7 @@ const local = StyleSheet.create({
   },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, width: 5 * 44, justifyContent: 'center' },
   mineVault: { width: 282, height: 282, alignSelf: 'center', borderRadius: radius.lg, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(125,211,252,0.62)', backgroundColor: '#04090E', shadowColor: '#38BDF8', shadowOpacity: 0.45, shadowRadius: 18, shadowOffset: { width: 0, height: 6 } },
-  mineBoard: { position: 'absolute', left: 53, top: 110, width: 176, height: 115, flexDirection: 'row', flexWrap: 'wrap', gap: 2, alignContent: 'space-between', justifyContent: 'center' },
+  mineBoard: { ...StyleSheet.absoluteFillObject },
   tile: {
     // These match the visible cell faces in the vault tile, so the player's
     // finger is opening the illustrated machine rather than a generic grid.
@@ -1597,17 +1672,21 @@ const local = StyleSheet.create({
     transform: [{ rotate: '-20deg' }],
   },
   diceVault: { width: '100%', height: 172, borderRadius: radius.lg, borderWidth: 1, borderColor: 'rgba(190,255,120,0.5)', overflow: 'hidden', alignItems: 'center', justifyContent: 'center', shadowColor: '#76EF42', shadowOpacity: 0.45, shadowRadius: 17, shadowOffset: { width: 0, height: 6 } },
-  diceStage: { width: '100%', gap: spacing.sm, alignItems: 'center' },
-  diceStageWide: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+  diceStage: { width: '100%', flexDirection: 'row', gap: spacing.xs, justifyContent: 'center', alignItems: 'center' },
   diceVaultWide: { width: 280, height: 168 },
+  diceVaultCompact: { height: 168 },
   diceVaultLabel: { position: 'absolute', top: 8, alignSelf: 'center', paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(232,255,196,0.6)', backgroundColor: 'rgba(3,16,4,0.68)' },
   diceDialShell: { width: 168, height: 168, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', borderRadius: 84, borderWidth: 1, borderColor: 'rgba(202,255,146,0.32)', backgroundColor: 'rgba(3,19,8,0.74)', shadowColor: '#A3E635', shadowOpacity: 0.35, shadowRadius: 16, shadowOffset: { width: 0, height: 5 } },
   diceDialReadout: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   diceCrystal: { width: 72, height: 72, borderRadius: 18, borderWidth: 2, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', shadowColor: '#C8FF8F', shadowOpacity: 0.62, shadowRadius: 16, shadowOffset: { width: 0, height: 7 } },
   diceCrystalRear: { position: 'absolute', left: 55, top: 66, opacity: 0.8, transform: [{ rotate: '-18deg' }] },
+  diceCrystalCompact: { width: 46, height: 46, borderRadius: 12 },
+  diceCrystalCompactFirst: { position: 'absolute', left: 10, top: 38, opacity: 0.9 },
+  diceCrystalCompactSecond: { position: 'absolute', right: 10, top: 78 },
   dicePips: { width: 31, height: 31, flexDirection: 'row', flexWrap: 'wrap', gap: 4, justifyContent: 'center', alignItems: 'center' },
   dicePip: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#271709' },
   diceRollReadout: { position: 'absolute', right: spacing.md, bottom: spacing.sm, alignItems: 'flex-end', paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.sm, borderWidth: 1, borderColor: 'rgba(226,255,177,0.62)', backgroundColor: 'rgba(2,17,5,0.72)' },
+  diceRollReadoutCompact: { left: 5, right: 5, bottom: 4, alignItems: 'center', paddingHorizontal: 3, paddingVertical: 2 },
   crashDeck: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.sm, paddingBottom: 3, borderBottomWidth: 1, borderBottomColor: 'rgba(244,190,78,0.28)' },
   crashStatus: { paddingHorizontal: spacing.sm, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(248,201,90,0.52)', backgroundColor: 'rgba(19,8,3,0.56)' },
   crashFlightStage: { width: 292, height: 126, alignSelf: 'center', overflow: 'hidden' },
