@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Animated, Image, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
@@ -142,6 +142,8 @@ const BLACKJACK_RULES: HowToPlayContent = {
 };
 
 export function BlackjackScreen() {
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
+  const compactTable = viewportHeight < 860 || viewportWidth < 440;
   const api = useRef<PlayApi>(createPlayApi()).current;
 
   /*
@@ -309,7 +311,7 @@ export function BlackjackScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, compactTable && styles.contentCompact]} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <View>
           <Txt variant="caption" color={colors.text.muted}>
@@ -333,7 +335,7 @@ export function BlackjackScreen() {
       </View>
 
       <View
-        style={styles.table}
+        style={[styles.table, compactTable && styles.tableCompact]}
         onLayout={(event) =>
           setTableSize({
             width: event.nativeEvent.layout.width,
@@ -378,7 +380,7 @@ export function BlackjackScreen() {
         </View>
 
         {/* Dealer */}
-        <View style={styles.seat}>
+        <View style={[styles.seat, compactTable && styles.seatCompact]}>
           <View style={styles.seatLabel}>
             <Txt variant="caption" color="#C9A95D">
               DEALER
@@ -387,7 +389,7 @@ export function BlackjackScreen() {
           <View style={styles.cards}>
             {table ? (
               table.dealer.map((card, i) => (
-                <PlayingCard key={`d-${i}`} rank={card.rank} suit={card.suit} index={i} />
+                <PlayingCard key={`d-${i}`} rank={card.rank} suit={card.suit} index={i} size={compactTable ? 'small' : 'normal'} />
               ))
             ) : (
               <Txt variant="bodySmall" color={colors.text.muted}>
@@ -397,7 +399,7 @@ export function BlackjackScreen() {
             {/* Before the reveal the hole card is not in `dealer` at all — the
                 server never sent it. This is a placeholder, not a hidden value. */}
             {table && !table.dealerRevealed ? (
-              <PlayingCard rank="?" suit="S" hidden index={1} />
+              <PlayingCard rank="?" suit="S" hidden index={1} size={compactTable ? 'small' : 'normal'} />
             ) : null}
             {table?.dealerRevealed && dealerValue ? (
               <View style={styles.handTotalBadge}>
@@ -418,7 +420,7 @@ export function BlackjackScreen() {
             return (
               <View
                 key={`h-${handIndex}`}
-                style={[styles.seat, active && styles.seatActive]}
+                style={[styles.seat, compactTable && styles.seatCompact, active && styles.seatActive]}
               >
                 <View style={styles.seatLabel}>
             <Txt variant="caption" color={active ? '#FFE89B' : '#C9A95D'}>
@@ -434,7 +436,7 @@ export function BlackjackScreen() {
                       rank={card.rank}
                       suit={card.suit}
                       index={i}
-                      size={table.hands.length > 1 ? 'small' : 'normal'}
+                      size={compactTable || table.hands.length > 1 ? 'small' : 'normal'}
                     />
                   ))}
                   <View style={styles.handTotalBadge}>
@@ -461,7 +463,7 @@ export function BlackjackScreen() {
             );
           })
         ) : (
-          <View style={styles.seat}>
+          <View style={[styles.seat, compactTable && styles.seatCompact]}>
             <Txt variant="bodySmall" color={colors.text.muted}>
               Pick a bet and deal.
             </Txt>
@@ -487,7 +489,7 @@ export function BlackjackScreen() {
 
       {/* The betting rail is deliberately outside the scroll view. A player
           should never lose their stake chips after a hand settles. */}
-      <View style={styles.tableDock}>
+      <View style={[styles.tableDock, compactTable && styles.tableDockCompact]}>
       {settled ? (
         <View style={styles.payoutReadout}>
           <Txt variant="caption" color="#CBA75A">LAST HAND</Txt>
@@ -498,7 +500,7 @@ export function BlackjackScreen() {
       ) : null}
       {/* Bet selection is only meaningful between hands. */}
       {!inHand ? (
-        <View style={styles.betRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.betRow}>
           {options.map((option) => {
             const active = option === bet;
             const affordable = option <= balance;
@@ -520,7 +522,7 @@ export function BlackjackScreen() {
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
       ) : null}
 
       {inHand ? (
@@ -556,6 +558,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface.base,
   },
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: 190 },
+  contentCompact: { paddingHorizontal: spacing.sm, paddingTop: spacing.sm, gap: spacing.sm, paddingBottom: 150 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   rtpPill: {
     paddingHorizontal: spacing.md,
@@ -579,6 +582,7 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     shadowOffset: { width: 0, height: 6 },
   },
+  tableCompact: { padding: spacing.md, gap: spacing.sm, borderRadius: 18 },
   tableArtwork: { ...StyleSheet.absoluteFillObject, opacity: 0.16 },
   tableRail: { ...StyleSheet.absoluteFillObject, borderRadius: 20, borderWidth: 8, borderColor: 'rgba(29,14,4,0.76)' },
   tableRailInner: { flex: 1, margin: 5, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,225,133,0.72)' },
@@ -587,6 +591,7 @@ const styles = StyleSheet.create({
   tablePlaque: { alignSelf: 'center', paddingHorizontal: 14, paddingVertical: 5, borderRadius: 3, borderWidth: 1, borderColor: 'rgba(255,218,116,0.62)', backgroundColor: 'rgba(8,12,16,0.66)' },
   feltSheen: { position: 'absolute', left: 0, right: 0, top: 0, height: '30%' },
   seat: { gap: spacing.sm, minHeight: 96 },
+  seatCompact: { gap: 4, minHeight: 72 },
   seatActive: {
     borderLeftWidth: 3,
     borderLeftColor: colors.gold.default,
@@ -598,7 +603,7 @@ const styles = StyleSheet.create({
   cards: { flexDirection: 'row', alignItems: 'center', paddingRight: spacing.lg, minHeight: 74 },
   handTotalBadge: { minWidth: 54, minHeight: 54, marginLeft: spacing.md, paddingHorizontal: spacing.xs, borderRadius: 27, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(9,12,17,0.84)', borderWidth: 2, borderColor: '#C9A95D', shadowColor: '#F7CA62', shadowOpacity: 0.42, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } },
   divider: { height: 1, backgroundColor: 'rgba(255,221,137,0.38)' },
-  betRow: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'center', flexWrap: 'wrap' },
+  betRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
   chip: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
@@ -615,5 +620,6 @@ const styles = StyleSheet.create({
   actionButton: { flexGrow: 1, minWidth: 100 },
   deal: { minHeight: 56 },
   tableDock: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.md, gap: spacing.sm, backgroundColor: '#0B0C14', borderTopWidth: 1, borderTopColor: '#886522' },
+  tableDockCompact: { paddingHorizontal: spacing.sm, paddingTop: 5, paddingBottom: spacing.sm, gap: 5 },
   payoutReadout: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.sm },
 });

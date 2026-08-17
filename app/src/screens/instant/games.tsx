@@ -9,8 +9,8 @@
  * with. Nothing here computes an outcome.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Image, PanResponder, Pressable, StyleSheet, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Easing, Image, PanResponder, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, {
   Circle,
@@ -152,9 +152,16 @@ export function CrashScreen() {
 
   return (
     <InstantLayout game={game} state={state}
+      dockControl={<DockChoices choices={CRASH_TARGETS.map((option) => ({ key: `${option}`, label: `${option}×`, selected: option === target, onPress: () => setTarget(option), colour: game.accent }))} />}
       action={
           <PlayButton
-            label={state.busy || running ? 'Climbing…' : `Bet ${format(state.bet, 'GC')}`}
+            label={state.busy || running
+              ? 'Climbing…'
+              : result
+                ? won
+                  ? `${result.crashPoint.toFixed(2)}× · WON ${format(minor(state.round!.settlement?.payout ?? 0), 'GC')}`
+                  : `${result.crashPoint.toFixed(2)}× · BET AGAIN`
+                : `Bet ${format(state.bet, 'GC')}`}
             onPress={() => void play()}
             disabled={state.busy || running}
             colour={game.accent}
@@ -177,6 +184,7 @@ export function CrashScreen() {
           progress={Math.min(1, (shown - 1) / Math.max(0.6, target * 1.6 - 1))}
           accent={game.accent}
           crashed={!running && !!result && !won}
+          running={running}
         />
         <Txt
           variant="h2"
@@ -192,11 +200,6 @@ export function CrashScreen() {
         >
           {shown.toFixed(2)}×
         </Txt>
-
-        <Txt variant="caption" color={colors.text.muted}>
-          CASH OUT AT
-        </Txt>
-        <TargetPicker values={CRASH_TARGETS} value={target} onChange={setTarget} colour={game.accent} />
 
         <View style={shell.result}>
           {running ? (
@@ -302,10 +305,12 @@ function CrashFlight({
   progress,
   accent,
   crashed,
+  running,
 }: {
   progress: number;
   accent: string;
   crashed: boolean;
+  running: boolean;
 }) {
   const W = 292;
   const H = 126;
@@ -336,8 +341,46 @@ function CrashFlight({
       style={[local.crashAircraft, { left: x - 67, top: y - 47, opacity: crashed ? 0.42 : 1 }]}
       accessibilityElementsHidden
     />
+    {running ? <CrashExhaust x={x} y={y} /> : null}
     </View>
   );
+}
+
+/** Layered blue-core/orange-tail exhaust that keeps burning at the ceiling. */
+function CrashExhaust({ x, y }: { x: number; y: number }) {
+  const pulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 1, duration: 110, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0, duration: 95, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+  const stretch = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1.28] });
+  return <Animated.View pointerEvents="none" style={[local.crashExhaust, { left: x - 69, top: y + 12, transform: [{ rotate: '-22deg' }, { scaleX: stretch }] }]}>
+    <LinearGradient colors={['#E9FFFF', '#56D9FF', '#FFB137', 'rgba(255,65,24,0)']} start={{ x: 1, y: .5 }} end={{ x: 0, y: .5 }} style={StyleSheet.absoluteFill} />
+    <View style={local.crashExhaustCore} />
+  </Animated.View>;
+}
+
+/** One-height choice rail that remains pinned beside the stake/action dock. */
+function DockChoices({
+  choices,
+}: {
+  choices: { key: string; label: string; selected: boolean; onPress: () => void; colour: string }[];
+}) {
+  return <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={local.dockChoices}>
+    {choices.map((choice) => <Pressable
+      key={choice.key}
+      onPress={() => { sounds.tap(); choice.onPress(); }}
+      accessibilityRole="button"
+      accessibilityState={{ selected: choice.selected }}
+      style={[local.dockChoice, choice.selected && { backgroundColor: choice.colour, borderColor: choice.colour }]}
+    >
+      <Txt variant="caption" color={choice.selected ? colors.surface.base : colors.text.secondary}>{choice.label}</Txt>
+    </Pressable>)}
+  </ScrollView>;
 }
 
 // ------------------------------------------------------------------- limbo
@@ -381,9 +424,16 @@ export function LimboScreen() {
 
   return (
     <InstantLayout game={game} state={state}
+      dockControl={<DockChoices choices={LIMBO_TARGETS.map((option) => ({ key: `${option}`, label: `${option}×`, selected: option === target, onPress: () => setTarget(option), colour: game.accent }))} />}
       action={
           <PlayButton
-            label={state.busy || rolling ? 'Drawing…' : `Bet ${format(state.bet, 'GC')}`}
+            label={state.busy || rolling
+              ? 'Drawing…'
+              : settled
+                ? result!.won
+                  ? `${result!.result.toFixed(2)}× · WON ${format(minor(state.round!.settlement?.payout ?? 0), 'GC')}`
+                  : `${result!.result.toFixed(2)}× · BET AGAIN`
+                : `Bet ${format(state.bet, 'GC')}`}
             onPress={() => void play()}
             disabled={state.busy || rolling}
             colour={game.accent}
@@ -426,8 +476,6 @@ export function LimboScreen() {
             </Txt>
           </View>
         </View>
-
-        <TargetPicker values={LIMBO_TARGETS} value={target} onChange={setTarget} colour={game.accent} />
 
         <View style={shell.result}>
           {rolling ? (
@@ -513,6 +561,8 @@ const DICE_TARGETS = [10, 25, 50, 75, 90];
 export function DiceScreen() {
   const game = GAMES['dice']!;
   const state = useInstantGame(game);
+  const { width: viewportWidth } = useWindowDimensions();
+  const wideStage = viewportWidth >= 760;
   const [target, setTarget] = useState(50);
   const [direction, setDirection] = useState<'over' | 'under'>('over');
   const result = state.round?.state as
@@ -557,9 +607,19 @@ export function DiceScreen() {
 
   return (
     <InstantLayout game={game} state={state}
+      dockControl={<DockChoices choices={[
+        ...(['under', 'over'] as const).map((option) => ({ key: option, label: option.toUpperCase(), selected: option === direction, onPress: () => setDirection(option), colour: game.accent })),
+        ...DICE_TARGETS.map((option) => ({ key: `${option}`, label: `${option}`, selected: option === target, onPress: () => setTarget(option), colour: game.accent })),
+      ]} />}
       action={
           <PlayButton
-            label={state.busy || rolling ? 'Rolling…' : `Bet ${format(state.bet, 'GC')}`}
+            label={state.busy || rolling
+              ? 'Rolling…'
+              : settled
+                ? result!.won
+                  ? `${result!.roll.toFixed(2)} · WON ${format(minor(state.round!.settlement?.payout ?? 0), 'GC')}`
+                  : `${result!.roll.toFixed(2)} · BET AGAIN`
+                : `Bet ${format(state.bet, 'GC')}`}
             onPress={() => void play()}
             disabled={state.busy || rolling || !quote.legal}
             colour={game.accent}
@@ -574,37 +634,16 @@ export function DiceScreen() {
         {/* The risk is now a dimensional dial: the active arc says exactly
             which part of the 0–100 space wins without reverting to an old
             spreadsheet-like progress bar. */}
-        <DiceVault accent={game.accent} rolling={rolling} value={result || rolling ? display : null} />
-        <DiceDial
-          target={target}
-          direction={direction}
-          accent={game.accent}
-          roll={result || rolling ? display : null}
-          won={settled ? result!.won : null}
-        />
-
-        <View style={local.row}>
-          {(['under', 'over'] as const).map((option) => (
-            <Pressable
-              key={option}
-              onPress={() => {
-                sounds.tap();
-                setDirection(option);
-              }}
-              accessibilityRole="button"
-              accessibilityState={{ selected: direction === option }}
-              style={[local.toggle, direction === option && { backgroundColor: game.accent }]}
-            >
-              <Txt
-                variant="bodySmall"
-                color={direction === option ? colors.surface.base : colors.text.secondary}
-              >
-                {option.toUpperCase()}
-              </Txt>
-            </Pressable>
-          ))}
+        <View style={[local.diceStage, wideStage && local.diceStageWide]}>
+          <DiceVault accent={game.accent} rolling={rolling} value={result || rolling ? display : null} wide={wideStage} />
+          <DiceDial
+            target={target}
+            direction={direction}
+            accent={game.accent}
+            roll={result || rolling ? display : null}
+            won={settled ? result!.won : null}
+          />
         </View>
-        <TargetPicker values={DICE_TARGETS} value={target} onChange={setTarget} colour={game.accent} suffix="" />
         <Txt variant="bodySmall" color={colors.text.secondary}>
           {quote.legal
             ? `${direction.toUpperCase()} ${target} · pays ${quote.multiplier}×`
@@ -699,7 +738,7 @@ function DiceDial({
 }
 
 /** A glass vault that brings the lobby tile's cut-crystal dice into the game. */
-function DiceVault({ accent, rolling, value }: { accent: string; rolling: boolean; value: number | null }) {
+function DiceVault({ accent, rolling, value, wide = false }: { accent: string; rolling: boolean; value: number | null; wide?: boolean }) {
   const turn = useRef(new Animated.Value(0)).current;
   const reduced = usePrefersReducedMotion();
 
@@ -716,7 +755,7 @@ function DiceVault({ accent, rolling, value }: { accent: string; rolling: boolea
   }, [rolling, reduced, turn]);
 
   const rotate = turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
-  return <View style={local.diceVault}>
+  return <View style={[local.diceVault, wide && local.diceVaultWide]}>
     <Image source={{ uri: '/art/tiles/juwa-dice.png' }} resizeMode="cover" style={StyleSheet.absoluteFill} />
     <LinearGradient colors={['rgba(1,13,2,0.18)', 'rgba(1,8,2,0.54)']} style={StyleSheet.absoluteFill} />
     <View style={local.diceVaultLabel}><Txt variant="caption" color="#E8FFC4">CRYSTAL ROLL CHAMBER</Txt></View>
@@ -748,8 +787,10 @@ const PEG_PITCH = 8;
 export function PlinkoScreen() {
   const game = GAMES['plinko']!;
   const state = useInstantGame(game);
+  const { width: viewportWidth } = useWindowDimensions();
   const [rows, setRows] = useState<PlinkoRows>(12);
   const [risk, setRisk] = useState<PlinkoRisk>('medium');
+  const [revealedRoundId, setRevealedRoundId] = useState<string | null>(null);
   const result = state.round?.state as
     | { path: ('L' | 'R')[]; bucket: number; multiplier: number }
     | undefined;
@@ -763,21 +804,35 @@ export function PlinkoScreen() {
   const { step, dropping, drop } = useDrop();
 
   const play = async () => {
+    setRevealedRoundId(null);
     const round = await state.play({ type: 'drop', rows, risk });
     const path = (round?.state as { path: ('L' | 'R')[] } | undefined)?.path;
-    if (path) drop(path.length, () => reveal(round));
+    if (path) drop(path.length, () => {
+      setRevealedRoundId(round?.roundId ?? null);
+      reveal(round);
+    });
     else reveal(round);
   };
 
   // The bucket only lights up once the ball has arrived in it. Lighting it on
   // the response would answer the question the fall is asking.
-  const landedBucket = !dropping && result ? result.bucket : null;
+  const presentationComplete = !!state.round && state.round.roundId === revealedRoundId;
+  const landedBucket = presentationComplete && result ? result.bucket : null;
+  const boardWidth = viewportWidth >= 760 ? 420 : Math.min(300, viewportWidth - 36);
 
   return (
     <InstantLayout game={game} state={state}
+      dockControl={<DockChoices choices={[
+        ...PLINKO_ROWS.map((option) => ({ key: `rows-${option}`, label: `${option} ROWS`, selected: rows === option, onPress: () => setRows(option), colour: game.accent })),
+        ...RISKS.map((option) => ({ key: option, label: option.toUpperCase(), selected: risk === option, onPress: () => setRisk(option), colour: game.accent })),
+      ]} />}
       action={
           <PlayButton
-            label={state.busy || dropping ? 'Dropping…' : `Drop ${format(state.bet, 'GC')}`}
+            label={state.busy || dropping
+              ? 'Dropping…'
+              : presentationComplete && result
+                ? `${result.multiplier}× · WON ${format(minor(state.round?.settlement?.payout ?? 0), 'GC')}`
+                : `Drop ${format(state.bet, 'GC')}`}
             onPress={() => void play()}
             disabled={state.busy || dropping}
             colour={game.accent}
@@ -793,52 +848,11 @@ export function PlinkoScreen() {
           rows={rows}
           path={result?.path}
           accent={game.accent}
-          step={dropping ? step : result ? rows : 0}
+          step={dropping ? step : presentationComplete ? rows : 0}
           landedBucket={landedBucket}
-          outcome={result ? { multiplier: result.multiplier, payout: state.round?.settlement?.payout ?? 0 } : undefined}
+          outcome={presentationComplete && result ? { multiplier: result.multiplier, payout: state.round?.settlement?.payout ?? 0 } : undefined}
+          width={boardWidth}
         />
-        <View style={local.row}>
-          {PLINKO_ROWS.map((option) => (
-            <Pressable
-              key={option}
-              onPress={() => {
-                sounds.tap();
-                setRows(option);
-              }}
-              accessibilityRole="button"
-              accessibilityState={{ selected: rows === option }}
-              style={[local.target, rows === option && { backgroundColor: game.accent }]}
-            >
-              <Txt
-                variant="caption"
-                color={rows === option ? colors.surface.base : colors.text.secondary}
-              >
-                {option}
-              </Txt>
-            </Pressable>
-          ))}
-        </View>
-        <View style={local.row}>
-          {RISKS.map((option) => (
-            <Pressable
-              key={option}
-              onPress={() => {
-                sounds.tap();
-                setRisk(option);
-              }}
-              accessibilityRole="button"
-              accessibilityState={{ selected: risk === option }}
-              style={[local.toggle, risk === option && { backgroundColor: game.accent }]}
-            >
-              <Txt
-                variant="caption"
-                color={risk === option ? colors.surface.base : colors.text.secondary}
-              >
-                {option.toUpperCase()}
-              </Txt>
-            </Pressable>
-          ))}
-        </View>
       </Board>
     </InstantLayout>
   );
@@ -909,6 +923,7 @@ function PlinkoVault({
   step,
   landedBucket,
   outcome,
+  width,
 }: {
   rows: number;
   path?: ('L' | 'R')[];
@@ -917,10 +932,10 @@ function PlinkoVault({
   step: number;
   landedBucket: number | null;
   outcome?: { multiplier: number; payout: number };
+  width: number;
 }) {
-  const width = 300;
-  const height = 202;
-  const gap = 16;
+  const height = Math.round(width * 0.68);
+  const gap = width / 18.75;
   // The path is truncated to the bounces the player has actually seen.
   const shown = path ? path.slice(0, Math.max(0, step)) : [];
   let x = width / 2;
@@ -929,9 +944,9 @@ function PlinkoVault({
       x += (shown[r] === 'R' ? 0.5 : -0.5) * gap;
     }
   }
-  const y = 28 + Math.min(rows, shown.length) * 12;
+  const y = height * 0.14 + Math.min(rows, shown.length) * ((height * 0.72) / Math.max(rows, 1));
 
-  return <View style={[local.plinkoVault, { height }]}>
+  return <View style={[local.plinkoVault, { width, height }]}>
     <Image source={{ uri: '/art/tiles/juwa-plinko.png' }} resizeMode="cover" style={StyleSheet.absoluteFill} />
     <LinearGradient colors={['rgba(19,2,26,0.08)', 'rgba(12,0,20,0.38)']} style={StyleSheet.absoluteFill} />
     <View style={local.plinkoGlass} pointerEvents="none" />
@@ -958,7 +973,10 @@ const MINE_COUNTS = [1, 3, 5, 10, 24];
 export function MinesScreen() {
   const game = GAMES['mines']!;
   const state = useInstantGame(game);
+  const { width: viewportWidth } = useWindowDimensions();
   const [mines, setMines] = useState(3);
+  const mineSize = viewportWidth >= 760 ? 390 : Math.min(260, viewportWidth - 40);
+  const mineScale = mineSize / 282;
 
   const board = state.round?.state as
     | {
@@ -1018,6 +1036,13 @@ export function MinesScreen() {
 
   return (
     <InstantLayout game={game} state={state} stakeLocked={open}
+      dockControl={!open ? <DockChoices choices={MINE_COUNTS.map((option) => ({
+        key: String(option),
+        label: `${option} ${option === 1 ? 'MINE' : 'MINES'}`,
+        selected: mines === option,
+        onPress: () => setMines(option),
+        colour: game.accent,
+      }))} /> : undefined}
       action={
         open ? (
           <PlayButton
@@ -1032,7 +1057,13 @@ export function MinesScreen() {
           />
         ) : (
           <PlayButton
-            label={state.busy ? 'Dealing…' : `Bet ${format(state.bet, 'GC')}`}
+            label={state.busy
+              ? 'Dealing…'
+              : settled
+                ? board?.bust
+                  ? `MINE HIT · BET ${format(state.bet, 'GC')}`
+                  : `WON ${format(minor(state.round?.settlement?.payout ?? 0), 'GC')} · BET AGAIN`
+                : `Bet ${format(state.bet, 'GC')}`}
             onPress={() => void state.play({ type: 'configure', mines })}
             disabled={state.busy}
             colour={game.accent}
@@ -1046,13 +1077,19 @@ export function MinesScreen() {
           <Txt variant="caption" color="#C6F7FF">DEEP VAULT · CLEAR THE GRID</Txt>
           <Txt variant="caption" color="#71DFFF">{open ? 'ARMED' : 'STANDBY'}</Txt>
         </View>
-        <View style={local.mineVault}>
+        <View style={[local.mineVault, { width: mineSize, height: mineSize }]}>
           <Image source={{ uri: '/art/tiles/juwa-mines.png' }} resizeMode="contain" style={StyleSheet.absoluteFill} />
           {/* The tile is not wallpaper: its illustrated twenty-five-cell vault
               is the actual playfield.  The transparent hit faces sit on that
               machinery and light up only when the server opens a cell. */}
           <LinearGradient colors={['rgba(1,10,19,0.02)', 'rgba(1,8,17,0.18)']} style={StyleSheet.absoluteFill} />
-          <View style={local.mineBoard}>
+          <View style={[local.mineBoard, {
+            left: 53 * mineScale,
+            top: 110 * mineScale,
+            width: 176 * mineScale,
+            height: 115 * mineScale,
+            gap: 2 * mineScale,
+          }]}>
           {Array.from({ length: MINES_TILES }, (_, tile) => (
             <MineTile
               key={tile}
@@ -1061,9 +1098,11 @@ export function MinesScreen() {
               accent={game.accent}
               disabled={!open || state.busy || tileState(tile) !== 'hidden'}
               onPress={() => state.act({ type: 'reveal', tile })}
+              scale={mineScale}
             />
           ))}
           </View>
+          {bust ? <MineDetonation key={state.round?.roundId} /> : null}
         </View>
 
         {open ? (
@@ -1072,29 +1111,9 @@ export function MinesScreen() {
               ? `Cash out at ${board!.multiplier}× · next ${board!.nextMultiplier}×`
               : `First pick pays ${board!.nextMultiplier}×`}
           </Txt>
-        ) : (
-          <>
-            {/*
-              No "MINES" caption above the picker.
-
-              The line underneath already names what the number means, and on
-              the tallest board in the app a redundant label costs twenty
-              points that the Bet button needs. A caption that repeats the
-              sentence below it is the first thing to go.
-            */}
-            <TargetPicker
-              values={MINE_COUNTS}
-              value={mines}
-              onChange={setMines}
-              colour={game.accent}
-              suffix=""
-            />
-            <Txt variant="bodySmall" color={colors.text.secondary}>
-              {mines} {mines === 1 ? 'mine' : 'mines'} · first pick pays{' '}
-              {minesMultiplier(mines, 1)}×
-            </Txt>
-          </>
-        )}
+        ) : !settled ? <Txt variant="bodySmall" color={colors.text.secondary}>
+          {mines} {mines === 1 ? 'mine' : 'mines'} · first pick pays {minesMultiplier(mines, 1)}×
+        </Txt> : null}
 
         {/* Rendered only when there is something to say. Everywhere else in
             the other instant games the readout carries a hint line and so reserving its
@@ -1195,6 +1214,8 @@ function ScratchCard({
   const marks = useRef(new Set<number>());
   const previous = useRef<{ x: number; y: number } | null>(null);
   const serial = useRef(0);
+  const surface = useRef<View | null>(null);
+  const origin = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     setScratched(0);
@@ -1206,10 +1227,10 @@ function ScratchCard({
   }, [ticketId]);
 
   useEffect(() => {
-    // Five zones plus a real sweep across the foil prevent a single tap from
-    // opening a card while keeping the last few strokes satisfying rather than
-    // making the player scrub every empty pixel.
-    if (scratched < 5 || points.length < 12 || announced.current) return;
+    // Crossing all three prize windows with a real stroke reveals the card.
+    // Requiring arbitrary rows made a naturally horizontal scratch look
+    // complete while the game still refused to settle.
+    if (scratched < 3 || points.length < 10 || announced.current) return;
     announced.current = true;
     onReveal();
   }, [scratched, points.length, onReveal]);
@@ -1226,11 +1247,30 @@ function ScratchCard({
     setPoints((current) => [...current.slice(-150), point]);
     setDust((current) => [...current.slice(-22), point]);
     const column = Math.max(0, Math.min(2, Math.floor((x - 12) / 86)));
-    const row = y < 67 ? 0 : 1;
-    marks.current.add(row * 3 + column);
+    marks.current.add(column);
     setScratched(marks.current.size);
     sounds.scratch();
   };
+
+  const measureSurface = useCallback(() => {
+    surface.current?.measureInWindow((x, y) => {
+      origin.current = { x, y };
+    });
+  }, []);
+
+  const scratchEvent = useCallback((event: { nativeEvent: { pageX?: number; pageY?: number; locationX: number; locationY: number } }) => {
+    const native = event.nativeEvent;
+    let x = typeof native.pageX === 'number' ? native.pageX - origin.current.x : native.locationX;
+    let y = typeof native.pageY === 'number' ? native.pageY - origin.current.y : native.locationY;
+    // Browser page coordinates and measureInWindow coordinates differ when a
+    // document has already scrolled. In that case the root-local coordinates
+    // are the reliable pair (all visual children ignore pointer events).
+    if ((x < 0 || x > 282 || y < 0 || y > 138) && native.locationX >= 0 && native.locationX <= 282) {
+      x = native.locationX;
+      y = native.locationY;
+    }
+    scratchAt(x, y);
+  }, [ticket, revealed]);
 
   const scratchPan = useMemo(
     () =>
@@ -1239,32 +1279,32 @@ function ScratchCard({
         onStartShouldSetPanResponderCapture: () => !!ticket && !revealed,
         onMoveShouldSetPanResponder: () => !!ticket && !revealed,
         onMoveShouldSetPanResponderCapture: () => !!ticket && !revealed,
-        onPanResponderGrant: (event) => {
-          scratchAt(event.nativeEvent.locationX, event.nativeEvent.locationY);
-        },
-        onPanResponderMove: (event) => {
-          scratchAt(event.nativeEvent.locationX, event.nativeEvent.locationY);
-        },
+        onPanResponderGrant: scratchEvent,
+        onPanResponderMove: scratchEvent,
+        onPanResponderRelease: () => { previous.current = null; },
+        onPanResponderTerminate: () => { previous.current = null; },
         // The scratch surface owns the drag. Without this, Safari hands a
         // vertical stroke to the page and the player scrolls instead of
         // scraping the foil.
         onPanResponderTerminationRequest: () => false,
         onShouldBlockNativeResponder: () => true,
       }),
-    [ticket, revealed],
+    [ticket, revealed, scratchEvent],
   );
 
   const prizes = ticket?.prizes ?? [0, 0, 0];
   return (
-    <Pressable
-      style={local.scratchCard}
-      disabled={!ticket || revealed}
+    <View
+      ref={surface}
+      collapsable={false}
+      onLayout={measureSurface}
+      style={[local.scratchCard, { touchAction: 'none', userSelect: 'none' } as any]}
       {...scratchPan.panHandlers}
       accessibilityRole="button"
       accessibilityLabel={revealed ? 'Prize revealed' : 'Rub across the gold foil to scratch the prize windows'}
     >
-      <LinearGradient colors={['#FFF4BE', '#C98B16', '#4A1607']} style={StyleSheet.absoluteFill} />
-      <View style={local.scratchInner}>
+      <LinearGradient pointerEvents="none" colors={['#FFF4BE', '#C98B16', '#4A1607']} style={StyleSheet.absoluteFill} />
+      <View pointerEvents="none" style={local.scratchInner}>
         {prizes.map((prize, index) => <View key={index} style={local.scratchPrize}>
           <Txt variant="h2" color="#2B1605">{prize > 0 ? `${prize}×` : '—'}</Txt>
         </View>)}
@@ -1287,8 +1327,28 @@ function ScratchCard({
       </Svg> : null}
       {!revealed ? dust.map((flake) => <ScratchFlake key={flake.id} x={flake.x} y={flake.y} id={flake.id} />) : null}
       {!revealed ? <Txt variant="caption" color="#FFF6CF" style={local.scratchInstruction}>RUB THE GOLD FOIL TO REVEAL</Txt> : null}
-    </Pressable>
+    </View>
   );
+}
+
+function MineDetonation() {
+  const blast = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(blast, { toValue: 1, duration: 1150, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [blast]);
+  return <View pointerEvents="none" style={local.detonationLayer}>
+    <Animated.View style={[local.detonationFlash, { opacity: blast.interpolate({ inputRange: [0, 0.08, 0.35, 1], outputRange: [0, 1, 0.45, 0] }), transform: [{ scale: blast.interpolate({ inputRange: [0, 1], outputRange: [0.15, 3.5] }) }] }]} />
+    {[0, 1, 2, 3, 4].map((index) => <Animated.View key={index} style={[local.detonationSmoke, {
+      left: `${34 + index * 8}%`,
+      opacity: blast.interpolate({ inputRange: [0, 0.2, 0.75, 1], outputRange: [0, 0.78, 0.58, 0] }),
+      transform: [
+        { translateX: (index - 2) * 13 },
+        { translateY: blast.interpolate({ inputRange: [0, 1], outputRange: [18, -92 - index * 7] }) },
+        { scale: blast.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1.9 + index * 0.12] }) },
+      ],
+    }]} />)}
+    <Animated.View style={[local.detonationRing, { opacity: blast.interpolate({ inputRange: [0, 0.18, 0.65], outputRange: [0, 1, 0] }), transform: [{ scale: blast.interpolate({ inputRange: [0, 0.7], outputRange: [0.1, 3.8] }) }] }]} />
+  </View>;
 }
 
 /** Small foil flakes trail away from every actual scratch point. */
@@ -1325,12 +1385,14 @@ function MineTile({
   accent,
   disabled,
   onPress,
+  scale,
 }: {
   index: number;
   status: 'hidden' | 'safe' | 'mine';
   accent: string;
   disabled: boolean;
   onPress: () => void;
+  scale: number;
 }) {
   const flip = useRef(new Animated.Value(0)).current;
   const shake = useRef(new Animated.Value(0)).current;
@@ -1388,6 +1450,7 @@ function MineTile({
         accessibilityLabel={`Tile ${index + 1}`}
         style={({ pressed }) => [
           local.tile,
+          { width: 33 * scale, height: 21 * scale, borderRadius: 5 * scale },
           status === 'safe' && { borderColor: '#E9FBFF' },
           status === 'mine' && { borderColor: '#FFD0D0' },
           pressed && status === 'hidden' && local.tilePressed,
@@ -1428,6 +1491,8 @@ function MineTile({
 const local = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', justifyContent: 'center' },
   winReadout: { alignItems: 'center', gap: 2, paddingVertical: 2 },
+  dockChoices: { flexDirection: 'row', gap: 6, paddingHorizontal: 2, alignItems: 'center' },
+  dockChoice: { minHeight: 32, minWidth: 64, paddingHorizontal: 10, borderRadius: 11, borderWidth: 1, borderColor: '#3A3446', backgroundColor: '#15131D', alignItems: 'center', justifyContent: 'center' },
   targets: { flexDirection: 'row', gap: spacing.xs, flexWrap: 'wrap', justifyContent: 'center' },
   target: {
     minHeight: 44,
@@ -1478,6 +1543,10 @@ const local = StyleSheet.create({
   mineShockwave: { position: 'absolute', width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: '#FFB15B', shadowColor: '#FF4D21', shadowOpacity: 0.9, shadowRadius: 18 },
   mineSpark: { position: 'absolute', width: 5, height: 5, borderRadius: 3, backgroundColor: '#FFE27A', shadowColor: '#FF5C28', shadowOpacity: 1, shadowRadius: 7 },
   mineCore: { position: 'absolute', width: 10, height: 10, borderRadius: 5, backgroundColor: '#FFEF88', shadowColor: '#FF4D21', shadowOpacity: 1, shadowRadius: 10 },
+  detonationLayer: { ...StyleSheet.absoluteFillObject, zIndex: 8, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  detonationFlash: { position: 'absolute', width: 84, height: 84, borderRadius: 42, backgroundColor: '#FFF5B8', shadowColor: '#FF451A', shadowOpacity: 1, shadowRadius: 38 },
+  detonationSmoke: { position: 'absolute', bottom: '30%', width: 46, height: 46, borderRadius: 23, backgroundColor: 'rgba(46,44,48,0.9)', borderWidth: 5, borderColor: 'rgba(255,91,31,0.42)', shadowColor: '#FF531F', shadowOpacity: 0.72, shadowRadius: 18 },
+  detonationRing: { position: 'absolute', width: 68, height: 68, borderRadius: 34, borderWidth: 5, borderColor: '#FFB348', shadowColor: '#FF381C', shadowOpacity: 1, shadowRadius: 24 },
   /** The drawn number in Limbo, given fixed height so the panel cannot jump. */
   limboFace: {
     minHeight: 112,
@@ -1503,6 +1572,9 @@ const local = StyleSheet.create({
     transform: [{ rotate: '-20deg' }],
   },
   diceVault: { width: '100%', height: 172, borderRadius: radius.lg, borderWidth: 1, borderColor: 'rgba(190,255,120,0.5)', overflow: 'hidden', alignItems: 'center', justifyContent: 'center', shadowColor: '#76EF42', shadowOpacity: 0.45, shadowRadius: 17, shadowOffset: { width: 0, height: 6 } },
+  diceStage: { width: '100%', gap: spacing.sm, alignItems: 'center' },
+  diceStageWide: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+  diceVaultWide: { width: 280, height: 168 },
   diceVaultLabel: { position: 'absolute', top: 8, alignSelf: 'center', paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(232,255,196,0.6)', backgroundColor: 'rgba(3,16,4,0.68)' },
   diceDialShell: { width: 168, height: 168, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', borderRadius: 84, borderWidth: 1, borderColor: 'rgba(202,255,146,0.32)', backgroundColor: 'rgba(3,19,8,0.74)', shadowColor: '#A3E635', shadowOpacity: 0.35, shadowRadius: 16, shadowOffset: { width: 0, height: 5 } },
   diceDialReadout: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
@@ -1515,12 +1587,14 @@ const local = StyleSheet.create({
   crashStatus: { paddingHorizontal: spacing.sm, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(248,201,90,0.52)', backgroundColor: 'rgba(19,8,3,0.56)' },
   crashFlightStage: { width: 292, height: 126, alignSelf: 'center', overflow: 'hidden' },
   crashAircraft: { position: 'absolute', width: 134, height: 94 },
+  crashExhaust: { position: 'absolute', width: 54, height: 18, borderRadius: 9, overflow: 'hidden', shadowColor: '#FF672D', shadowOpacity: 1, shadowRadius: 15 },
+  crashExhaustCore: { position: 'absolute', right: 2, top: 5, width: 23, height: 8, borderRadius: 4, backgroundColor: '#F4FFFF', shadowColor: '#FFF4B6', shadowOpacity: 1, shadowRadius: 8 },
   limboHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'center', paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(111,240,244,0.65)', backgroundColor: 'rgba(1,19,29,0.72)' },
   limboSeal: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#67E8F9' },
   limboPulse: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#5EEAD4', shadowColor: '#5EEAD4', shadowOpacity: 1, shadowRadius: 7 },
   diceHeader: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: 'rgba(215,249,157,0.3)', paddingBottom: 5 },
   plinkoHeader: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: 'rgba(245,183,255,0.34)', paddingBottom: 5 },
-  plinkoVault: { width: 300, alignSelf: 'center', overflow: 'hidden', borderRadius: radius.lg, borderWidth: 1, borderColor: 'rgba(245,183,255,0.64)', shadowColor: '#E879F9', shadowOpacity: 0.5, shadowRadius: 18, shadowOffset: { width: 0, height: 6 } },
+  plinkoVault: { alignSelf: 'center', overflow: 'hidden', borderRadius: radius.lg, borderWidth: 1, borderColor: 'rgba(245,183,255,0.64)', shadowColor: '#E879F9', shadowOpacity: 0.5, shadowRadius: 18, shadowOffset: { width: 0, height: 6 } },
   plinkoBuckets: { position: 'absolute', left: 9, right: 9, bottom: 8, flexDirection: 'row', gap: 2 },
   plinkoBucket: { flex: 1, height: 10, borderRadius: 4, backgroundColor: 'rgba(255,240,255,0.22)' },
   plinkoOutcome: { position: 'absolute', right: 9, top: 8, alignItems: 'flex-end', paddingHorizontal: 6, paddingVertical: 3, borderRadius: radius.sm, borderWidth: 1, borderColor: 'rgba(255,220,255,0.54)', backgroundColor: 'rgba(23,3,34,0.8)' },

@@ -175,6 +175,7 @@ export function InstantLayout({
   state,
   children,
   action,
+  dockControl,
   footer,
   /** Locked while a multi-step round is open — the stake is already committed. */
   stakeLocked = false,
@@ -192,6 +193,8 @@ export function InstantLayout({
    * below the fold on every one of these games.
    */
   action?: React.ReactNode;
+  /** Compact game-specific choices pinned with the stake and play button. */
+  dockControl?: React.ReactNode;
   footer?: React.ReactNode;
   stakeLocked?: boolean;
 }) {
@@ -220,7 +223,7 @@ export function InstantLayout({
 
   return (
     <View style={styles.frame}>
-    <Screen contentStyle={styles.scrollBody}>
+    <Screen contentStyle={[styles.scrollBody, !!dockControl && styles.scrollBodyWithControl]}>
       <View style={styles.topRow}>
         <View>
           <Txt variant="caption" color={colors.text.muted}>
@@ -286,6 +289,7 @@ export function InstantLayout({
         hidden behind it.
       */}
       {action ? <View style={styles.dock}>
+        {dockControl ? <View style={styles.dockControl}>{dockControl}</View> : null}
         {!stakeLocked ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dockChips}>
           {state.options.map((option) => {
             const selected = option === state.bet;
@@ -699,6 +703,7 @@ export const styles = StyleSheet.create({
   frame: { flex: 1 },
   /** Clears the dock, which floats over this scroll view. */
   scrollBody: { paddingBottom: DOCK_HEIGHT + spacing.md },
+  scrollBodyWithControl: { paddingBottom: DOCK_HEIGHT + 52 + spacing.md },
   dock: {
     position: 'absolute',
     left: 0,
@@ -712,6 +717,7 @@ export const styles = StyleSheet.create({
     borderTopColor: colors.surface.border,
   },
   dockChips: { gap: spacing.sm, paddingBottom: spacing.sm, paddingHorizontal: 1 },
+  dockControl: { minHeight: 34, paddingBottom: spacing.xs, justifyContent: 'center' },
   dockChip: { minHeight: 34, minWidth: 76, paddingHorizontal: spacing.md, borderRadius: 10, borderWidth: 1, borderColor: '#3A3446', backgroundColor: '#15131D', justifyContent: 'center', alignItems: 'center' },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   rtpPill: {

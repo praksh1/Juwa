@@ -133,7 +133,10 @@ export function ThemedMarquee({ gameId, name, height, theme }: { gameId: string;
           {decor(flavor, theme.accent, theme.secondary)}
         </Svg>
       </Animated.View>
-      <Svg style={StyleSheet.absoluteFill} width="100%" height="100%" viewBox="0 0 300 60" preserveAspectRatio="none">
+      {/* Keep the sign face edge-to-edge, but preserve the lettering's own
+          geometry. `none` stretched Ocean/Jade/Aurora titles across a Surface
+          display until their glyphs were almost unreadable. */}
+      <Svg style={StyleSheet.absoluteFill} width="100%" height="100%" viewBox="0 0 300 60" preserveAspectRatio="xMidYMid meet">
         <Defs>
           <SvgLinearGradient id={id} x1="0" y1="0" x2="0" y2="1">
             <Stop offset="0" stopColor="#FFF8DF" />

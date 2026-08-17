@@ -37,6 +37,7 @@ import { ReelFrame, SlotConsole, SpinLever } from '../components/SlotControls';
 import { CabinetAtmosphere } from '../components/CabinetAtmosphere';
 import { DragonMarquee } from '../components/DragonMarquee';
 import { ThemedMarquee } from '../components/ThemedMarquee';
+import { SlotEnvironment } from '../components/SlotEnvironment';
 import { cabinetFor, roomFor } from '../api/cabinets';
 import { hasTileArt } from '../components/GameArt';
 import { WinOverlay, useCabinetShake, useScreenShake } from '../components/WinOverlay';
@@ -1534,7 +1535,13 @@ export function SlotsScreen() {
   // document made Ocean, Jade, City, Aurora, Nova and Storm require a trip
   // below the reels just to press SPIN.  Lever cabinets deliberately keep
   // their own physical control beside the reel window.
-  const dockedConsole = cabinet.controls === 'console' && !sideControls;
+  // Triple Bar and Fruit Stand keep their physical pull handle in the cabinet,
+  // but their stake/auto console must remain reachable above iOS browser chrome.
+  // This is intentionally per-machine: the other lever cabinets retain their
+  // existing proportions until their own fit is measured.
+  const dockedLeverConsole =
+    !sideControls && (gameId === 'slot-triple-bar' || gameId === 'slot-fruit-stand');
+  const dockedConsole = !sideControls && (cabinet.controls === 'console' || dockedLeverConsole);
   const controlConsole = (
     <SlotConsole
       bet={bet}
@@ -1699,21 +1706,10 @@ export function SlotsScreen() {
             cabinets keep their own room clean instead of sharing one moving
             diagonal light across the catalogue. */}
         {theatreLighting ? <CabinetAtmosphere /> : null}
-        {/*
-          Every cabinet gets one quiet, theme-specific living mark in its own
-          glass. It never changes the reels or the math; it simply makes an
-          ocean ripple, a comet orbit, a neon sign drift, etc. while the game
-          waits to be played. Dragon's Hoard keeps its larger dragon performance
-          instead of receiving a second generic decoration.
-        */}
-        {details && !dragonHoard ? (
-          <CabinetHero
-            gameId={gameId}
-            family={details.art}
-            tint={symbolTint}
-            size={Math.min(66, Math.max(42, symbolSize * 0.9))}
-          />
-        ) : null}
+        {/* Full-glass scenery, unique to the machine. This replaces the old
+            translucent symbol in the top-right corner: Ocean has moving water,
+            Frost grows ice, Storm flashes, Jungle swings through vines, etc. */}
+        {details && !dragonHoard ? <SlotEnvironment gameId={gameId} accent={details.theme.accent} /> : null}
         <View
           style={[styles.reels, styles.reelsFill]}
           onLayout={(e) => setReelsWidth(e.nativeEvent.layout.width)}
@@ -2154,94 +2150,6 @@ export function SlotsScreen() {
   );
 }
 
-type HeroMotion = 'drift' | 'orbit' | 'pulse' | 'rise' | 'sweep';
-
-const CABINET_HEROES: Record<string, { symbol: string; motion: HeroMotion }> = {
-  'juwa-classic-slots': { symbol: 'BELL', motion: 'rise' },
-  'slot-triple-bar': { symbol: 'BAR', motion: 'sweep' },
-  'slot-fruit-stand': { symbol: 'LEMON', motion: 'drift' },
-  'slot-lucky-sevens': { symbol: 'SEVEN', motion: 'pulse' },
-  'slot-desert-mirage': { symbol: 'DIAMOND', motion: 'rise' },
-  'slot-pharaohs-vault': { symbol: 'DIAMOND', motion: 'orbit' },
-  'slot-jade-temple': { symbol: 'BELL', motion: 'drift' },
-  'slot-royal-flush': { symbol: 'DIAMOND', motion: 'orbit' },
-  'slot-midnight-gold': { symbol: 'BELL', motion: 'rise' },
-  'slot-spice-market': { symbol: 'CHERRY', motion: 'sweep' },
-  'slot-emerald-nights': { symbol: 'DIAMOND', motion: 'pulse' },
-  'slot-frost-peak': { symbol: 'DIAMOND', motion: 'drift' },
-  'slot-storm-chaser': { symbol: 'BELL', motion: 'sweep' },
-  'slot-supernova': { symbol: 'DIAMOND', motion: 'orbit' },
-  'slot-aurora-borealis': { symbol: 'CHERRY', motion: 'drift' },
-  'slot-vault-breaker': { symbol: 'DIAMOND', motion: 'rise' },
-  'slot-city-lights': { symbol: 'DIAMOND', motion: 'pulse' },
-  'slot-neon-alley': { symbol: 'DIAMOND', motion: 'sweep' },
-  'slot-ocean-drift': { symbol: 'CHERRY', motion: 'drift' },
-  'slot-sunset-strip': { symbol: 'BELL', motion: 'sweep' },
-  'slot-carnival-row': { symbol: 'DIAMOND', motion: 'pulse' },
-  'slot-jungle-run': { symbol: 'DIAMOND', motion: 'orbit' },
-};
-
-/**
- * A small animated emblem lives inside the real reel glass.  The changing
- * symbol and motion are intentional — a comet should orbit, a pearl should
- * drift, and a casino bell should rise — rather than every cabinet getting
- * the same title sweep with a different colour.
- */
-function CabinetHero({
-  gameId,
-  family,
-  tint,
-  size,
-}: {
-  gameId: string;
-  family?: string;
-  tint: ReturnType<typeof tintFromAccent>;
-  size: number;
-}) {
-  const hero = CABINET_HEROES[gameId] ?? { symbol: 'DIAMOND', motion: 'pulse' as HeroMotion };
-  const reduced = usePrefersReducedMotion();
-  const phase = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (reduced) {
-      phase.setValue(0.5);
-      return undefined;
-    }
-    const timing = Animated.loop(Animated.sequence([
-      Animated.timing(phase, { toValue: 1, duration: hero.motion === 'sweep' ? 3_800 : 4_800, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      Animated.timing(phase, { toValue: 0, duration: hero.motion === 'sweep' ? 3_800 : 4_800, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-    ]));
-    timing.start();
-    return () => timing.stop();
-  }, [hero.motion, phase, reduced]);
-
-  const translateX = hero.motion === 'sweep'
-    ? phase.interpolate({ inputRange: [0, 1], outputRange: [-16, 9] })
-    : hero.motion === 'orbit'
-      ? phase.interpolate({ inputRange: [0, 1], outputRange: [-7, 8] })
-      : 0;
-  const translateY = hero.motion === 'rise'
-    ? phase.interpolate({ inputRange: [0, 1], outputRange: [9, -8] })
-    : hero.motion === 'drift'
-      ? phase.interpolate({ inputRange: [0, 1], outputRange: [-5, 7] })
-      : hero.motion === 'orbit'
-        ? phase.interpolate({ inputRange: [0, 1], outputRange: [6, -5] })
-        : 0;
-  const scale = hero.motion === 'pulse'
-    ? phase.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1.07] })
-    : 1;
-
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[styles.cabinetHero, { transform: [{ translateX }, { translateY }, { scale }] }]}
-      accessibilityElementsHidden
-    >
-      <SlotSymbol name={hero.symbol} size={size} family={family} gameId={gameId} tint={tint} />
-    </Animated.View>
-  );
-}
-
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface.base, overflow: 'hidden' },
   scroll: { flex: 1 },
@@ -2418,7 +2326,6 @@ const styles = StyleSheet.create({
    * is legible as a room and loses every argument with a symbol.
    */
   roomScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(4, 6, 16, 0.58)' },
-  cabinetHero: { position: 'absolute', right: 4, top: 7, opacity: 0.3, zIndex: 1 },
   chip: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
