@@ -308,6 +308,7 @@ export function BlackjackScreen() {
   );
 
   const dealerValue = table ? handValue(table.dealer) : null;
+  const splitTable = (table?.hands.length ?? 0) > 1;
 
   return (
     <View style={styles.screen}>
@@ -414,13 +415,19 @@ export function BlackjackScreen() {
 
         {/* Player, one block per hand after a split */}
         {table ? (
-          table.hands.map((hand, handIndex) => {
+          <View style={splitTable ? styles.splitHands : undefined}>
+          {table.hands.map((hand, handIndex) => {
             const value = handValue(hand.cards);
             const active = !settled && handIndex === table.activeHand;
             return (
               <View
                 key={`h-${handIndex}`}
-                style={[styles.seat, compactTable && styles.seatCompact, active && styles.seatActive]}
+                style={[
+                  styles.seat,
+                  compactTable && styles.seatCompact,
+                  splitTable && styles.splitSeat,
+                  active && styles.seatActive,
+                ]}
               >
                 <View style={styles.seatLabel}>
             <Txt variant="caption" color={active ? '#FFE89B' : '#C9A95D'}>
@@ -429,7 +436,7 @@ export function BlackjackScreen() {
                     {format(minor(hand.stake), 'GC')}
                   </Txt>
                 </View>
-                <View style={styles.cards}>
+                <View style={[styles.cards, splitTable && styles.cardsSplit]}>
                   {hand.cards.map((card, i) => (
                     <PlayingCard
                       key={`h${handIndex}-${i}`}
@@ -439,7 +446,7 @@ export function BlackjackScreen() {
                       size={compactTable || table.hands.length > 1 ? 'small' : 'normal'}
                     />
                   ))}
-                  <View style={styles.handTotalBadge}>
+                  <View style={[styles.handTotalBadge, splitTable && styles.handTotalBadgeSplit]}>
                     <Txt variant="h2" color={active ? '#FFF1B5' : '#F7E9BC'}>{value.total}</Txt>
                     {value.soft ? <Txt variant="caption" color="#C9A95D">SOFT</Txt> : null}
                   </View>
@@ -461,7 +468,8 @@ export function BlackjackScreen() {
                 ) : null}
               </View>
             );
-          })
+          })}
+          </View>
         ) : (
           <View style={[styles.seat, compactTable && styles.seatCompact]}>
             <Txt variant="bodySmall" color={colors.text.muted}>
@@ -592,6 +600,11 @@ const styles = StyleSheet.create({
   feltSheen: { position: 'absolute', left: 0, right: 0, top: 0, height: '30%' },
   seat: { gap: spacing.sm, minHeight: 96 },
   seatCompact: { gap: 4, minHeight: 72 },
+  // A split creates two betting positions on the same table, not a second
+  // table below the first. Keeping the hands beside one another prevents the
+  // second hand and its controls from falling under Safari's browser chrome.
+  splitHands: { flexDirection: 'row', gap: spacing.xs, alignItems: 'flex-start' },
+  splitSeat: { flex: 1, minWidth: 0, minHeight: 116, paddingHorizontal: 3 },
   seatActive: {
     borderLeftWidth: 3,
     borderLeftColor: colors.gold.default,
@@ -601,7 +614,9 @@ const styles = StyleSheet.create({
   seatLabel: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   // Extra right padding compensates for the negative margin that overlaps cards.
   cards: { flexDirection: 'row', alignItems: 'center', paddingRight: spacing.lg, minHeight: 74 },
+  cardsSplit: { paddingRight: 0, minHeight: 58 },
   handTotalBadge: { minWidth: 54, minHeight: 54, marginLeft: spacing.md, paddingHorizontal: spacing.xs, borderRadius: 27, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(9,12,17,0.84)', borderWidth: 2, borderColor: '#C9A95D', shadowColor: '#F7CA62', shadowOpacity: 0.42, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } },
+  handTotalBadgeSplit: { minWidth: 42, minHeight: 42, marginLeft: 4, borderRadius: 21 },
   divider: { height: 1, backgroundColor: 'rgba(255,221,137,0.38)' },
   betRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
   chip: {

@@ -123,6 +123,10 @@ const CRASH_TARGETS = [1.5, 2, 3, 5, 10, 25];
 export function CrashScreen() {
   const game = GAMES['crash']!;
   const state = useInstantGame(game);
+  const { height: viewportHeight } = useWindowDimensions();
+  // Safari's expanded address bar leaves roughly 640 points for the app. The
+  // flight deck must contract, not disappear behind the pinned bet rail.
+  const shortStage = viewportHeight < 700;
   const [target, setTarget] = useState(2);
   const announce = useSettlementAnnouncer();
   const { handle, celebrate } = useCelebration();
@@ -169,7 +173,7 @@ export function CrashScreen() {
           />
       }
     >
-      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet}>
+      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet} bodyStyle={shortStage ? local.shortBoardBody : undefined}>
         <View style={local.crashDeck}>
           <View>
             <Txt variant="caption" color="#D6B76B">AUTO CASH OUT</Txt>
@@ -186,6 +190,7 @@ export function CrashScreen() {
           accent={game.accent}
           crashed={!running && !!result && !won}
           running={running}
+          compact={shortStage}
         />
         <Txt
           variant="h2"
@@ -202,7 +207,7 @@ export function CrashScreen() {
           {shown.toFixed(2)}×
         </Txt>
 
-        <View style={shell.result}>
+        <View style={[shell.result, shortStage && local.shortResult]}>
           {running ? (
             <Txt variant="bodySmall" color={colors.text.secondary}>
               Climbing…
@@ -307,14 +312,16 @@ function CrashFlight({
   accent,
   crashed,
   running,
+  compact,
 }: {
   progress: number;
   accent: string;
   crashed: boolean;
   running: boolean;
+  compact: boolean;
 }) {
   const W = 292;
-  const H = 126;
+  const H = compact ? 92 : 126;
   const p = Math.max(0, Math.min(1, progress));
   const x = 30 + p * (W - 60);
   const y = H - 24 - Math.pow(p, 1.55) * (H - 52);
@@ -322,7 +329,7 @@ function CrashFlight({
   const glow = crashed ? '#FF5C67' : accent;
 
   return (
-    <View style={local.crashFlightStage}>
+    <View style={[local.crashFlightStage, compact && local.crashFlightStageShort]}>
     <Svg width={W} height={H}>
       <Defs>
         <SvgLinearGradient id="crash-thrust" x1="0" y1="0" x2="1" y2="0">
@@ -339,16 +346,24 @@ function CrashFlight({
     <Image
       source={{ uri: '/art/overlays/crash-aircraft-stage-v1.png' }}
       resizeMode="contain"
-      style={[local.crashAircraft, { left: x - 67, top: y - 47, opacity: crashed ? 0.42 : 1 }]}
+      style={[
+        local.crashAircraft,
+        compact && local.crashAircraftShort,
+        {
+          left: x - (compact ? 56 : 67),
+          top: y - (compact ? 39 : 47),
+          opacity: crashed ? 0.42 : 1,
+        },
+      ]}
       accessibilityElementsHidden
     />
-    {running ? <CrashExhaust x={x} y={y} /> : null}
+    {running ? <CrashExhaust x={x} y={y} compact={compact} /> : null}
     </View>
   );
 }
 
 /** Layered blue-core/orange-tail exhaust that keeps burning at the ceiling. */
-function CrashExhaust({ x, y }: { x: number; y: number }) {
+function CrashExhaust({ x, y, compact }: { x: number; y: number; compact: boolean }) {
   const pulse = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const loop = Animated.loop(Animated.sequence([
@@ -359,7 +374,7 @@ function CrashExhaust({ x, y }: { x: number; y: number }) {
     return () => loop.stop();
   }, [pulse]);
   const stretch = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1.28] });
-  return <Animated.View pointerEvents="none" style={[local.crashExhaust, { left: x - 69, top: y + 12, transform: [{ rotate: '-22deg' }, { scaleX: stretch }] }]}>
+  return <Animated.View pointerEvents="none" style={[local.crashExhaust, compact && local.crashExhaustShort, { left: x - (compact ? 58 : 69), top: y + (compact ? 8 : 12), transform: [{ rotate: '-22deg' }, { scaleX: stretch }] }]}>
     <LinearGradient colors={['#E9FFFF', '#56D9FF', '#FFB137', 'rgba(255,65,24,0)']} start={{ x: 1, y: .5 }} end={{ x: 0, y: .5 }} style={StyleSheet.absoluteFill} />
     <View style={local.crashExhaustCore} />
   </Animated.View>;
@@ -403,6 +418,8 @@ const LIMBO_TARGETS = [1.5, 2, 5, 10, 50, 100];
 export function LimboScreen() {
   const game = GAMES['limbo']!;
   const state = useInstantGame(game);
+  const { height: viewportHeight } = useWindowDimensions();
+  const shortStage = viewportHeight < 700;
   const [target, setTarget] = useState(2);
   const announce = useSettlementAnnouncer();
   const { handle, celebrate } = useCelebration();
@@ -441,7 +458,7 @@ export function LimboScreen() {
           />
       }
     >
-      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet}>
+      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet} bodyStyle={shortStage ? local.shortBoardBody : undefined}>
         <View style={local.limboHeader}>
           <View style={local.limboSeal}><Txt variant="caption" color="#B8FFFF">∞</Txt></View>
           <Txt variant="caption" color="#B8FFFF">QUANTUM VAULT DRAW</Txt>
@@ -456,9 +473,9 @@ export function LimboScreen() {
 
         {/* The drawn number, at the largest size on the screen — it is the
             entire outcome, and it should be the entire focus. */}
-        <View style={local.limboChamber}>
+        <View style={[local.limboChamber, shortStage && local.limboChamberShort]}>
           <View style={local.limboOrbit} pointerEvents="none" />
-          <View style={local.limboFace}>
+          <View style={[local.limboFace, shortStage && local.limboFaceShort]}>
             <View style={local.limboCut} pointerEvents="none" />
             <Txt
               variant="display"
@@ -478,7 +495,7 @@ export function LimboScreen() {
           </View>
         </View>
 
-        <View style={shell.result}>
+        <View style={[shell.result, shortStage && local.shortResult]}>
           {rolling ? (
             <Txt variant="bodySmall" color={colors.text.secondary}>
               Drawing…
@@ -562,14 +579,17 @@ const DICE_TARGETS = [10, 25, 50, 75, 90];
 export function DiceScreen() {
   const game = GAMES['dice']!;
   const state = useInstantGame(game);
-  const { width: viewportWidth } = useWindowDimensions();
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
+  const shortStage = viewportHeight < 700;
   const wideStage = viewportWidth >= 760;
   const diceDialSize = wideStage
     ? 168
-    : Math.min(168, Math.max(144, (viewportWidth - 60) * 0.52));
+    : shortStage
+      ? 132
+      : Math.min(168, Math.max(144, (viewportWidth - 60) * 0.52));
   const diceVaultWidth = wideStage
     ? 280
-    : Math.min(132, Math.max(106, viewportWidth - 60 - diceDialSize - spacing.xs));
+    : Math.min(shortStage ? 142 : 132, Math.max(106, viewportWidth - 60 - diceDialSize - spacing.xs));
   const [target, setTarget] = useState(50);
   const [direction, setDirection] = useState<'over' | 'under'>('over');
   const result = state.round?.state as
@@ -633,7 +653,7 @@ export function DiceScreen() {
           />
       }
     >
-      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet}>
+      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet} bodyStyle={shortStage ? local.shortBoardBody : undefined}>
         <View style={local.diceHeader}>
           <Txt variant="caption" color="#EEFFC3">CUT-GLASS DICE VAULT</Txt>
           <Txt variant="caption" color="#B7D95A">RISK INSTRUMENT</Txt>
@@ -649,6 +669,7 @@ export function DiceScreen() {
             wide={wideStage}
             compact={!wideStage}
             width={diceVaultWidth}
+            height={shortStage ? 132 : undefined}
           />
           <DiceDial
             target={target}
@@ -664,7 +685,7 @@ export function DiceScreen() {
             ? `${direction.toUpperCase()} ${target} · pays ${quote.multiplier}×`
             : 'That bet pays too little to place'}
         </Txt>
-        <View style={shell.result}>
+        <View style={[shell.result, shortStage && local.shortResult]}>
           {rolling ? (
             <Txt variant="bodySmall" color={colors.text.secondary}>
               Rolling…
@@ -761,6 +782,7 @@ function DiceVault({
   wide = false,
   compact = false,
   width,
+  height,
 }: {
   accent: string;
   rolling: boolean;
@@ -768,6 +790,7 @@ function DiceVault({
   wide?: boolean;
   compact?: boolean;
   width?: number;
+  height?: number;
 }) {
   const turn = useRef(new Animated.Value(0)).current;
   const reduced = usePrefersReducedMotion();
@@ -785,7 +808,7 @@ function DiceVault({
   }, [rolling, reduced, turn]);
 
   const rotate = turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
-  return <View style={[local.diceVault, wide && local.diceVaultWide, compact && local.diceVaultCompact, width ? { width } : null]}>
+  return <View style={[local.diceVault, wide && local.diceVaultWide, compact && local.diceVaultCompact, width ? { width } : null, height ? { height } : null]}>
     <Image source={{ uri: '/art/tiles/juwa-dice.png' }} resizeMode="cover" style={StyleSheet.absoluteFill} />
     <LinearGradient colors={['rgba(1,13,2,0.18)', 'rgba(1,8,2,0.54)']} style={StyleSheet.absoluteFill} />
     <View style={local.diceVaultLabel}><Txt variant="caption" color="#E8FFC4">{compact ? 'CRYSTAL DICE' : 'CRYSTAL ROLL CHAMBER'}</Txt></View>
@@ -820,7 +843,8 @@ const PEG_PITCH = 8;
 export function PlinkoScreen() {
   const game = GAMES['plinko']!;
   const state = useInstantGame(game);
-  const { width: viewportWidth } = useWindowDimensions();
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
+  const shortStage = viewportHeight < 700;
   const [rows, setRows] = useState<PlinkoRows>(12);
   const [risk, setRisk] = useState<PlinkoRisk>('medium');
   const [revealedRoundId, setRevealedRoundId] = useState<string | null>(null);
@@ -875,7 +899,7 @@ export function PlinkoScreen() {
           />
       }
     >
-      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet} bodyStyle={local.expandedGameBody}>
+      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet} bodyStyle={[local.expandedGameBody, shortStage && local.shortBoardBody]}>
         <View style={local.plinkoHeader}>
           <Txt variant="caption" color="#FFE4FF">LUMEN PEG ARRAY</Txt>
           <Txt variant="caption" color="#F4A9FF">PATH RECORDER</Txt>
@@ -888,6 +912,7 @@ export function PlinkoScreen() {
           landedBucket={landedBucket}
           outcome={presentationComplete && result ? { multiplier: result.multiplier, payout: state.round?.settlement?.payout ?? 0 } : undefined}
           width={boardWidth}
+          compactHeight={shortStage}
         />
       </Board>
     </InstantLayout>
@@ -960,6 +985,7 @@ function PlinkoVault({
   landedBucket,
   outcome,
   width,
+  compactHeight,
 }: {
   rows: number;
   path?: ('L' | 'R')[];
@@ -969,11 +995,12 @@ function PlinkoVault({
   landedBucket: number | null;
   outcome?: { multiplier: number; payout: number };
   width: number;
+  compactHeight: boolean;
 }) {
   // A phone has spare height below the chamber, so use it for the soul of the
   // game. Wide/Surface layouts keep the shallower ratio to protect their much
   // scarcer vertical space.
-  const height = Math.round(width * (width < 400 ? 0.82 : 0.68));
+  const height = Math.round(width * (compactHeight ? 0.58 : width < 400 ? 0.82 : 0.68));
   const gap = width / 18.75;
   // The path is truncated to the bounces the player has actually seen.
   const shown = path ? path.slice(0, Math.max(0, step)) : [];
@@ -1137,9 +1164,10 @@ export function MinesScreen() {
   // The square can reach 440 on a tall desktop, while a short Surface gets a
   // height-derived cap so its lower cells never sit underneath the pinned
   // controls. Phones still gain almost forty points over the previous vault.
+  const shortStage = viewportHeight < 700;
   const mineSize = viewportWidth >= 760
     ? Math.min(440, Math.max(288, viewportHeight - 478))
-    : Math.min(298, viewportWidth - 60);
+    : Math.min(298, viewportWidth - 60, shortStage ? Math.max(204, viewportHeight - 420) : 298);
   const mineScale = mineSize / 282;
 
   const board = state.round?.state as
@@ -1235,12 +1263,7 @@ export function MinesScreen() {
         )
       }
     >
-      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet} bodyStyle={local.expandedGameBody}>
-        <View style={local.minesHeader}>
-          <View style={local.minesIndicator} />
-          <Txt variant="caption" color="#C6F7FF">DEEP VAULT · CLEAR THE GRID</Txt>
-          <Txt variant="caption" color="#71DFFF">{open ? 'ARMED' : 'STANDBY'}</Txt>
-        </View>
+      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet} bodyStyle={[local.expandedGameBody, shortStage && local.shortBoardBody]}>
         <View style={[local.mineVault, { width: mineSize, height: mineSize }]}>
           <Image source={{ uri: '/art/tiles/juwa-mines.png' }} resizeMode="contain" style={StyleSheet.absoluteFill} />
           {/* The illustrated twenty-five-cell vault is the actual playfield.
@@ -1248,6 +1271,11 @@ export function MinesScreen() {
               drawing a second glass grid over this art made every cell look
               doubled and clouded. */}
           <LinearGradient colors={['rgba(1,10,19,0.02)', 'rgba(1,8,17,0.18)']} style={StyleSheet.absoluteFill} />
+          <View style={[local.minesHeader, local.minesHeaderOverlay]} pointerEvents="none">
+            <View style={local.minesIndicator} />
+            <Txt variant="caption" color="#C6F7FF">DEEP VAULT</Txt>
+            <Txt variant="caption" color="#71DFFF">{open ? 'ARMED' : 'STANDBY'}</Txt>
+          </View>
           <MinePerspectiveFaces tileState={tileState} />
           <View style={local.mineBoard} pointerEvents="box-none">
           {Array.from({ length: MINES_TILES }, (_, tile) => (
@@ -1262,35 +1290,24 @@ export function MinesScreen() {
           ))}
           </View>
           {bust ? <MineDetonation key={state.round?.roundId} /> : null}
-        </View>
-
-        {open ? (
-          <Txt variant="bodySmall" color={colors.text.secondary}>
-            {board!.multiplier > 0
-              ? `Cash out at ${board!.multiplier}× · next ${board!.nextMultiplier}×`
-              : `First pick pays ${board!.nextMultiplier}×`}
-          </Txt>
-        ) : !settled ? <Txt variant="bodySmall" color={colors.text.secondary}>
-          {mines} {mines === 1 ? 'mine' : 'mines'} · first pick pays {minesMultiplier(mines, 1)}×
-        </Txt> : null}
-
-        {/* Rendered only when there is something to say. Everywhere else in
-            the other instant games the readout carries a hint line and so reserving its
-            height prevents a jump; here it is empty until the round ends, so
-            reserving it was fifty points of nothing on the tallest board in
-            the app. */}
-        {settled ? (
-          <View style={shell.result}>
+          <View style={local.minesStatusOverlay} pointerEvents="none">
             <Txt
-              variant="h2"
-              color={board?.bust ? colors.feedback.error : colors.feedback.winBright}
+              variant="bodySmall"
+              color={settled && board?.bust ? colors.feedback.error : settled ? colors.feedback.winBright : colors.text.secondary}
+              numberOfLines={1}
             >
-              {board?.bust
-                ? 'Hit a mine'
-                : `WON ${format(minor(state.round!.settlement?.payout ?? 0), 'GC')}`}
+              {open
+                ? board!.multiplier > 0
+                  ? `Cash out ${board!.multiplier}× · next ${board!.nextMultiplier}×`
+                  : `First pick pays ${board!.nextMultiplier}×`
+                : settled
+                  ? board?.bust
+                    ? 'MINE HIT'
+                    : `WON ${format(minor(state.round!.settlement?.payout ?? 0), 'GC')}`
+                  : `${mines} ${mines === 1 ? 'mine' : 'mines'} · first pick ${minesMultiplier(mines, 1)}×`}
             </Txt>
           </View>
-        ) : null}
+        </View>
       </Board>
     </InstantLayout>
   );
@@ -1637,6 +1654,11 @@ function MineTile({
 const local = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', justifyContent: 'center' },
   expandedGameBody: { paddingHorizontal: 6 },
+  // Only used when Safari exposes its short visual viewport. Each game's main
+  // instrument has its own height cap above; this removes surplus cabinet
+  // padding rather than applying a scale transform to the whole interface.
+  shortBoardBody: { paddingVertical: 7, gap: 5 },
+  shortResult: { minHeight: 30 },
   winReadout: { alignItems: 'center', gap: 2, paddingVertical: 2 },
   dockChoices: { flexDirection: 'row', gap: 6, paddingHorizontal: 2, alignItems: 'center' },
   dockChoice: { minHeight: 32, minWidth: 64, paddingHorizontal: 10, borderRadius: 11, borderWidth: 1, borderColor: '#3A3446', backgroundColor: '#15131D', alignItems: 'center', justifyContent: 'center' },
@@ -1696,7 +1718,9 @@ const local = StyleSheet.create({
     backgroundColor: 'rgba(2, 18, 24, 0.72)',
     overflow: 'hidden',
   },
+  limboFaceShort: { minHeight: 78, minWidth: 246 },
   limboChamber: { width: '100%', minHeight: 134, alignItems: 'center', justifyContent: 'center', borderRadius: radius.lg, borderWidth: 1, borderColor: 'rgba(78,221,226,0.28)', backgroundColor: 'rgba(0,11,20,0.38)', overflow: 'hidden' },
+  limboChamberShort: { minHeight: 92 },
   limboOrbit: { position: 'absolute', width: 244, height: 74, borderRadius: 122, borderWidth: 1, borderColor: 'rgba(94,234,212,0.38)', transform: [{ rotate: '-12deg' }] },
   limboNumber: { fontSize: 52, lineHeight: 60, textShadowColor: 'rgba(78,221,226,0.5)', textShadowRadius: 18 },
   limboCut: {
@@ -1727,8 +1751,11 @@ const local = StyleSheet.create({
   crashDeck: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.sm, paddingBottom: 3, borderBottomWidth: 1, borderBottomColor: 'rgba(244,190,78,0.28)' },
   crashStatus: { paddingHorizontal: spacing.sm, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(248,201,90,0.52)', backgroundColor: 'rgba(19,8,3,0.56)' },
   crashFlightStage: { width: 292, height: 126, alignSelf: 'center', overflow: 'hidden' },
+  crashFlightStageShort: { height: 92 },
   crashAircraft: { position: 'absolute', width: 134, height: 94 },
+  crashAircraftShort: { width: 112, height: 78 },
   crashExhaust: { position: 'absolute', width: 54, height: 18, borderRadius: 9, overflow: 'hidden', shadowColor: '#FF672D', shadowOpacity: 1, shadowRadius: 15 },
+  crashExhaustShort: { width: 44, height: 14, borderRadius: 7 },
   crashExhaustCore: { position: 'absolute', right: 2, top: 5, width: 23, height: 8, borderRadius: 4, backgroundColor: '#F4FFFF', shadowColor: '#FFF4B6', shadowOpacity: 1, shadowRadius: 8 },
   limboHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'center', paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(111,240,244,0.65)', backgroundColor: 'rgba(1,19,29,0.72)' },
   limboSeal: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#67E8F9' },
@@ -1744,7 +1771,9 @@ const local = StyleSheet.create({
   plinkoOrb: { position: 'absolute', width: 14, height: 14, borderRadius: 7, backgroundColor: '#FFF5FF', borderWidth: 2, borderColor: '#F7A2FF', shadowColor: '#FFFFFF', shadowOpacity: 1, shadowRadius: 8 },
   plinkoVaultLabel: { position: 'absolute', top: 8, left: 10, paddingHorizontal: 7, paddingVertical: 3, borderRadius: radius.sm, backgroundColor: 'rgba(24,4,32,0.72)' },
   minesHeader: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xs },
+  minesHeaderOverlay: { position: 'absolute', left: 4, right: 4, top: 4, zIndex: 6, width: undefined, paddingVertical: 3, borderRadius: radius.sm, backgroundColor: 'rgba(1,10,18,0.72)' },
   minesIndicator: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#79E7FF', shadowColor: '#79E7FF', shadowOpacity: 1, shadowRadius: 8 },
+  minesStatusOverlay: { position: 'absolute', left: 8, right: 8, bottom: 5, zIndex: 6, minHeight: 24, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: 'rgba(1,8,17,0.78)' },
   scratchCard: {
     width: 282,
     height: 138,

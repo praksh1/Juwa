@@ -152,7 +152,9 @@ export const CABINETS: Record<string, CabinetSpec> = {
   // symbols crowd their windows, they do not float in them.
   'juwa-classic-slots': { controls: 'lever', frame: 'timber', symbolFill: 1.0, rowAspect: 1.06, background: `${BG}/bg03.jpg`, portrait: { symbolCap: 70, glassHeight: 38, leverWidth: 48 } },
   'slot-triple-bar': { controls: 'lever', frame: 'timber', symbolFill: 1.0, rowAspect: 1.04, background: `${BG}/bg08.jpg`, portrait: { symbolCap: 72, glassHeight: 42, leverWidth: 50 } },
-  'slot-fruit-stand': { controls: 'lever', frame: 'timber', symbolFill: 1.0, rowAspect: 1.04, background: `${BG}/bg05.jpg`, portrait: { symbolCap: 72, glassHeight: 42, leverWidth: 50 } },
+  // Fruit Stand keeps its chunky three-reel face, but 72-point cells made the
+  // bonus strip disappear behind its dock in Safari's expanded-toolbar view.
+  'slot-fruit-stand': { controls: 'lever', frame: 'timber', symbolFill: 1.0, rowAspect: 1.04, background: `${BG}/bg05.jpg`, portrait: { symbolCap: 64, glassHeight: 42, leverWidth: 50 } },
   'slot-lucky-sevens': { controls: 'lever', frame: 'timber', symbolFill: 1.0, rowAspect: 1.0, background: `${BG}/bg02.jpg`, portrait: { symbolCap: 76, glassHeight: 42, leverWidth: 50 } },
 
   // ---- temples, tombs and hoards: gold, and a room with pillars in it ----
@@ -160,9 +162,9 @@ export const CABINETS: Record<string, CabinetSpec> = {
   'slot-pharaohs-vault': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.14, background: `${BG}/egypt.jpg`, portrait: { symbolCap: 70, glassHeight: 38 } },
   // Five visible rows in the centre reel: this needs a materially shorter
   // portrait face than the three-row gilt cabinets above it.
-  'slot-jade-temple': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.2, background: `${BG}/bg09.jpg`, portrait: { symbolCap: 49, glassHeight: 30, rowAspect: 1.1 }, wide: { symbolCap: 62, rowAspect: 1.02, glassHeight: 34 } },
+  'slot-jade-temple': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.2, background: `${BG}/bg09.jpg`, portrait: { symbolCap: 43, glassHeight: 30, rowAspect: 1.08 }, wide: { symbolCap: 62, rowAspect: 1.02, glassHeight: 34 } },
   'slot-dragons-hoard': { controls: 'console', frame: 'gilt', symbolFill: 1.0, rowAspect: 1.1, background: `${BG}/bg10.jpg` },
-  'slot-royal-flush': { controls: 'console', frame: 'gilt', symbolFill: 0.96, rowAspect: 1.22, background: `${BG}/bg11.jpg`, portrait: { symbolCap: 68, glassHeight: 38 } },
+  'slot-royal-flush': { controls: 'console', frame: 'gilt', symbolFill: 0.96, rowAspect: 1.22, background: `${BG}/bg11.jpg`, portrait: { symbolCap: 60, glassHeight: 38, rowAspect: 1.16 } },
   'slot-midnight-gold': { controls: 'console', frame: 'gilt', symbolFill: 0.96, rowAspect: 1.22, background: `${BG}/bg04.jpg`, portrait: { symbolCap: 68, glassHeight: 40 } },
   'slot-spice-market': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.14, background: `${BG}/bg06.jpg`, portrait: { symbolCap: 70, glassHeight: 38 } },
   'slot-emerald-nights': { controls: 'console', frame: 'gilt', symbolFill: 0.98, rowAspect: 1.16, background: `${BG}/bg07.jpg`, portrait: { symbolCap: 68, glassHeight: 36 } },
@@ -172,7 +174,7 @@ export const CABINETS: Record<string, CabinetSpec> = {
   'slot-storm-chaser': { controls: 'console', frame: 'chrome', symbolFill: 0.96, rowAspect: 1.26, background: `${BG}/bg01.jpg`, portrait: { symbolCap: 66, glassHeight: 36 } },
   'slot-supernova': { controls: 'console', frame: 'chrome', symbolFill: 0.96, rowAspect: 1.28, portrait: { symbolCap: 66, glassHeight: 36 } },
   // Like Ocean Drift, Aurora is a 3-4-5-4-3 diamond rather than a 3x5 grid.
-  'slot-aurora-borealis': { controls: 'console', frame: 'chrome', symbolFill: 0.96, rowAspect: 1.24, portrait: { symbolCap: 49, glassHeight: 30, rowAspect: 1.1 }, wide: { symbolCap: 58, rowAspect: 1.0, glassHeight: 30 } },
+  'slot-aurora-borealis': { controls: 'console', frame: 'chrome', symbolFill: 0.96, rowAspect: 1.24, portrait: { symbolCap: 43, glassHeight: 30, rowAspect: 1.08 }, wide: { symbolCap: 58, rowAspect: 1.0, glassHeight: 30 } },
   'slot-vault-breaker': { controls: 'console', frame: 'chrome', symbolFill: 0.98, rowAspect: 1.18, background: `${BG}/bg08.jpg`, portrait: { symbolCap: 68, glassHeight: 36 } },
   'slot-city-lights': { controls: 'console', frame: 'chrome', symbolFill: 0.96, rowAspect: 1.24, portrait: { symbolCap: 67, glassHeight: 36 } },
 
@@ -182,7 +184,7 @@ export const CABINETS: Record<string, CabinetSpec> = {
   'slot-neon-alley': { controls: 'console', frame: 'none', symbolFill: 0.96, rowAspect: 1.3, portrait: { symbolCap: 66, glassHeight: 34 } },
   // The extra two centre rows need their own fit so the bonus glass remains
   // visible above the dock instead of being hidden behind SPIN.
-  'slot-ocean-drift': { controls: 'console', frame: 'none', symbolFill: 0.96, rowAspect: 1.3, portrait: { symbolCap: 48, glassHeight: 30, rowAspect: 1.08 }, wide: { symbolCap: 58, rowAspect: 1.0, glassHeight: 30 } },
+  'slot-ocean-drift': { controls: 'console', frame: 'none', symbolFill: 0.96, rowAspect: 1.3, portrait: { symbolCap: 42, glassHeight: 30, rowAspect: 1.06 }, wide: { symbolCap: 58, rowAspect: 1.0, glassHeight: 30 } },
   'slot-sunset-strip': { controls: 'console', frame: 'none', symbolFill: 0.96, rowAspect: 1.3, portrait: { symbolCap: 66, glassHeight: 34 } },
   'slot-carnival-row': { controls: 'console', frame: 'none', symbolFill: 0.98, rowAspect: 1.26, portrait: { symbolCap: 66, glassHeight: 34 } },
   'slot-jungle-run': { controls: 'console', frame: 'none', symbolFill: 0.98, rowAspect: 1.26, portrait: { symbolCap: 66, glassHeight: 34 } },

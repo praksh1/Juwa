@@ -907,6 +907,12 @@ export function SlotsScreen() {
   // as "compact". Keep its bet and spin rail beside the cabinet so a player
   // never has to reduce browser zoom just to reach the controls.
   const sideControls = compact || viewportWidth >= 760;
+  // Expanded Safari chrome can leave barely 640 CSS pixels for the whole app.
+  // The portrait cabinet has to surrender a little reel height in that state;
+  // otherwise the fixed console is visible but the bonus/message strip lives
+  // in a second, hidden scroll position. Desktop and landscape never use this
+  // cap, and Dragon's Hoard keeps its purpose-built measured presentation.
+  const shortPortrait = !sideControls && viewportHeight < 700 && !dragonHoard;
   // Safari can report the narrow visual viewport while its controls are
   // expanded. Keep every header action reachable instead of letting the sound
   // switch or the last part of the cabinet extend off the right edge.
@@ -955,9 +961,12 @@ export function SlotsScreen() {
       ? 54
       : sideControls
         ? (wideCabinet?.symbolCap ?? (viewportWidth >= 1_000 ? 104 : 88))
-        : (portraitCabinet?.symbolCap ?? MAX_SYMBOL_SIZE);
+        : Math.min(
+            portraitCabinet?.symbolCap ?? MAX_SYMBOL_SIZE,
+            shortPortrait ? (cabinet.controls === 'lever' ? 46 : 34) : MAX_SYMBOL_SIZE,
+          );
     return Math.max(26, Math.min(stageCap, byWidth));
-  }, [viewportWidth, reelsWidth, REELS, compact, sideControls, portraitCabinet?.symbolCap, wideCabinet?.symbolCap]);
+  }, [viewportWidth, reelsWidth, REELS, compact, sideControls, portraitCabinet?.symbolCap, wideCabinet?.symbolCap, shortPortrait, cabinet.controls]);
 
   /**
    * How tall a cell is against how wide it is.
@@ -1049,11 +1058,15 @@ export function SlotsScreen() {
 
   const glassHeight = useMemo(() => {
     if (compact) return 0;
-    if (portraitCabinet) return portraitCabinet.glassHeight;
+    if (portraitCabinet) {
+      return shortPortrait
+        ? Math.max(22, portraitCabinet.glassHeight - 8)
+        : portraitCabinet.glassHeight;
+    }
     if (wideCabinet?.glassHeight) return wideCabinet.glassHeight;
     // A width-led top box remains still when mobile-browser chrome changes.
     return Math.round(Math.max(MIN_GLASS, Math.min(MAX_GLASS, cellHeight * 0.72)));
-  }, [compact, cellHeight, portraitCabinet]);
+  }, [compact, cellHeight, portraitCabinet, shortPortrait]);
 
   /**
    * The bonus-round re-theme.
@@ -1632,8 +1645,13 @@ export function SlotsScreen() {
 
       <ScrollView
         style={[styles.scroll, { transform: [{ translateX: screenShake }] }]}
-        contentContainerStyle={[styles.screen, dockedConsole && styles.screenWithDock]}
-        showsVerticalScrollIndicator
+        contentContainerStyle={[
+          styles.screen,
+          shortPortrait && styles.shortPortraitScreen,
+          dockedConsole && styles.screenWithDock,
+          dockedConsole && shortPortrait && styles.screenWithShortDock,
+        ]}
+        showsVerticalScrollIndicator={false}
         contentInsetAdjustmentBehavior="automatic"
       >
 
@@ -2065,7 +2083,11 @@ export function SlotsScreen() {
       </View> : null}
       </View>
 
-      <Txt variant="caption" color={colors.text.muted} style={styles.fairness}>
+      <Txt
+        variant="caption"
+        color={colors.text.muted}
+        style={[styles.fairness, shortPortrait && styles.shortHidden]}
+      >
         {USE_DEMO_API
           ? '⚠️ Demo mode — outcomes are generated on-device and are not the real game.'
           : round
@@ -2177,6 +2199,10 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
   },
   screenWithDock: { paddingBottom: 96 },
+  // The dense portrait console is only about 58px tall. Reserving 96px made a
+  // correctly sized cabinet scroll even though nothing occupied the surplus.
+  screenWithShortDock: { paddingBottom: 60 },
+  shortPortraitScreen: { paddingTop: 2, paddingBottom: 2, gap: spacing.xs },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2346,4 +2372,5 @@ const styles = StyleSheet.create({
   chipDisabled: { opacity: 0.35 },
   spin: { minHeight: 56 },
   fairness: { textAlign: 'center' },
+  shortHidden: { display: 'none' },
 });
