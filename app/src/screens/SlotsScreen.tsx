@@ -961,12 +961,9 @@ export function SlotsScreen() {
       ? 54
       : sideControls
         ? (wideCabinet?.symbolCap ?? (viewportWidth >= 1_000 ? 104 : 88))
-        : Math.min(
-            portraitCabinet?.symbolCap ?? MAX_SYMBOL_SIZE,
-            shortPortrait ? (cabinet.controls === 'lever' ? 46 : 34) : MAX_SYMBOL_SIZE,
-          );
+        : (portraitCabinet?.symbolCap ?? MAX_SYMBOL_SIZE);
     return Math.max(26, Math.min(stageCap, byWidth));
-  }, [viewportWidth, reelsWidth, REELS, compact, sideControls, portraitCabinet?.symbolCap, wideCabinet?.symbolCap, shortPortrait, cabinet.controls]);
+  }, [viewportWidth, reelsWidth, REELS, compact, sideControls, portraitCabinet?.symbolCap, wideCabinet?.symbolCap]);
 
   /**
    * How tall a cell is against how wide it is.
@@ -1058,15 +1055,11 @@ export function SlotsScreen() {
 
   const glassHeight = useMemo(() => {
     if (compact) return 0;
-    if (portraitCabinet) {
-      return shortPortrait
-        ? Math.max(22, portraitCabinet.glassHeight - 8)
-        : portraitCabinet.glassHeight;
-    }
+    if (portraitCabinet) return portraitCabinet.glassHeight;
     if (wideCabinet?.glassHeight) return wideCabinet.glassHeight;
     // A width-led top box remains still when mobile-browser chrome changes.
     return Math.round(Math.max(MIN_GLASS, Math.min(MAX_GLASS, cellHeight * 0.72)));
-  }, [compact, cellHeight, portraitCabinet, shortPortrait]);
+  }, [compact, cellHeight, portraitCabinet]);
 
   /**
    * The bonus-round re-theme.
