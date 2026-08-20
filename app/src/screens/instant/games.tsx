@@ -47,6 +47,7 @@ import {
 import { sounds } from '../../sound';
 import type { RoundResponse } from '../../api/client';
 import { usePrefersReducedMotion } from '../../motion';
+import { isIos } from '../../pwa';
 
 const GAMES: Record<string, InstantGame> = {
   crash: { id: 'juwa-crash', name: 'Crash', minBet: 50, maxBet: 500_000, accent: '#F59E0B', cabinet: 'crash' },
@@ -56,6 +57,16 @@ const GAMES: Record<string, InstantGame> = {
   mines: { id: 'juwa-mines', name: 'Mines', minBet: 50, maxBet: 500_000, accent: '#38BDF8', cabinet: 'mines' },
   scratch: { id: 'juwa-scratch', name: 'Golden Scratch', minBet: 100, maxBet: 10_000, accent: '#F6C84C', cabinet: 'scratch' },
 };
+
+/**
+ * Safari's smaller-page control fixes these tall stages by changing the whole
+ * CSS viewport, not merely their lettering. Reproduce only the small amount of
+ * vertical density it buys on an iPhone at Safari's default scale.
+ */
+function useTightIphoneStage(): boolean {
+  const { width } = useWindowDimensions();
+  return isIos() && width <= 410;
+}
 
 /** A row of preset targets. Typing 2.47 on a phone is nobody's idea of fun. */
 function TargetPicker({
@@ -126,6 +137,7 @@ export function CrashScreen() {
   const [target, setTarget] = useState(2);
   const announce = useSettlementAnnouncer();
   const { handle, celebrate } = useCelebration();
+  const tightIphoneStage = useTightIphoneStage();
   // Sound and sparks together, on the frame the picture says so.
   const reveal = (round: RoundResponse | null) => {
     announce(round);
@@ -169,7 +181,12 @@ export function CrashScreen() {
           />
       }
     >
-      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet}>
+      <Board
+        accent={game.accent}
+        celebrate={handle}
+        cabinet={game.cabinet}
+        bodyStyle={tightIphoneStage && local.tightIphoneGameBody}
+      >
         <View style={local.crashDeck}>
           <View>
             <Txt variant="caption" color="#D6B76B">AUTO CASH OUT</Txt>
@@ -202,7 +219,7 @@ export function CrashScreen() {
           {shown.toFixed(2)}×
         </Txt>
 
-        <View style={shell.result}>
+        <View style={[shell.result, tightIphoneStage && local.tightIphoneResult]}>
           {running ? (
             <Txt variant="bodySmall" color={colors.text.secondary}>
               Climbing…
@@ -821,6 +838,7 @@ export function PlinkoScreen() {
   const game = GAMES['plinko']!;
   const state = useInstantGame(game);
   const { width: viewportWidth } = useWindowDimensions();
+  const tightIphoneStage = useTightIphoneStage();
   const [rows, setRows] = useState<PlinkoRows>(12);
   const [risk, setRisk] = useState<PlinkoRisk>('medium');
   const [revealedRoundId, setRevealedRoundId] = useState<string | null>(null);
@@ -875,7 +893,12 @@ export function PlinkoScreen() {
           />
       }
     >
-      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet} bodyStyle={local.expandedGameBody}>
+      <Board
+        accent={game.accent}
+        celebrate={handle}
+        cabinet={game.cabinet}
+        bodyStyle={[local.expandedGameBody, tightIphoneStage && local.tightIphoneGameBody]}
+      >
         <View style={local.plinkoHeader}>
           <Txt variant="caption" color="#FFE4FF">LUMEN PEG ARRAY</Txt>
           <Txt variant="caption" color="#F4A9FF">PATH RECORDER</Txt>
@@ -888,6 +911,7 @@ export function PlinkoScreen() {
           landedBucket={landedBucket}
           outcome={presentationComplete && result ? { multiplier: result.multiplier, payout: state.round?.settlement?.payout ?? 0 } : undefined}
           width={boardWidth}
+          condensed={tightIphoneStage}
         />
       </Board>
     </InstantLayout>
@@ -960,6 +984,7 @@ function PlinkoVault({
   landedBucket,
   outcome,
   width,
+  condensed,
 }: {
   rows: number;
   path?: ('L' | 'R')[];
@@ -969,11 +994,12 @@ function PlinkoVault({
   landedBucket: number | null;
   outcome?: { multiplier: number; payout: number };
   width: number;
+  condensed?: boolean;
 }) {
   // A phone has spare height below the chamber, so use it for the soul of the
   // game. Wide/Surface layouts keep the shallower ratio to protect their much
   // scarcer vertical space.
-  const height = Math.round(width * (width < 400 ? 0.82 : 0.68));
+  const height = Math.round(width * (condensed ? 0.74 : width < 400 ? 0.82 : 0.68));
   const gap = width / 18.75;
   // The path is truncated to the bounces the player has actually seen.
   const shown = path ? path.slice(0, Math.max(0, step)) : [];
@@ -1133,12 +1159,13 @@ export function MinesScreen() {
   const game = GAMES['mines']!;
   const state = useInstantGame(game);
   const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
+  const tightIphoneStage = useTightIphoneStage();
   const [mines, setMines] = useState(3);
   // The square can reach 440 on a tall desktop. Phones keep a substantial
   // 298-point vault so the playfield remains the visual focus of the screen.
   const mineSize = viewportWidth >= 760
     ? Math.min(440, Math.max(288, viewportHeight - 478))
-    : Math.min(298, viewportWidth - 60);
+    : Math.min(tightIphoneStage ? 282 : 298, viewportWidth - 60);
   const mineScale = mineSize / 282;
 
   const board = state.round?.state as
@@ -1234,7 +1261,12 @@ export function MinesScreen() {
         )
       }
     >
-      <Board accent={game.accent} celebrate={handle} cabinet={game.cabinet} bodyStyle={local.expandedGameBody}>
+      <Board
+        accent={game.accent}
+        celebrate={handle}
+        cabinet={game.cabinet}
+        bodyStyle={[local.expandedGameBody, tightIphoneStage && local.tightIphoneGameBody]}
+      >
         <View style={[local.mineVault, { width: mineSize, height: mineSize }]}>
           <Image source={{ uri: '/art/tiles/juwa-mines.png' }} resizeMode="contain" style={StyleSheet.absoluteFill} />
           {/* The illustrated twenty-five-cell vault is the actual playfield.
@@ -1643,6 +1675,8 @@ function MineTile({
 const local = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', justifyContent: 'center' },
   expandedGameBody: { paddingHorizontal: 6 },
+  tightIphoneGameBody: { paddingVertical: 9, gap: 4 },
+  tightIphoneResult: { minHeight: 34 },
   winReadout: { alignItems: 'center', gap: 2, paddingVertical: 2 },
   dockChoices: { flexDirection: 'row', gap: 6, paddingHorizontal: 2, alignItems: 'center' },
   dockChoice: { minHeight: 32, minWidth: 64, paddingHorizontal: 10, borderRadius: 11, borderWidth: 1, borderColor: '#3A3446', backgroundColor: '#15131D', alignItems: 'center', justifyContent: 'center' },
