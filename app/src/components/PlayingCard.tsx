@@ -41,9 +41,9 @@ export function PlayingCard({ rank, suit, hidden, index = 0, dealOrder = index, 
     entrance.setValue(0);
     Animated.timing(entrance, {
       toValue: 1,
-      duration: Math.max(motion.cardDeal, 540),
+      duration: Math.max(motion.cardDeal, 650),
       delay: dealOrder * 145,
-      easing: Easing.bezier(0.16, 0.78, 0.24, 1),
+      easing: Easing.bezier(0.2, 0.72, 0.28, 1),
       useNativeDriver: true,
     }).start();
   }, [dealOrder, entrance]);
@@ -54,46 +54,46 @@ export function PlayingCard({ rank, suit, hidden, index = 0, dealOrder = index, 
   // slow down reading a hand.
   const ink = suit === 'H' || suit === 'D' ? colors.table.red : colors.table.black;
 
-  const sourceX = trajectory === 'dealer' ? 116 + index * 10 : 166 + index * 12;
-  const sourceY = trajectory === 'dealer' ? -68 : -184;
+  const sourceX = trajectory === 'dealer' ? 112 + index * 8 : 158 + index * 8;
+  const sourceY = trajectory === 'dealer' ? -62 : -172;
   const animatedStyle = {
     opacity: entrance.interpolate({ inputRange: [0, 0.08, 1], outputRange: [0, 1, 1] }),
     transform: [
       { perspective: 620 },
       {
         translateX: entrance.interpolate({
-          inputRange: [0, 0.18, 0.72, 0.9, 1],
-          outputRange: [sourceX, sourceX * 0.86, 14, -4, 0],
+          inputRange: [0, 0.28, 0.78, 1],
+          outputRange: [sourceX, sourceX * 0.7, 8, 0],
         }),
       },
       {
         translateY: entrance.interpolate({
-          inputRange: [0, 0.18, 0.72, 0.9, 1],
-          outputRange: [sourceY, sourceY - 10, -14, 3, 0],
+          inputRange: [0, 0.28, 0.78, 1],
+          outputRange: [sourceY, sourceY * 0.78 - 8, -6, 0],
         }),
       },
       {
         rotateZ: entrance.interpolate({
-          inputRange: [0, 0.2, 0.76, 1],
-          outputRange: ['-24deg', '-18deg', '3deg', '0deg'],
+          inputRange: [0, 0.36, 0.86, 1],
+          outputRange: ['-9deg', '-6deg', '1deg', '0deg'],
         }),
       },
       {
         rotateY: entrance.interpolate({
-          inputRange: [0, 0.22, 0.74, 1],
-          outputRange: ['-48deg', '-24deg', '6deg', '0deg'],
+          inputRange: [0, 0.5, 1],
+          outputRange: ['-12deg', '-4deg', '0deg'],
         }),
       },
       {
         rotateX: entrance.interpolate({
-          inputRange: [0, 0.68, 1],
-          outputRange: ['18deg', '4deg', '0deg'],
+          inputRange: [0, 0.7, 1],
+          outputRange: ['7deg', '2deg', '0deg'],
         }),
       },
       {
         scale: entrance.interpolate({
-          inputRange: [0, 0.7, 0.9, 1],
-          outputRange: [0.68, 0.96, 1.035, 1],
+          inputRange: [0, 0.72, 1],
+          outputRange: [0.84, 0.985, 1],
         }),
       },
     ],

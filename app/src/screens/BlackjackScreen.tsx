@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Image, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Animated, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
@@ -165,8 +165,24 @@ export function BlackjackScreen() {
   const [bet, setBet] = useState(minor(1_000));
   const [round, setRound] = useState<RoundResponse | null>(null);
   const [busy, setBusy] = useState(false);
+  const [cardsSettling, setCardsSettling] = useState(false);
+  const [handView, setHandView] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const lamp = useRef(new Animated.Value(0)).current;
+  const presentationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const holdCards = useCallback((duration: number) => {
+    if (presentationTimer.current) clearTimeout(presentationTimer.current);
+    setCardsSettling(true);
+    presentationTimer.current = setTimeout(() => {
+      setCardsSettling(false);
+      presentationTimer.current = null;
+    }, duration);
+  }, []);
+
+  useEffect(() => () => {
+    if (presentationTimer.current) clearTimeout(presentationTimer.current);
+  }, []);
 
   useEffect(() => {
     const glow = Animated.loop(Animated.sequence([
@@ -197,6 +213,15 @@ export function BlackjackScreen() {
   const table = round?.state as BlackjackPublic | undefined;
   const settled = round?.status === 'settled';
   const inHand = Boolean(round) && !settled;
+  const controlsLocked = busy || cardsSettling;
+
+  useEffect(() => {
+    if (!table) {
+      setHandView(0);
+      return;
+    }
+    setHandView(settled ? 0 : table.activeHand);
+  }, [round?.roundId, settled, table?.activeHand, table?.hands.length]);
 
   /**
    * Sound and sparks for however the hand ended, once the dealer is revealed.
@@ -255,10 +280,11 @@ export function BlackjackScreen() {
       publishBalance(minor(result.balance));
 
       const state = result.state as BlackjackPublic;
+      holdCards(1_120);
       // Four cards, dealt in sequence.
       [0, 1, 2, 3].forEach((i) => setTimeout(() => sounds.cardDeal(), i * 145));
       if (result.status === 'settled') {
-        setTimeout(() => announce(state, result.settlement?.payout ?? 0, bet), 500);
+        setTimeout(() => announce(state, result.settlement?.payout ?? 0, bet), 1_180);
       }
     } catch (caught) {
       setBalance((current) => minor(current + bet));
@@ -267,14 +293,13 @@ export function BlackjackScreen() {
     } finally {
       setBusy(false);
     }
-  }, [announce, api, balance, bet, busy]);
+  }, [announce, api, balance, bet, busy, holdCards]);
 
   const act = useCallback(
     async (action: string) => {
       if (!round || busy) return;
       unlock();
       sounds.tap();
-      if (action === 'hit' || action === 'double' || action === 'split') sounds.cardDeal();
 
       setBusy(true);
       setError(null);
@@ -288,13 +313,27 @@ export function BlackjackScreen() {
         setBalance(minor(result.balance));
         publishBalance(minor(result.balance));
 
+        const state = result.state as BlackjackPublic;
+        const presentationMs = result.status === 'settled'
+          ? Math.min(1_150, 720 + Math.max(0, state.dealer.length - 1) * 120)
+          : action === 'split' ? 860 : 720;
+        holdCards(presentationMs);
+
+        // The sound belongs to the visible card crossing the felt, not the
+        // button press while the server is still deciding the hand.
+        if (action === 'split') {
+          sounds.cardDeal();
+          setTimeout(() => sounds.cardDeal(), 145);
+        } else if (action === 'hit' || action === 'double') {
+          sounds.cardDeal();
+        }
+
         if (result.status === 'settled') {
-          const state = result.state as BlackjackPublic;
           // The hole card turns over as the hand resolves.
           sounds.cardFlip();
           setTimeout(
             () => announce(state, result.settlement?.payout ?? 0, result.settlement?.stake ?? bet),
-            420,
+            presentationMs + 60,
           );
         }
       } catch (caught) {
@@ -304,11 +343,13 @@ export function BlackjackScreen() {
         setBusy(false);
       }
     },
-    [announce, api, bet, busy, round],
+    [announce, api, bet, busy, holdCards, round],
   );
 
   const dealerValue = table ? handValue(table.dealer) : null;
   const splitTable = (table?.hands.length ?? 0) > 1;
+  const visibleHandIndex = table ? Math.min(handView, Math.max(0, table.hands.length - 1)) : 0;
+  const visibleHand = table?.hands[visibleHandIndex];
 
   return (
     <View style={styles.screen}>
@@ -344,24 +385,11 @@ export function BlackjackScreen() {
           })
         }
       >
-        <Image
-          source={{ uri: '/art/tiles/juwa-blackjack.png' }}
-          resizeMode="cover"
-          style={styles.tableArtwork}
-        />
-        {/*
-          Lit felt, not a flat green rectangle.
-
-          A real table is a bowl of light: brightest under the lamp in the
-          middle, falling off to the rail. One radial-ish gradient plus a darker
-          rim is the whole difference between "green background" and "table",
-          and it costs two views.
-        */}
         <LinearGradient
-          colors={['rgba(3,5,9,0.88)', 'rgba(5,72,51,0.84)', 'rgba(1,25,19,0.94)']}
-          locations={[0, 0.55, 1]}
-          start={{ x: 0.3, y: 0 }}
-          end={{ x: 0.7, y: 1 }}
+          colors={['#087A51', '#075F41', '#043B2C', '#02251D']}
+          locations={[0, 0.38, 0.76, 1]}
+          start={{ x: 0.18, y: 0 }}
+          end={{ x: 0.82, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
         <View style={styles.tableRail} pointerEvents="none" />
@@ -374,8 +402,6 @@ export function BlackjackScreen() {
         <Animated.View style={[styles.lampPool, { opacity: lamp.interpolate({ inputRange: [0, 1], outputRange: [0.18, 0.52] }) }]} pointerEvents="none" />
         <View style={styles.ruleArc} pointerEvents="none">
           <View style={styles.ruleArcLine} />
-          <Txt variant="caption" color="rgba(255,224,145,0.54)">BLACKJACK PAYS 3 TO 2</Txt>
-          <Txt variant="caption" color="rgba(255,224,145,0.40)">DEALER STANDS ON 17</Txt>
         </View>
         <View style={styles.dealerHardware} pointerEvents="none">
           <View style={styles.chipRack}>
@@ -391,7 +417,8 @@ export function BlackjackScreen() {
           </View>
         </View>
         <View style={styles.tablePlaque} pointerEvents="none">
-          <Txt variant="caption" color="#FFE9A6">PRIVATE TABLE · 21</Txt>
+          <Txt variant="h3" color="#F5D77E">BLACKJACK</Txt>
+          <Txt variant="caption" color="rgba(255,232,164,0.76)">PAYS 3 TO 2 · DEALER STANDS ON ALL 17s</Txt>
         </View>
         <View style={styles.feltSheen} pointerEvents="none">
           <LinearGradient
@@ -411,7 +438,7 @@ export function BlackjackScreen() {
           <View style={styles.cards}>
             {table ? (
               table.dealer.map((card, i) => (
-                <PlayingCard key={`d-${i}`} rank={card.rank} suit={card.suit} index={i} dealOrder={i === 0 ? 1 : 4 + i} trajectory="dealer" size={compactTable ? 'small' : 'normal'} />
+                <PlayingCard key={`d-${i}`} rank={card.rank} suit={card.suit} index={i} dealOrder={i === 0 ? 1 : Math.max(0, i - 1)} trajectory="dealer" size={compactTable ? 'small' : 'normal'} />
               ))
             ) : (
               <Txt variant="bodySmall" color={colors.text.muted}>
@@ -424,7 +451,7 @@ export function BlackjackScreen() {
               <PlayingCard rank="?" suit="S" hidden index={1} dealOrder={3} trajectory="dealer" size={compactTable ? 'small' : 'normal'} />
             ) : null}
             {table?.dealerRevealed && dealerValue ? (
-              <View style={styles.handTotalBadge}>
+              <View style={[styles.handTotalBadge, cardsSettling && styles.totalWaiting]}>
                 <Txt variant="h2" color="#FFF0B1">{dealerValue.total}</Txt>
                 {dealerValue.soft ? <Txt variant="caption" color="#C9A95D">SOFT</Txt> : null}
               </View>
@@ -434,66 +461,92 @@ export function BlackjackScreen() {
 
         <View style={styles.divider} />
 
-        {/* Player, one block per hand after a split */}
-        {table ? (
-          <View style={splitTable ? styles.splitHands : undefined}>
-          {table.hands.map((hand, handIndex) => {
-            const value = handValue(hand.cards);
-            const active = !settled && handIndex === table.activeHand;
-            return (
-              <View
-                key={`h-${handIndex}`}
-                style={[
-                  styles.seat,
-                  compactTable && styles.seatCompact,
-                  splitTable && styles.splitSeat,
-                  active && styles.seatActive,
-                ]}
-              >
-                <View style={styles.seatLabel}>
-            <Txt variant="caption" color={active ? '#FFE89B' : '#C9A95D'}>
-                    {table.hands.length > 1 ? `HAND ${handIndex + 1}` : 'YOU'}
-                    {' · '}
-                    {format(minor(hand.stake), 'GC')}
+        {/*
+          A split is a row of betting positions, not several miniature tables.
+          Only one full-size hand is on the felt at a time; the gold position is
+          the hand the buttons will act on. Settled hands can be reviewed.
+        */}
+        {table && splitTable ? (
+          <View style={styles.handPositions}>
+            {table.hands.map((hand, handIndex) => {
+              const value = handValue(hand.cards);
+              const active = !settled && handIndex === table.activeHand;
+              const selected = handIndex === visibleHandIndex;
+              return (
+                <Pressable
+                  key={`position-${handIndex}`}
+                  disabled={!settled}
+                  onPress={() => setHandView(handIndex)}
+                  style={[
+                    styles.handPosition,
+                    selected && styles.handPositionSelected,
+                    active && styles.handPositionActive,
+                  ]}
+                >
+                  <Txt variant="caption" color={active ? colors.text.inverse : '#E4CA85'}>
+                    HAND {handIndex + 1}
                   </Txt>
-                </View>
-                <View style={[styles.cards, splitTable && styles.cardsSplit]}>
-                  {hand.cards.map((card, i) => (
-                    <PlayingCard
-                      key={`h${handIndex}-${i}`}
-                      rank={card.rank}
-                      suit={card.suit}
-                      index={i}
-                      dealOrder={i * 2 + handIndex}
-                      trajectory="player"
-                      size={compactTable || table.hands.length > 1 ? 'small' : 'normal'}
-                    />
-                  ))}
-                  <View style={[styles.handTotalBadge, splitTable && styles.handTotalBadgeSplit]}>
-                    <Txt variant="h2" color={active ? '#FFF1B5' : '#F7E9BC'}>{value.total}</Txt>
-                    {value.soft ? <Txt variant="caption" color="#C9A95D">SOFT</Txt> : null}
-                  </View>
-                </View>
-                {hand.outcome ? (
-                  <Txt
-                    variant="bodySmall"
-                    color={
-                      hand.outcome === 'blackjack' || hand.outcome === 'win'
-                        ? colors.feedback.winBright
-                        : hand.outcome === 'push'
-                          ? colors.text.secondary
-                          : colors.feedback.loss
-                    }
-                  >
-                    {OUTCOME_TEXT[hand.outcome]}
-                    {hand.payout ? ` · +${format(minor(hand.payout), 'GC')}` : ''}
+                  <Txt variant="bodySmall" color={active ? colors.text.inverse : '#FFF0B1'}>
+                    {cardsSettling && active ? 'DEALING…' : value.total}
                   </Txt>
-                ) : null}
-              </View>
-            );
-          })}
+                </Pressable>
+              );
+            })}
           </View>
-        ) : (
+        ) : null}
+
+        {table && visibleHand ? (() => {
+          const value = handValue(visibleHand.cards);
+          const active = !settled && visibleHandIndex === table.activeHand;
+          return (
+            <View style={[styles.seat, compactTable && styles.seatCompact, active && styles.seatActive]}>
+              {active ? (
+                <View style={styles.turnBanner}>
+                  <Txt variant="caption" color={colors.text.inverse}>
+                    HAND {visibleHandIndex + 1} · YOUR TURN — HIT OR STAND
+                  </Txt>
+                </View>
+              ) : null}
+              <View style={styles.seatLabel}>
+                <Txt variant="caption" color={active ? '#FFE89B' : '#C9A95D'}>
+                  {splitTable ? `HAND ${visibleHandIndex + 1}` : 'YOU'} · {format(minor(visibleHand.stake), 'GC')}
+                </Txt>
+              </View>
+              <View style={styles.cards}>
+                {visibleHand.cards.map((card, i) => (
+                  <PlayingCard
+                    key={`h${visibleHandIndex}-${i}`}
+                    rank={card.rank}
+                    suit={card.suit}
+                    index={i}
+                    dealOrder={visibleHandIndex === 0 && i === 1 ? 2 : i < 2 && visibleHandIndex > 0 ? i : 0}
+                    trajectory="player"
+                    size={compactTable ? 'small' : 'normal'}
+                  />
+                ))}
+                <View style={[styles.handTotalBadge, cardsSettling && styles.totalWaiting]}>
+                  <Txt variant="h2" color={active ? '#FFF1B5' : '#F7E9BC'}>{value.total}</Txt>
+                  {value.soft ? <Txt variant="caption" color="#C9A95D">SOFT</Txt> : null}
+                </View>
+              </View>
+              {visibleHand.outcome && !cardsSettling ? (
+                <Txt
+                  variant="bodySmall"
+                  color={
+                    visibleHand.outcome === 'blackjack' || visibleHand.outcome === 'win'
+                      ? colors.feedback.winBright
+                      : visibleHand.outcome === 'push'
+                        ? colors.text.secondary
+                        : colors.feedback.loss
+                  }
+                >
+                  {OUTCOME_TEXT[visibleHand.outcome]}
+                  {visibleHand.payout ? ` · +${format(minor(visibleHand.payout), 'GC')}` : ''}
+                </Txt>
+              ) : null}
+            </View>
+          );
+        })() : table ? null : (
           <View style={[styles.seat, compactTable && styles.seatCompact]}>
             <Txt variant="bodySmall" color={colors.text.muted}>
               Pick a bet and deal.
@@ -539,7 +592,7 @@ export function BlackjackScreen() {
               <Pressable
                 key={option}
                 onPress={() => setBet(option)}
-                disabled={busy || !affordable}
+                disabled={controlsLocked || !affordable}
                 accessibilityRole="button"
                 accessibilityState={{ selected: active, disabled: !affordable }}
                 style={[styles.chip, active && styles.chipActive, !affordable && styles.chipOff]}
@@ -564,7 +617,7 @@ export function BlackjackScreen() {
               label={ACTION_LABELS[action] ?? action}
               variant={action === 'hit' || action === 'stand' ? 'primary' : 'secondary'}
               onPress={() => act(action)}
-              disabled={busy}
+              disabled={controlsLocked}
               style={styles.actionButton}
             />
           ))}
@@ -574,7 +627,7 @@ export function BlackjackScreen() {
           label={settled ? `Deal again · ${format(bet, 'GC')}` : `Deal ${format(bet, 'GC')}`}
           onPress={deal}
           loading={busy}
-          disabled={busy || bet > balance}
+          disabled={controlsLocked || bet > balance}
           style={styles.deal}
         />
       )}
@@ -617,7 +670,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
   },
   tableCompact: { padding: spacing.md, gap: spacing.sm, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderBottomLeftRadius: 58, borderBottomRightRadius: 58 },
-  tableArtwork: { ...StyleSheet.absoluteFillObject, opacity: 0.08 },
   tableRail: {
     ...StyleSheet.absoluteFillObject,
     borderTopLeftRadius: 22,
@@ -655,25 +707,23 @@ const styles = StyleSheet.create({
   lampPool: { position: 'absolute', width: 260, height: 150, borderRadius: 130, alignSelf: 'center', top: -54, backgroundColor: '#F8CD63', shadowColor: '#FFE29A', shadowRadius: 40 },
   ruleArc: {
     position: 'absolute',
-    left: '16%',
-    right: '16%',
-    top: '43%',
-    height: 74,
+    left: '12%',
+    right: '12%',
+    bottom: 28,
+    height: 92,
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 1,
-    opacity: 0.72,
+    opacity: 0.46,
   },
   ruleArcLine: {
     position: 'absolute',
     left: 0,
     right: 0,
     top: 0,
-    height: 58,
-    borderTopWidth: 1.5,
-    borderColor: 'rgba(242,205,116,0.50)',
+    height: 82,
+    borderTopWidth: 1,
+    borderColor: 'rgba(242,205,116,0.56)',
     borderRadius: 999,
-    transform: [{ scaleY: 0.56 }],
+    transform: [{ scaleY: 0.48 }],
   },
   dealerHardware: { position: 'absolute', top: 10, left: 16, right: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   chipRack: {
@@ -698,27 +748,74 @@ const styles = StyleSheet.create({
   shoeCard: { position: 'absolute', width: 32, height: 22, right: 8, top: 5, borderRadius: 3, borderWidth: 1, borderColor: '#E7CC86', backgroundColor: '#151E36', transform: [{ rotate: '-8deg' }] },
   shoeCardTwo: { right: 12, top: 3, opacity: 0.7 },
   shoeMouth: { position: 'absolute', left: 4, right: 4, bottom: 3, height: 5, borderRadius: 4, backgroundColor: '#050607', borderTopWidth: 1, borderTopColor: '#E2B758' },
-  tablePlaque: { alignSelf: 'center', paddingHorizontal: 14, paddingVertical: 5, borderRadius: 3, borderWidth: 1, borderColor: 'rgba(255,218,116,0.62)', backgroundColor: 'rgba(8,12,16,0.66)' },
+  tablePlaque: {
+    alignSelf: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 76,
+    paddingVertical: 1,
+    gap: 0,
+  },
   feltSheen: { position: 'absolute', left: 0, right: 0, top: 0, height: '30%' },
   seat: { gap: spacing.sm, minHeight: 96 },
   seatCompact: { gap: 4, minHeight: 72 },
-  // A split creates two betting positions on the same table, not a second
-  // table below the first. Keeping the hands beside one another prevents the
-  // second hand and its controls from falling under Safari's browser chrome.
-  splitHands: { flexDirection: 'row', gap: spacing.xs, alignItems: 'flex-start' },
-  splitSeat: { flex: 1, minWidth: 0, minHeight: 116, paddingHorizontal: 3 },
+  handPositions: {
+    flexDirection: 'row',
+    gap: 4,
+    paddingHorizontal: 2,
+  },
+  handPosition: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 42,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: 'rgba(239,204,117,0.30)',
+    backgroundColor: 'rgba(0,22,16,0.66)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  handPositionSelected: {
+    borderColor: '#F4D273',
+    backgroundColor: 'rgba(70,52,13,0.72)',
+  },
+  handPositionActive: {
+    backgroundColor: '#E6BC4E',
+    borderColor: '#FFF0AE',
+    shadowColor: '#FFD86A',
+    shadowOpacity: 0.82,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 6,
+  },
   seatActive: {
-    borderLeftWidth: 3,
-    borderLeftColor: colors.gold.default,
-    paddingLeft: spacing.md,
-    marginLeft: -spacing.md,
+    borderWidth: 2,
+    borderColor: '#F5D370',
+    borderRadius: 14,
+    backgroundColor: 'rgba(8,47,34,0.74)',
+    padding: spacing.sm,
+    shadowColor: '#FFD76A',
+    shadowOpacity: 0.62,
+    shadowRadius: 13,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 7,
+  },
+  turnBanner: {
+    alignSelf: 'center',
+    borderRadius: radius.pill,
+    backgroundColor: '#E6BC4E',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+    shadowColor: '#FFE17F',
+    shadowOpacity: 0.66,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
   },
   seatLabel: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   // Extra right padding compensates for the negative margin that overlaps cards.
   cards: { flexDirection: 'row', alignItems: 'center', paddingRight: spacing.lg, minHeight: 74 },
-  cardsSplit: { paddingRight: 0, minHeight: 58 },
   handTotalBadge: { minWidth: 54, minHeight: 54, marginLeft: spacing.md, paddingHorizontal: spacing.xs, borderRadius: 27, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(9,12,17,0.84)', borderWidth: 2, borderColor: '#C9A95D', shadowColor: '#F7CA62', shadowOpacity: 0.42, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } },
-  handTotalBadgeSplit: { minWidth: 42, minHeight: 42, marginLeft: 4, borderRadius: 21 },
+  totalWaiting: { opacity: 0 },
   divider: { height: 1, backgroundColor: 'rgba(255,221,137,0.38)' },
   betRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
   chip: {
