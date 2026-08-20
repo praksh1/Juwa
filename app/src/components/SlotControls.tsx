@@ -322,6 +322,11 @@ export function SlotConsole({
         >
           {win > 0 ? format(win as Minor, 'GC') : '—'}
         </Txt>
+        {auto ? (
+          <Txt variant="caption" color={colors.feedback.winBright} style={styles.autoStatus}>
+            {hideSpin ? 'AUTO ON · TAP AUTO TO STOP' : 'AUTO ON · TAP STOP'}
+          </Txt>
+        ) : null}
       </View>
 
       {/*
@@ -348,7 +353,7 @@ export function SlotConsole({
 
         {hideSpin ? null : (
         <Pressable
-          onPress={onSpin}
+          onPress={auto ? onToggleAuto : onSpin}
           disabled={spinning && !auto}
           accessibilityRole="button"
           accessibilityLabel={
@@ -663,6 +668,10 @@ const styles = StyleSheet.create({
   spinPressed: { transform: [{ scale: 0.94 }] },
   spinBusy: { opacity: 0.6 },
   spinLabel: { ...typography.bodySmall, fontWeight: '900', letterSpacing: 1, color: '#1A1206' },
+  // Lives inside the existing WIN block, whose height is already governed by
+  // the spin button. It therefore explains auto-play without adding another
+  // row to a mobile layout that is deliberately fitted to the viewport.
+  autoStatus: { fontSize: 8, lineHeight: 10, fontWeight: '800', letterSpacing: 0.25, textAlign: 'center' },
 
   /* glass */
   glass: {

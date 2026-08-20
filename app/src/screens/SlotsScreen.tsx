@@ -181,11 +181,11 @@ const MIN_GLASS = 30;
 /**
  * How long auto-spin waits after being switched on, before spending anything.
  *
- * Long enough to press STOP having changed your mind, which is the whole
- * point: the previous version started a round almost immediately, so realising
- * you meant to set the stake first cost you a spin.
+ * Just long enough for the AUTO/STOP state to paint before the reels move.
+ * A multi-second grace period looked like AUTO was waiting for another press,
+ * which made the otherwise standard control sequence feel broken.
  */
-const AUTO_GRACE_MS = 2_600;
+const AUTO_GRACE_MS = 300;
 /**
  * The gap between automatic spins, by what the last one paid.
  *
@@ -599,11 +599,10 @@ export function SlotsScreen() {
   /**
    * How long auto-spin waits before the next round.
    *
-   * Three things it has to respect, all of them the player's:
+   * Three things it has to respect:
    *
-   *   CHANGING YOUR MIND. Pressing AUTO used to start a spin almost at once,
-   *   which is a trap — the moment you realise you meant to change the stake
-   *   first, the money is already gone. The first round waits.
+   *   CLEAR FEEDBACK. The first round waits only long enough to paint AUTO ON
+   *   and STOP, so the control responds before the stake is placed.
    *
    *   SEEING WHAT YOU WON. A win that is cleared by the next spin was not
    *   shown. The pause scales with the size of it, because a mega win takes
