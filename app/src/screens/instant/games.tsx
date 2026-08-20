@@ -1159,6 +1159,37 @@ function MinePerspectiveFaces({ tileState }: { tileState: (tile: number) => 'hid
   );
 }
 
+/** A settled Mines round announces over the vault instead of below the fold. */
+function MineResultBanner({ roundId, payout, bust }: { roundId: string; payout: number; bust: boolean }) {
+  const entrance = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.spring(entrance, { toValue: 1, friction: 6, tension: 96, useNativeDriver: true }).start();
+  }, [entrance, roundId]);
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        local.mineResultBanner,
+        bust ? local.mineResultBannerBust : local.mineResultBannerWin,
+        {
+          opacity: entrance,
+          transform: [
+            { scale: entrance.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] }) },
+            { translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) },
+          ],
+        },
+      ]}
+    >
+      <Txt variant="caption" color={bust ? '#FFD4B0' : '#CFFFFF'}>{bust ? 'VAULT BREACHED' : 'VAULT CLEARED'}</Txt>
+      <Txt variant="h2" color={bust ? '#FFF0D2' : '#E9FFFF'}>
+        {bust ? 'MINE HIT' : `WON ${format(minor(payout), 'GC')}`}
+      </Txt>
+    </Animated.View>
+  );
+}
+
 export function MinesScreen() {
   const game = GAMES['mines']!;
   const state = useInstantGame(game);
@@ -1299,7 +1330,15 @@ export function MinesScreen() {
           ))}
           </View>
           {bust ? <MineDetonation key={state.round?.roundId} /> : null}
-          <View style={local.minesStatusOverlay} pointerEvents="none">
+          {settled ? (
+            <MineResultBanner
+              key={state.round!.roundId}
+              roundId={state.round!.roundId}
+              payout={state.round!.settlement?.payout ?? 0}
+              bust={board?.bust ?? false}
+            />
+          ) : null}
+          {!settled ? <View style={local.minesStatusOverlay} pointerEvents="none">
             <Txt
               variant="bodySmall"
               color={settled && board?.bust ? colors.feedback.error : settled ? colors.feedback.winBright : colors.text.secondary}
@@ -1309,13 +1348,9 @@ export function MinesScreen() {
                 ? board!.multiplier > 0
                   ? `Cash out ${board!.multiplier}× · next ${board!.nextMultiplier}×`
                   : `First pick pays ${board!.nextMultiplier}×`
-                : settled
-                  ? board?.bust
-                    ? 'MINE HIT'
-                    : `WON ${format(minor(state.round!.settlement?.payout ?? 0), 'GC')}`
-                  : `${mines} ${mines === 1 ? 'mine' : 'mines'} · first pick ${minesMultiplier(mines, 1)}×`}
+                : `${mines} ${mines === 1 ? 'mine' : 'mines'} · first pick ${minesMultiplier(mines, 1)}×`}
             </Txt>
-          </View>
+          </View> : null}
         </View>
       </Board>
     </InstantLayout>
@@ -1795,6 +1830,9 @@ const local = StyleSheet.create({
   minesHeaderOverlay: { position: 'absolute', left: 4, right: 4, top: 4, zIndex: 6, width: undefined, paddingVertical: 3, borderRadius: radius.sm, backgroundColor: 'rgba(1,10,18,0.72)' },
   minesIndicator: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#79E7FF', shadowColor: '#79E7FF', shadowOpacity: 1, shadowRadius: 8 },
   minesStatusOverlay: { position: 'absolute', left: 8, right: 8, bottom: 5, zIndex: 6, minHeight: 24, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: 'rgba(1,8,17,0.78)' },
+  mineResultBanner: { position: 'absolute', left: 22, right: 22, bottom: 28, zIndex: 12, minHeight: 68, alignItems: 'center', justifyContent: 'center', borderRadius: 17, borderWidth: 2, shadowOpacity: 0.95, shadowRadius: 22, shadowOffset: { width: 0, height: 0 }, overflow: 'hidden' },
+  mineResultBannerWin: { borderColor: '#B9FFFF', backgroundColor: 'rgba(0,45,62,0.94)', shadowColor: '#50E8FF' },
+  mineResultBannerBust: { borderColor: '#FFD18A', backgroundColor: 'rgba(72,14,3,0.95)', shadowColor: '#FF5A24' },
   scratchCard: {
     width: 282,
     height: 138,

@@ -358,7 +358,7 @@ export function BlackjackScreen() {
           and it costs two views.
         */}
         <LinearGradient
-          colors={['#05070D', '#103A30', '#031A14']}
+          colors={['rgba(3,5,9,0.88)', 'rgba(5,72,51,0.84)', 'rgba(1,25,19,0.94)']}
           locations={[0, 0.55, 1]}
           start={{ x: 0.3, y: 0 }}
           end={{ x: 0.7, y: 1 }}
@@ -367,11 +367,22 @@ export function BlackjackScreen() {
         <View style={styles.tableRail} pointerEvents="none">
           <View style={styles.tableRailInner} />
         </View>
+        <LinearGradient colors={['rgba(181,119,50,0)', 'rgba(116,62,19,0.68)', 'rgba(25,11,5,0.95)']} style={styles.tableRailGlow} pointerEvents="none" />
+        <View style={styles.feltInset} pointerEvents="none" />
         <Animated.View style={[styles.lampPool, { opacity: lamp.interpolate({ inputRange: [0, 1], outputRange: [0.18, 0.52] }) }]} pointerEvents="none" />
         <View style={styles.tableDimension} pointerEvents="none" />
         <View style={styles.tablePerspectiveLeft} pointerEvents="none" />
         <View style={styles.tablePerspectiveRight} pointerEvents="none" />
         <View style={styles.playerArc} pointerEvents="none" />
+        <View style={styles.tableWatermark} pointerEvents="none">
+          <Txt variant="display" color="rgba(242,210,125,0.10)">21</Txt>
+        </View>
+        <View style={styles.casinoRules} pointerEvents="none">
+          <Txt variant="caption" color="rgba(255,224,145,0.62)">BLACKJACK PAYS 3 TO 2 · DEALER STANDS ON 17</Txt>
+        </View>
+        <View style={[styles.betSpot, styles.betSpotLeft]} pointerEvents="none" />
+        <View style={[styles.betSpot, styles.betSpotCentre]} pointerEvents="none" />
+        <View style={[styles.betSpot, styles.betSpotRight]} pointerEvents="none" />
         <View style={styles.dealerHardware} pointerEvents="none">
           <View style={styles.discardTray}>
             <View style={styles.discardSlot} />
@@ -612,14 +623,22 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
   },
   tableCompact: { padding: spacing.md, gap: spacing.sm, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderBottomLeftRadius: 58, borderBottomRightRadius: 58 },
-  tableArtwork: { ...StyleSheet.absoluteFillObject, opacity: 0.16 },
-  tableRail: { ...StyleSheet.absoluteFillObject, borderTopLeftRadius: 22, borderTopRightRadius: 22, borderBottomLeftRadius: 80, borderBottomRightRadius: 80, borderWidth: 9, borderColor: 'rgba(39,18,7,0.88)' },
-  tableRailInner: { flex: 1, margin: 5, borderTopLeftRadius: 15, borderTopRightRadius: 15, borderBottomLeftRadius: 70, borderBottomRightRadius: 70, borderWidth: 1, borderColor: 'rgba(255,225,133,0.72)' },
+  tableArtwork: { ...StyleSheet.absoluteFillObject, opacity: 0.24 },
+  tableRail: { ...StyleSheet.absoluteFillObject, borderTopLeftRadius: 22, borderTopRightRadius: 22, borderBottomLeftRadius: 80, borderBottomRightRadius: 80, borderWidth: 9, borderColor: '#3D1D0B', padding: 5 },
+  tableRailInner: { flex: 1, borderTopLeftRadius: 12, borderTopRightRadius: 12, borderBottomLeftRadius: 67, borderBottomRightRadius: 67, borderWidth: 2, borderColor: 'rgba(255,224,137,0.78)', shadowColor: '#000', shadowOpacity: 0.75, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
+  tableRailGlow: { position: 'absolute', left: 8, right: 8, bottom: 0, height: 58, borderBottomLeftRadius: 72, borderBottomRightRadius: 72, opacity: 0.88 },
+  feltInset: { ...StyleSheet.absoluteFillObject, margin: 14, borderTopLeftRadius: 10, borderTopRightRadius: 10, borderBottomLeftRadius: 62, borderBottomRightRadius: 62, borderWidth: 1, borderColor: 'rgba(246,214,128,0.35)' },
   lampPool: { position: 'absolute', width: 260, height: 150, borderRadius: 130, alignSelf: 'center', top: -54, backgroundColor: '#F8CD63', shadowColor: '#FFE29A', shadowRadius: 40 },
   tableDimension: { position: 'absolute', left: 30, right: 30, bottom: -44, height: 126, borderRadius: 100, borderWidth: 1, borderColor: 'rgba(255,224,133,0.26)', backgroundColor: 'rgba(0,0,0,0.14)', transform: [{ scaleX: 1.18 }] },
   tablePerspectiveLeft: { position: 'absolute', left: 7, top: 70, bottom: 46, width: 2, backgroundColor: 'rgba(255,218,121,0.28)', transform: [{ rotate: '2deg' }] },
   tablePerspectiveRight: { position: 'absolute', right: 7, top: 70, bottom: 46, width: 2, backgroundColor: 'rgba(255,218,121,0.28)', transform: [{ rotate: '-2deg' }] },
   playerArc: { position: 'absolute', left: '13%', right: '13%', bottom: 19, height: 104, borderRadius: 999, borderWidth: 2, borderColor: 'rgba(246,210,119,0.26)', transform: [{ scaleY: 0.62 }] },
+  tableWatermark: { position: 'absolute', alignSelf: 'center', top: '43%', width: 120, alignItems: 'center', transform: [{ rotate: '-8deg' }] },
+  casinoRules: { position: 'absolute', left: 30, right: 30, bottom: 20, alignItems: 'center' },
+  betSpot: { position: 'absolute', bottom: 37, width: 72, height: 38, borderRadius: 36, borderWidth: 1, borderColor: 'rgba(241,206,113,0.23)', transform: [{ scaleY: 0.62 }] },
+  betSpotLeft: { left: '12%' },
+  betSpotCentre: { alignSelf: 'center' },
+  betSpotRight: { right: '12%' },
   dealerHardware: { position: 'absolute', top: 10, left: 16, right: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   discardTray: { width: 46, height: 25, paddingHorizontal: 5, flexDirection: 'row', gap: 3, alignItems: 'center', borderRadius: 5, borderWidth: 1, borderColor: '#8A6A2A', backgroundColor: 'rgba(3,5,8,0.78)' },
   discardSlot: { flex: 1, height: 15, borderRadius: 2, backgroundColor: 'rgba(236,222,184,0.14)' },

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
@@ -140,6 +140,10 @@ function RouletteWinMoment({ payout, tier }: { payout: number; tier: RouletteWin
 }
 
 export function RouletteScreen() {
+  const { width: viewportWidth } = useWindowDimensions();
+  // The live wheel is allowed to own more of the room than the resting wheel.
+  // It still keeps a safe margin on narrow phones instead of overflowing them.
+  const liveWheelSize = Math.min(340, Math.max(292, viewportWidth - 44));
   const api = useRef<PlayApi>(createPlayApi()).current;
 
   const [balance, setBalance] = useState(minor(0));
@@ -649,12 +653,12 @@ export function RouletteScreen() {
             <Txt variant="bodySmall" color={colors.feedback.error}>
               {error}
             </Txt>
-          ) : round ? (
+          ) : round && payout <= 0 ? (
             <Txt
               variant="h3"
-              color={payout > 0 ? colors.feedback.winBright : colors.text.muted}
+              color={colors.text.muted}
             >
-              {payout > 0 ? `WIN ${format(minor(payout), 'GC')}` : 'No win this time'}
+              No win this time
             </Txt>
           ) : bets.size > 0 ? (
             // It went on saying "pick a chip, then tap the table" while the
@@ -787,7 +791,7 @@ export function RouletteScreen() {
           </View>
           <View style={styles.spinCrown}><Txt variant="caption" color="#FFE8A7">NO MORE BETS · BALL IN MOTION</Txt></View>
           <RouletteWheel
-            size={292}
+            size={liveWheelSize}
             phase={wheelPhase}
             target={wheelTarget}
             landFrom={wheelPlan.from}
