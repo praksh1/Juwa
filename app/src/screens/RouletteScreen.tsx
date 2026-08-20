@@ -789,7 +789,8 @@ export function RouletteScreen() {
             <Txt variant="caption" color="#D7C391">TOTAL GC BALANCE</Txt>
             <Txt variant="money" color="#FFE9A1">{format(balance, 'GC')}</Txt>
           </View>
-          <View style={styles.spinCrown}><Txt variant="caption" color="#FFE8A7">NO MORE BETS · BALL IN MOTION</Txt></View>
+          <View style={styles.spinCrownSpacer} />
+          <View style={styles.spinCrown}><Txt variant="caption" color="#FFE8A7">NO MORE BETS</Txt></View>
           <RouletteWheel
             size={liveWheelSize}
             phase={wheelPhase}
@@ -923,7 +924,8 @@ const styles = StyleSheet.create({
   spinStage: { ...StyleSheet.absoluteFillObject, zIndex: 8, alignItems: 'center', justifyContent: 'center', gap: spacing.md, overflow: 'hidden' },
   spinArtwork: { ...StyleSheet.absoluteFillObject, opacity: 0.24 },
   spinBalance: { position: 'absolute', left: spacing.lg, top: spacing.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: 'rgba(255,224,143,0.68)', backgroundColor: 'rgba(4,5,12,0.82)' },
-  spinCrown: { paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.sm, borderWidth: 1, borderColor: '#E1B555', backgroundColor: 'rgba(13,7,4,0.86)' },
+  spinCrownSpacer: { height: 30 },
+  spinCrown: { position: 'absolute', right: spacing.lg, top: spacing.lg, minHeight: 56, paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.md, borderWidth: 1, borderColor: '#E1B555', backgroundColor: 'rgba(13,7,4,0.86)', alignItems: 'center', justifyContent: 'center' },
   winMoment: { position: 'absolute', left: spacing.md, right: spacing.md, bottom: 36, zIndex: 12, minHeight: 88, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: 22, borderWidth: 2, borderColor: '#FFE49A', backgroundColor: 'rgba(35,9,4,0.92)', shadowColor: '#FFD35A', shadowOpacity: 0.92, shadowRadius: 26, shadowOffset: { width: 0, height: 0 } },
   winMomentMega: { minHeight: 116, bottom: 28, borderColor: '#FFFFFF', backgroundColor: 'rgba(75,22,2,0.95)' },
   winMomentRays: { position: 'absolute', width: '130%', height: 18, backgroundColor: 'rgba(255,220,111,0.18)', transform: [{ rotate: '-8deg' }] },
