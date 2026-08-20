@@ -166,15 +166,26 @@ export function BlackjackScreen() {
   const [round, setRound] = useState<RoundResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [cardsSettling, setCardsSettling] = useState(false);
+  const [displayedTotals, setDisplayedTotals] = useState<{
+    dealer: ReturnType<typeof handValue> | null;
+    hands: Array<ReturnType<typeof handValue> | null>;
+  }>({
+    dealer: null,
+    hands: [],
+  });
   const [handView, setHandView] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const lamp = useRef(new Animated.Value(0)).current;
   const presentationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const holdCards = useCallback((duration: number) => {
+  const presentCards = useCallback((state: BlackjackPublic, duration: number) => {
     if (presentationTimer.current) clearTimeout(presentationTimer.current);
     setCardsSettling(true);
     presentationTimer.current = setTimeout(() => {
+      setDisplayedTotals({
+        dealer: handValue(state.dealer),
+        hands: state.hands.map((hand) => handValue(hand.cards)),
+      });
       setCardsSettling(false);
       presentationTimer.current = null;
     }, duration);
@@ -267,6 +278,7 @@ export function BlackjackScreen() {
     setBusy(true);
     setError(null);
     setRound(null);
+    setDisplayedTotals({ dealer: null, hands: [] });
     setBalance((current) => minor(current - bet));
 
     try {
@@ -280,7 +292,7 @@ export function BlackjackScreen() {
       publishBalance(minor(result.balance));
 
       const state = result.state as BlackjackPublic;
-      holdCards(1_120);
+      presentCards(state, 1_120);
       // Four cards, dealt in sequence.
       [0, 1, 2, 3].forEach((i) => setTimeout(() => sounds.cardDeal(), i * 145));
       if (result.status === 'settled') {
@@ -293,7 +305,7 @@ export function BlackjackScreen() {
     } finally {
       setBusy(false);
     }
-  }, [announce, api, balance, bet, busy, holdCards]);
+  }, [announce, api, balance, bet, busy, presentCards]);
 
   const act = useCallback(
     async (action: string) => {
@@ -314,10 +326,26 @@ export function BlackjackScreen() {
         publishBalance(minor(result.balance));
 
         const state = result.state as BlackjackPublic;
-        const presentationMs = result.status === 'settled'
-          ? Math.min(1_150, 720 + Math.max(0, state.dealer.length - 1) * 120)
-          : action === 'split' ? 860 : 720;
-        holdCards(presentationMs);
+        const actionMovesCards = action === 'hit' || action === 'double' || action === 'split';
+        const dealerMovesCards = result.status === 'settled';
+        const presentationMs = dealerMovesCards
+          ? Math.min(1_080, 690 + Math.max(0, state.dealer.length - 2) * 145)
+          : action === 'split' ? 860 : actionMovesCards ? 690 : 0;
+
+        if (dealerMovesCards) {
+          // A standing player's total is already known and must stay pinned
+          // while the dealer reveals and draws. Only the dealer total waits.
+          setDisplayedTotals((current) => ({ ...current, dealer: null }));
+        }
+
+        if (presentationMs > 0) {
+          presentCards(state, presentationMs);
+        } else {
+          setDisplayedTotals({
+            dealer: handValue(state.dealer),
+            hands: state.hands.map((hand) => handValue(hand.cards)),
+          });
+        }
 
         // The sound belongs to the visible card crossing the felt, not the
         // button press while the server is still deciding the hand.
@@ -343,10 +371,9 @@ export function BlackjackScreen() {
         setBusy(false);
       }
     },
-    [announce, api, bet, busy, holdCards, round],
+    [announce, api, bet, busy, presentCards, round],
   );
 
-  const dealerValue = table ? handValue(table.dealer) : null;
   const splitTable = (table?.hands.length ?? 0) > 1;
   const visibleHandIndex = table ? Math.min(handView, Math.max(0, table.hands.length - 1)) : 0;
   const visibleHand = table?.hands[visibleHandIndex];
@@ -450,10 +477,10 @@ export function BlackjackScreen() {
             {table && !table.dealerRevealed ? (
               <PlayingCard rank="?" suit="S" hidden index={1} dealOrder={3} trajectory="dealer" size={compactTable ? 'small' : 'normal'} />
             ) : null}
-            {table?.dealerRevealed && dealerValue ? (
-              <View style={[styles.handTotalBadge, cardsSettling && styles.totalWaiting]}>
-                <Txt variant="h2" color="#FFF0B1">{dealerValue.total}</Txt>
-                {dealerValue.soft ? <Txt variant="caption" color="#C9A95D">SOFT</Txt> : null}
+            {table?.dealerRevealed && displayedTotals.dealer !== null ? (
+              <View style={styles.handTotalBadge}>
+                <Txt variant="h2" color="#FFF0B1">{displayedTotals.dealer.total}</Txt>
+                {displayedTotals.dealer.soft ? <Txt variant="caption" color="#C9A95D">SOFT</Txt> : null}
               </View>
             ) : null}
           </View>
@@ -470,6 +497,7 @@ export function BlackjackScreen() {
           <View style={styles.handPositions}>
             {table.hands.map((hand, handIndex) => {
               const value = handValue(hand.cards);
+              const displayedTotal = displayedTotals.hands[handIndex];
               const active = !settled && handIndex === table.activeHand;
               const selected = handIndex === visibleHandIndex;
               return (
@@ -487,7 +515,7 @@ export function BlackjackScreen() {
                     HAND {handIndex + 1}
                   </Txt>
                   <Txt variant="bodySmall" color={active ? colors.text.inverse : '#FFF0B1'}>
-                    {cardsSettling && active ? 'DEALING…' : value.total}
+                    {displayedTotal?.total ?? (cardsSettling && active ? 'DEALING…' : value.total)}
                   </Txt>
                 </Pressable>
               );
@@ -496,7 +524,7 @@ export function BlackjackScreen() {
         ) : null}
 
         {table && visibleHand ? (() => {
-          const value = handValue(visibleHand.cards);
+          const displayedTotal = displayedTotals.hands[visibleHandIndex];
           const active = !settled && visibleHandIndex === table.activeHand;
           return (
             <View style={[styles.seat, compactTable && styles.seatCompact, active && styles.seatActive]}>
@@ -524,10 +552,12 @@ export function BlackjackScreen() {
                     size={compactTable ? 'small' : 'normal'}
                   />
                 ))}
-                <View style={[styles.handTotalBadge, cardsSettling && styles.totalWaiting]}>
-                  <Txt variant="h2" color={active ? '#FFF1B5' : '#F7E9BC'}>{value.total}</Txt>
-                  {value.soft ? <Txt variant="caption" color="#C9A95D">SOFT</Txt> : null}
-                </View>
+                {displayedTotal !== null && displayedTotal !== undefined ? (
+                  <View style={styles.handTotalBadge}>
+                    <Txt variant="h2" color={active ? '#FFF1B5' : '#F7E9BC'}>{displayedTotal.total}</Txt>
+                    {displayedTotal.soft ? <Txt variant="caption" color="#C9A95D">SOFT</Txt> : null}
+                  </View>
+                ) : null}
               </View>
               {visibleHand.outcome && !cardsSettling ? (
                 <Txt
@@ -815,7 +845,6 @@ const styles = StyleSheet.create({
   // Extra right padding compensates for the negative margin that overlaps cards.
   cards: { flexDirection: 'row', alignItems: 'center', paddingRight: spacing.lg, minHeight: 74 },
   handTotalBadge: { minWidth: 54, minHeight: 54, marginLeft: spacing.md, paddingHorizontal: spacing.xs, borderRadius: 27, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(9,12,17,0.84)', borderWidth: 2, borderColor: '#C9A95D', shadowColor: '#F7CA62', shadowOpacity: 0.42, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } },
-  totalWaiting: { opacity: 0 },
   divider: { height: 1, backgroundColor: 'rgba(255,221,137,0.38)' },
   betRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
   chip: {
