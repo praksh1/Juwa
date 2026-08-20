@@ -3,27 +3,19 @@ import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { colors, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
 import { Button, Card, Screen, SectionHeader, Txt } from '../components/primitives';
-import { usePlayer } from '../api/usePlayer';
+import { notifyBalanceChanged, usePlayer } from '../api/usePlayer';
 import { createPlayApi, type HistoryEntry, type WalletResponse } from '../api/client';
-import { ConversionPanel, ConversionPanelSkeleton } from '../components/ConversionPanel';
+import { AgentVaultPanel, AgentVaultPanelSkeleton } from '../components/AgentVaultPanel';
 import { LOBBY_BED, useAmbientBed } from '../ambience';
 
 /**
  * Wallet.
  *
- * ## Two balances, and what the second one is not
+ * ## One currency, in three clearly separated states
  *
- * Gold Coins are what the games are played with. Casino Cash is a conversion
- * balance held between a player and their agent: it buys GC, and it buys
- * nothing else. There is still no path from either to money — no withdrawal, no
- * cash-out, no player-to-player transfer — which is what the footer says and
- * what the absence of any such control means.
- *
- * This file used to open by explaining that there was no "Redeem" button at
- * all. There is one now, and it does not redeem for money: it asks an agent to
- * exchange GC for CC at a published rate, and it moves nothing until they
- * agree. The distinction is the whole product, so the panel states it in every
- * state it can be in.
+ * Players only see GC. Playable GC can move into a pending save request and,
+ * after their agent confirms it, into GC saved under that player's name. It is
+ * still virtual, no-cash-value GC and never becomes agent inventory.
  *
  * The activity list is the player-facing view of the double-entry ledger. Each
  * row is one side of a balanced transaction, so a support question — "where did
@@ -43,6 +35,8 @@ const LABELS: Record<HistoryEntry['type'], string> = {
   refund: 'Refund',
   adjustment: 'Adjustment',
   withdrawal: 'Withdrawal',
+  vault_save: 'Saved for later',
+  vault_restore: 'Returned from Agent Vault',
 };
 
 const GAME_NAMES: Record<string, string> = {
@@ -83,7 +77,8 @@ export function WalletScreen() {
   const api = React.useRef(createPlayApi()).current;
 
   const [wallet, setWallet] = useState<WalletResponse | null>(null);
-  const [converting, setConverting] = useState(false);
+  const [vaultBusy, setVaultBusy] = useState(false);
+  const [vaultError, setVaultError] = useState<string | null>(null);
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -91,12 +86,12 @@ export function WalletScreen() {
   const [error, setError] = useState<string | null>(null);
 
   /**
-   * The two balances and the conversion queue.
+   * Playable, pending and saved GC, plus the custody queue.
    *
    * Refetched whenever the GC balance changes, alongside the activity list, so
    * a spin or an approval shows up without a pull to refresh. A failure is
-   * SWALLOWED rather than shown: the CC panel is additive, and a player whose
-   * agent's rate lookup hiccuped should still see their coins and their
+   * SWALLOWED rather than shown: the vault panel is additive, and a player whose
+   * agent lookup hiccuped should still see their coins and their
    * history.
    */
   const loadWallet = useCallback(async () => {
@@ -111,30 +106,41 @@ export function WalletScreen() {
     void loadWallet();
   }, [loadWallet, balance]);
 
-  const requestConversion = useCallback(
-    async (direction: 'gc_to_cc' | 'cc_to_gc', amount: number) => {
-      setConverting(true);
+  const saveToVault = useCallback(
+    async (amount: number) => {
+      setVaultBusy(true);
+      setVaultError(null);
       try {
-        await api.requestConversion({ direction, amount });
-        await loadWallet();
+        const next = await api.saveToVault({
+          amount,
+          idempotencyKey: `vault-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+        });
+        setWallet(next);
+        notifyBalanceChanged();
+      } catch (caught) {
+        setVaultError(caught instanceof Error ? caught.message : 'Could not save those GC');
       } finally {
-        setConverting(false);
+        setVaultBusy(false);
       }
     },
-    [api, loadWallet],
+    [api],
   );
 
-  const cancelConversion = useCallback(
+  const cancelVaultSave = useCallback(
     async (requestId: string) => {
-      setConverting(true);
+      setVaultBusy(true);
+      setVaultError(null);
       try {
-        await api.cancelConversion(requestId);
-        await loadWallet();
+        const next = await api.cancelVaultSave(requestId);
+        setWallet(next);
+        notifyBalanceChanged();
+      } catch (caught) {
+        setVaultError(caught instanceof Error ? caught.message : 'Could not cancel that request');
       } finally {
-        setConverting(false);
+        setVaultBusy(false);
       }
     },
-    [api, loadWallet],
+    [api],
   );
 
   useEffect(() => {
@@ -187,23 +193,21 @@ export function WalletScreen() {
         </Txt>
       </Card>
 
-      {/*
-        Casino Cash, under the GC card and above the history.
+      {vaultError ? (
+        <Card style={styles.vaultError}>
+          <Txt variant="bodySmall" color={colors.feedback.loss}>{vaultError}</Txt>
+        </Card>
+      ) : null}
 
-        Under, because GC is the balance a player checks before they play and
-        this must not push it off the top of the screen. Above the history,
-        because a pending request is a thing they are waiting on and belongs
-        with the balances rather than at the end of a list of past events.
-      */}
       {wallet ? (
-        <ConversionPanel
+        <AgentVaultPanel
           data={wallet}
-          busy={converting}
-          onRequest={requestConversion}
-          onCancel={cancelConversion}
+          busy={vaultBusy}
+          onSave={saveToVault}
+          onCancel={cancelVaultSave}
         />
       ) : (
-        <ConversionPanelSkeleton />
+        <AgentVaultPanelSkeleton />
       )}
 
       <View>
@@ -282,4 +286,5 @@ const styles = StyleSheet.create({
   noCashValue: { marginTop: spacing.md, textAlign: 'center' },
   centre: { padding: spacing.xl, alignItems: 'center' },
   more: { justifyContent: 'center' },
+  vaultError: { borderColor: colors.feedback.loss, borderWidth: 1 },
 });

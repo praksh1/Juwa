@@ -165,6 +165,7 @@ const { server } = createServer({
   ...(legacySecret ? { jwtSecret: legacySecret } : {}),
   ...(jwks ? { jwks } : {}),
   allowedOrigins,
+  casinoCashEnabled: process.env['ENABLE_CASINO_CASH'] === 'true',
   ...(supabaseAdmin ? { supabaseAdmin } : {}),
   ...(stripe ? { stripe } : {}),
 });

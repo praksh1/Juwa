@@ -143,7 +143,16 @@ export interface HistoryEntry {
   id: string;
   /** Positive is coins in, negative is coins out. Never a net figure. */
   amount: number;
-  type: 'deposit' | 'withdrawal' | 'bet' | 'payout' | 'bonus' | 'adjustment' | 'refund';
+  type:
+    | 'deposit'
+    | 'withdrawal'
+    | 'bet'
+    | 'payout'
+    | 'bonus'
+    | 'adjustment'
+    | 'refund'
+    | 'vault_save'
+    | 'vault_restore';
   at: string;
   meta: Record<string, unknown>;
 }
@@ -271,7 +280,7 @@ export interface ConversionRequest {
   reason: string | null;
 }
 
-export interface WalletResponse {
+export interface LegacyWalletResponse {
   wallet: WalletBalances;
   /**
    * GC per CC, for THIS player.
@@ -282,6 +291,45 @@ export interface WalletResponse {
   rate: number;
   agent: { agentId: string; displayName: string } | null;
   requests: ConversionRequest[];
+}
+
+/* --------------------------------------------------------- agent vault */
+
+export type VaultRequestStatus = 'pending' | 'saved' | 'cancelled' | 'rejected' | 'restored';
+
+export interface VaultRequest {
+  id: string;
+  playerId: string;
+  username: string | null;
+  agentId: string;
+  amount: number;
+  remainingAmount: number;
+  status: VaultRequestStatus;
+  requestedAt: string;
+  decidedAt: string | null;
+  reason: string | null;
+}
+
+export interface VaultWallet {
+  playable: number;
+  pending: number;
+  saved: number;
+}
+
+export interface WalletResponse {
+  wallet: VaultWallet;
+  agent: { agentId: string; displayName: string } | null;
+  requests: VaultRequest[];
+}
+
+export interface AgentVaultPlayer extends VaultWallet {
+  playerId: string;
+  username: string;
+}
+
+export interface AgentVaultData {
+  requests: VaultRequest[];
+  players: AgentVaultPlayer[];
 }
 
 export interface AgentConversions {
@@ -395,7 +443,7 @@ export interface PlayApi {
   /** Record that the player has replaced their temporary password. */
   confirmPasswordSet(): Promise<{ ok: boolean }>;
 
-  /* --------------------------------------------------------- casino cash */
+  /* ----------------------------------------------------------- agent vault */
 
   /**
    * Both balances, the player's rate and their conversion requests.
@@ -405,6 +453,21 @@ export interface PlayApi {
    * disagree with each other for a second.
    */
   getWallet(): Promise<WalletResponse>;
+  saveToVault(request: {
+    amount: number;
+    idempotencyKey: string;
+  }): Promise<WalletResponse>;
+  cancelVaultSave(requestId: string): Promise<WalletResponse>;
+  getAgentVault(): Promise<AgentVaultData>;
+  approveVaultSave(requestId: string): Promise<{ ok: boolean }>;
+  rejectVaultSave(requestId: string, reason?: string): Promise<{ ok: boolean }>;
+  restoreVaultCoins(request: {
+    playerId: string;
+    amount: number;
+    idempotencyKey: string;
+  }): Promise<{ ok: boolean; player: VaultWallet }>;
+
+  /* ---------------------------------------------- legacy casino cash */
   /**
    * Ask to convert. MOVES NOTHING — it creates a request an agent has to
    * approve, and the balances are unchanged until they do.
@@ -858,6 +921,34 @@ export class HttpPlayApi implements PlayApi {
     return this.request<WalletResponse>('/wallet');
   }
 
+  saveToVault(request: { amount: number; idempotencyKey: string }) {
+    return this.request<WalletResponse>('/wallet/vault/save', request);
+  }
+
+  cancelVaultSave(requestId: string) {
+    return this.request<WalletResponse>('/wallet/vault/cancel', { requestId });
+  }
+
+  getAgentVault() {
+    return this.request<AgentVaultData>('/agent/vault');
+  }
+
+  approveVaultSave(requestId: string) {
+    return this.request<{ ok: boolean }>('/agent/vault/approve', { requestId });
+  }
+
+  rejectVaultSave(requestId: string, reason?: string) {
+    return this.request<{ ok: boolean }>('/agent/vault/reject', {
+      requestId,
+      ...(reason ? { reason } : {}),
+    });
+  }
+
+  restoreVaultCoins(request: { playerId: string; amount: number; idempotencyKey: string }) {
+    return this.request<{ ok: boolean; player: VaultWallet }>('/agent/vault/restore', request);
+  }
+
+  /* Legacy CC endpoints are retained for the reversible feature switch. */
   requestConversion(request: { direction: ConversionDirection; amount: number }) {
     return this.request<{ request: ConversionRequest }>('/wallet/convert', request);
   }
@@ -1450,11 +1541,29 @@ export class DemoPlayApi implements PlayApi {
    */
   async getWallet(): Promise<WalletResponse> {
     return {
-      wallet: { gc: this.balance, cc: 0 },
-      rate: 0,
+      wallet: { playable: this.balance, pending: 0, saved: 0 },
       agent: null,
       requests: [],
     };
+  }
+
+  async saveToVault(): Promise<never> {
+    this.noAgentInDemo();
+  }
+  async cancelVaultSave(): Promise<never> {
+    this.noAgentInDemo();
+  }
+  async getAgentVault(): Promise<never> {
+    this.noAgentInDemo();
+  }
+  async approveVaultSave(): Promise<never> {
+    this.noAgentInDemo();
+  }
+  async rejectVaultSave(): Promise<never> {
+    this.noAgentInDemo();
+  }
+  async restoreVaultCoins(): Promise<never> {
+    this.noAgentInDemo();
   }
 
   async requestConversion(): Promise<never> {

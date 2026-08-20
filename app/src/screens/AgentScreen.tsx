@@ -6,14 +6,11 @@
  * that job and nothing else — inventory at the top, the player list under it,
  * invitations, and a ledger.
  *
- * ## Casino Cash, and the line that moved
+ * ## Agent Vault, and the line that must not move
  *
- * This file used to say there was no way to take coins BACK from a player,
- * full stop, because a balance that can flow back to a person is one that can
- * be paid cash for. There is now exactly one way, and it is narrow on purpose:
- * a player RAISES A REQUEST, the agent approves it, it is priced at a published
- * rate, and both legs land on the ledger. The agent cannot initiate it, cannot
- * set the rate, and cannot take coins from a player who has not asked.
+ * A player may ask to keep GC out of play for later. Approval moves it into a
+ * player-attributed custody account, never into distributable inventory. The
+ * agent may return it only to that same player's playable balance.
  *
  * ## What is still deliberately not on this screen
  *
@@ -36,7 +33,7 @@ import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react
 import { colors, radius, spacing } from '@juwa/ui';
 import { Badge, Button, Card, Screen, SectionHeader, Txt } from '../components/primitives';
 import { useAgentDesk } from '../api/useAgent';
-import { AgentConversions } from '../components/AgentConversions';
+import { AgentVault } from '../components/AgentVault';
 import type { AgentPlayer } from '../api/client';
 import { StatePicker } from '../components/StatePicker';
 import { PasswordInput } from '../components/PasswordInput';
@@ -177,22 +174,14 @@ export function AgentScreen() {
         </Card>
       ) : null}
 
-      {/*
-        The conversion queue, ABOVE the allocation form.
-
-        A pending request is somebody waiting on this agent; the allocation form
-        is work the agent chose to start. Rendered only when the queue actually
-        loaded — see `useAgentDesk`, where this one read is allSettled so that a
-        failure cannot take the rest of the desk down with it.
-      */}
-      {desk.conversions ? (
+      {desk.vault ? (
         <View>
-          <SectionHeader title="Casino Cash" />
-          <AgentConversions
-            data={desk.conversions}
+          <SectionHeader title="Agent Vault" />
+          <AgentVault
+            data={desk.vault}
             canAct={summary.status === 'active'}
-            onDecide={desk.decideConversion}
-            onRedeem={desk.redeemCc}
+            onDecide={desk.decideVault}
+            onRestore={desk.restoreVault}
           />
         </View>
       ) : null}

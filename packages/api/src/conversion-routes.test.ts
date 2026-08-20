@@ -158,6 +158,7 @@ describe(
         query: (text, params) => pool.query(text, params as unknown[]) as never,
         jwtSecret: SECRET,
         allowedOrigins: [ORIGIN],
+        casinoCashEnabled: true,
       });
       await new Promise<void>((done) => created.server.listen(0, done));
       base = `http://127.0.0.1:${(created.server.address() as AddressInfo).port}`;

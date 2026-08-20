@@ -32,7 +32,7 @@ import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { colors, radius, spacing } from '@juwa/ui';
 import { format, minor } from '@juwa/money';
 import { Button, Card, Txt } from './primitives';
-import { PlayApiError, type ConversionRequest, type WalletResponse } from '../api/client';
+import { PlayApiError, type ConversionRequest, type LegacyWalletResponse } from '../api/client';
 
 /** How a status reads to the person waiting on it. */
 const STATUS_LABEL: Record<ConversionRequest['status'], string> = {
@@ -50,7 +50,7 @@ const STATUS_COLOUR: Record<ConversionRequest['status'], string> = {
 };
 
 export interface ConversionPanelProps {
-  data: WalletResponse;
+  data: LegacyWalletResponse;
   busy: boolean;
   onRequest: (direction: 'gc_to_cc' | 'cc_to_gc', amount: number) => Promise<void>;
   onCancel: (requestId: string) => Promise<void>;

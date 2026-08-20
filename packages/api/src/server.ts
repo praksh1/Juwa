@@ -17,6 +17,7 @@ import {
   ApiError,
   ConversionsDb,
   PostgresDb,
+  VaultsDb,
   act,
   claimDailyBonus,
   claimTopUp,
@@ -53,6 +54,7 @@ import {
 import { GameConfigCache, assertBetAllowed } from './game-config.js';
 import { agentRoutes, handleAdminAgents } from './agent-routes.js';
 import { conversionRoutes, handleAdminConversions } from './conversion-routes.js';
+import { vaultRoutes } from './vault-routes.js';
 import { SupabaseAdmin, type SupabaseAdminConfig } from './supabase-admin.js';
 import { ADMIN_CONSOLE_HTML } from './admin-console.js';
 import {
@@ -73,6 +75,8 @@ export interface ServerConfig {
   jwks?: JwksCache;
   /** Origins allowed to call this API. Never '*' — credentials are involved. */
   allowedOrigins: string[];
+  /** Dormant legacy GC/CC exchange. Agent Vault is the default live model. */
+  casinoCashEnabled?: boolean;
   /**
    * Service-role access to Supabase Auth, for accounts an AGENT creates on a
    * player's behalf. Omit and that one route returns 503 — invite links, which
@@ -289,16 +293,18 @@ async function handleAdmin(
 
     // Exchange rates, CC grants and manual adjustments. Null when the path is
     // none of its business, for the same reason.
-    const conversionResult = await handleAdminConversions(
-      route,
-      url,
-      body as Record<string, unknown>,
-      operator,
-      conversions,
-    );
-    if (conversionResult !== null) {
-      send(res, 200, conversionResult);
-      return;
+    if (config.casinoCashEnabled === true) {
+      const conversionResult = await handleAdminConversions(
+        route,
+        url,
+        body as Record<string, unknown>,
+        operator,
+        conversions,
+      );
+      if (conversionResult !== null) {
+        send(res, 200, conversionResult);
+        return;
+      }
     }
 
     send(res, 404, { message: 'Not found', code: 'no_route' });
@@ -332,6 +338,7 @@ export function createServer(config: ServerConfig) {
    * queue behind a bet on the same balance row.
    */
   const conversions = new ConversionsDb({ query: (text, values) => config.query(text, values) });
+  const vaults = new VaultsDb({ query: (text, values) => config.query(text, values) });
   const supabaseAdmin = config.supabaseAdmin ? new SupabaseAdmin(config.supabaseAdmin) : undefined;
 
   const sweeper = setInterval(() => {
@@ -804,10 +811,11 @@ export function createServer(config: ServerConfig) {
     // agent record, resolved from the verified token — see agent-routes.ts.
     ...agentRoutes(agents, supabaseAdmin),
 
-    // The wallet's second currency, and the request lifecycle around it. Player
-    // routes scope to the caller's own id; agent routes resolve the caller to
-    // an agent record first — see conversion-routes.ts.
-    ...conversionRoutes(conversions, agents),
+    // Legacy CC remains reversible in code, but is dark unless explicitly
+    // enabled. Agent Vault is the live, one-currency custody model.
+    ...(config.casinoCashEnabled === true
+      ? conversionRoutes(conversions, agents)
+      : vaultRoutes(vaults, agents)),
   };
 
   const limiterFor = (route: string) => {

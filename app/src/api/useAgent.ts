@@ -23,7 +23,7 @@ import {
   type AgentInvite,
   type AgentPlayer,
   type AgentSummary,
-  type AgentConversions,
+  type AgentVaultData,
   type AgentTxn,
   type PlayApi,
 } from './client';
@@ -69,16 +69,8 @@ export interface AgentDesk {
   players: AgentPlayer[];
   transactions: AgentTxn[];
   invites: AgentInvite[];
-  /**
-   * The conversion queue, both balances and both rates.
-   *
-   * Null while it is loading and after a failure, and the panel renders
-   * nothing in either case. That is deliberate rather than lazy: the rest of
-   * this desk is how an agent funds the player standing in front of them, and
-   * a conversion queue that fails to load must not take the allocation form
-   * down with it.
-   */
-  conversions: AgentConversions | null;
+  /** Player-attributed saved GC. Never part of distributable inventory. */
+  vault: AgentVaultData | null;
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
@@ -94,14 +86,14 @@ export interface AgentDesk {
     playerId: string,
     password: string,
   ) => Promise<{ ok: boolean; message?: string }>;
-  /** Settle a player's conversion request. */
-  decideConversion: (
+  /** Confirm or return a player's save-for-later request. */
+  decideVault: (
     requestId: string,
     decision: 'approve' | 'reject',
     reason?: string,
   ) => Promise<{ ok: boolean; message?: string }>;
-  /** Spend CC with the operator on GC inventory. */
-  redeemCc: (ccAmount: number) => Promise<{ ok: boolean; gcAmount?: number; message?: string }>;
+  /** Move saved GC back to that same player's playable balance. */
+  restoreVault: (playerId: string, amount: number) => Promise<{ ok: boolean; message?: string }>;
 }
 
 export function useAgentDesk(): AgentDesk {
@@ -110,20 +102,20 @@ export function useAgentDesk(): AgentDesk {
   const [players, setPlayers] = useState<AgentPlayer[]>([]);
   const [transactions, setTransactions] = useState<AgentTxn[]>([]);
   const [invites, setInvites] = useState<AgentInvite[]>([]);
-  const [conversions, setConversions] = useState<AgentConversions | null>(null);
+  const [vault, setVault] = useState<AgentVaultData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
       /*
-       * In parallel, and the conversions read is allSettled rather than part of
+       * In parallel, and the vault read is allSettled rather than part of
        * the `all`.
        *
        * Four of these five are what the desk IS. The fifth is a queue that may
        * be empty, may 404 on an older server, and must never be the reason an
        * agent cannot see their inventory or fund a player who is standing in
-       * front of them. A rejection here leaves `conversions` null and the panel
+       * front of them. A rejection here leaves `vault` null and the panel
        * simply absent.
        */
       const [next, playerList, txns, inviteList, queue] = await Promise.all([
@@ -131,7 +123,7 @@ export function useAgentDesk(): AgentDesk {
         api.getAgentPlayers(),
         api.getAgentTransactions(),
         api.getAgentInvites(),
-        api.getAgentConversions('all').then(
+        api.getAgentVault().then(
           (value) => value,
           () => null,
         ),
@@ -140,7 +132,7 @@ export function useAgentDesk(): AgentDesk {
       setPlayers(playerList.players);
       setTransactions(txns.transactions);
       setInvites(inviteList.invites);
-      setConversions(queue);
+      setVault(queue);
       setError(null);
     } catch (caught) {
       setError(caught instanceof PlayApiError ? caught.message : 'Could not load your agent desk');
@@ -202,12 +194,11 @@ export function useAgentDesk(): AgentDesk {
    * room. The refresh that follows is awaited, so the queue the agent looks at
    * next is the queue the server has.
    */
-  const decideConversion = useCallback(
+  const decideVault = useCallback(
     async (requestId: string, decision: 'approve' | 'reject', reason?: string) => {
       try {
-        if (decision === 'approve') await api.approveConversion(requestId);
-        else await api.rejectConversion(requestId, reason);
-        // An agent is a player too, and an approval moves their own inventory.
+        if (decision === 'approve') await api.approveVaultSave(requestId);
+        else await api.rejectVaultSave(requestId, reason);
         notifyBalanceChanged();
         await refresh();
         return { ok: true };
@@ -215,27 +206,25 @@ export function useAgentDesk(): AgentDesk {
         return {
           ok: false,
           message:
-            caught instanceof PlayApiError ? caught.message : 'Could not settle that request',
+            caught instanceof PlayApiError ? caught.message : 'Could not update that request',
         };
       }
     },
     [api, refresh],
   );
 
-  /** Buy GC inventory with CC, at the operator rate. */
-  const redeemCc = useCallback(
-    async (ccAmount: number) => {
-      // Generated once per attempt and reused on retry, exactly as `allocate`
-      // does — a key made inside the retry would be no protection at all.
-      const idempotencyKey = `cc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const restoreVault = useCallback(
+    async (playerId: string, amount: number) => {
+      const idempotencyKey = `vault-restore-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       try {
-        const result = await api.redeemAgentCc({ ccAmount, idempotencyKey });
+        await api.restoreVaultCoins({ playerId, amount, idempotencyKey });
+        notifyBalanceChanged();
         await refresh();
-        return { ok: true, gcAmount: result.gcAmount };
+        return { ok: true };
       } catch (caught) {
         return {
           ok: false,
-          message: caught instanceof PlayApiError ? caught.message : 'Could not redeem that',
+          message: caught instanceof PlayApiError ? caught.message : 'Could not restore those GC',
         };
       }
     },
@@ -318,7 +307,7 @@ export function useAgentDesk(): AgentDesk {
       players,
       transactions,
       invites,
-      conversions,
+      vault,
       loading,
       error,
       refresh,
@@ -326,15 +315,15 @@ export function useAgentDesk(): AgentDesk {
       createInvite,
       createPlayer,
       resetPassword,
-      decideConversion,
-      redeemCc,
+      decideVault,
+      restoreVault,
     }),
     [
       summary,
       players,
       transactions,
       invites,
-      conversions,
+      vault,
       loading,
       error,
       refresh,
@@ -342,8 +331,8 @@ export function useAgentDesk(): AgentDesk {
       createInvite,
       createPlayer,
       resetPassword,
-      decideConversion,
-      redeemCc,
+      decideVault,
+      restoreVault,
     ],
   );
 }
