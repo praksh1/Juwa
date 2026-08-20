@@ -219,17 +219,19 @@ export function CrashScreen() {
           {shown.toFixed(2)}×
         </Txt>
 
-        <View style={[shell.result, tightIphoneStage && local.tightIphoneResult]}>
+        <View style={[shell.result, tightIphoneStage && local.tightIphoneCrashResult]}>
           {running ? (
             <Txt variant="bodySmall" color={colors.text.secondary}>
               Climbing…
             </Txt>
           ) : result ? (
-            won ? <View style={local.winReadout}>
+            won ? tightIphoneStage ? <Txt variant="bodySmall" color={colors.feedback.winBright} numberOfLines={1}>
+              WON {format(minor(state.round!.settlement?.payout ?? 0), 'GC')} · CASHED OUT AT {target.toFixed(2)}×
+            </Txt> : <View style={local.winReadout}>
               <Txt variant="caption" color="#B9FFD9">AUTO CASH OUT · {target.toFixed(2)}×</Txt>
               <Txt variant="display" color={colors.feedback.winBright}>WON {format(minor(state.round!.settlement?.payout ?? 0), 'GC')}</Txt>
               <Txt variant="bodySmall" color={colors.text.secondary}>The flight reached {result.crashPoint.toFixed(2)}×</Txt>
-            </View> : <Txt variant="bodySmall" color={colors.text.muted}>
+            </View> : <Txt variant="bodySmall" color={colors.text.muted} numberOfLines={tightIphoneStage ? 1 : undefined}>
               Crashed at {result.crashPoint.toFixed(2)}× — you needed {target.toFixed(2)}×
             </Txt>
           ) : (
@@ -872,7 +874,9 @@ export function PlinkoScreen() {
   // Plinko is the game, not decoration around the game. Its panel alone uses
   // the wider Board body below, so the chamber can grow without changing the
   // other instant cabinets or overflowing a narrow iPhone.
-  const boardWidth = viewportWidth >= 760 ? 470 : Math.min(330, viewportWidth - 60);
+  const boardWidth = viewportWidth >= 760
+    ? 470
+    : Math.min(tightIphoneStage ? 318 : 330, viewportWidth - (tightIphoneStage ? 72 : 60));
 
   return (
     <InstantLayout game={game} state={state} pinHeader
@@ -1163,9 +1167,11 @@ export function MinesScreen() {
   const [mines, setMines] = useState(3);
   // The square can reach 440 on a tall desktop. Phones keep a substantial
   // 298-point vault so the playfield remains the visual focus of the screen.
+  // Narrow iPhones need only twelve points reclaimed; reducing every phone
+  // made the cabinet unnecessarily small on Pixel devices that already fit.
   const mineSize = viewportWidth >= 760
     ? Math.min(440, Math.max(288, viewportHeight - 478))
-    : Math.min(tightIphoneStage ? 282 : 298, viewportWidth - 60);
+    : Math.min(tightIphoneStage ? 270 : 298, viewportWidth - (tightIphoneStage ? 72 : 60));
   const mineScale = mineSize / 282;
 
   const board = state.round?.state as
@@ -1677,6 +1683,8 @@ const local = StyleSheet.create({
   expandedGameBody: { paddingHorizontal: 6 },
   tightIphoneGameBody: { paddingVertical: 9, gap: 4 },
   tightIphoneResult: { minHeight: 34 },
+  /** Ready, win and loss occupy exactly the same space, so Crash cannot grow after settlement. */
+  tightIphoneCrashResult: { height: 34, minHeight: 34, overflow: 'hidden', paddingHorizontal: 2 },
   winReadout: { alignItems: 'center', gap: 2, paddingVertical: 2 },
   dockChoices: { flexDirection: 'row', gap: 6, paddingHorizontal: 2, alignItems: 'center' },
   dockChoice: { minHeight: 32, minWidth: 64, paddingHorizontal: 10, borderRadius: 11, borderWidth: 1, borderColor: '#3A3446', backgroundColor: '#15131D', alignItems: 'center', justifyContent: 'center' },
