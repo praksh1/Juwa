@@ -12,15 +12,19 @@ import {
 const DEFAULTS: GameConfig = {
   enabled: true,
   maxWinMultiplier: null,
+  maxPayoutGc: null,
   minBet: null,
   maxBet: null,
 };
 
-function fakeDb(rows: unknown[], counter: { calls: number }) {
+function fakeDb(rows: unknown[], counter: { calls: number }, maxPayoutGc: number | null = null) {
   return {
-    async query<T>(): Promise<{ rows: T[] }> {
-      counter.calls++;
-      return { rows: rows as T[] };
+    async query<T>(sql: string): Promise<{ rows: T[] }> {
+      if (sql.includes('game_configs')) {
+        counter.calls++;
+        return { rows: rows as T[] };
+      }
+      return { rows: [{ max_single_bet_payout: maxPayoutGc }] as T[] };
     },
   };
 }
@@ -107,6 +111,16 @@ test('the max win cap rounds down and never pays more than set', () => {
 
   // No cap configured means no change at all.
   assert.deepEqual(applyMaxWin(DEFAULTS, 1_000, 999_999), { payout: 999_999, capped: false });
+});
+
+test('the global absolute payout cap wins over a larger game multiplier cap', () => {
+  const config = { ...DEFAULTS, maxWinMultiplier: 100, maxPayoutGc: 5_000 };
+  assert.deepEqual(applyMaxWin(config, 1_000, 80_000), { payout: 5_000, capped: true });
+});
+
+test('the global payout cap also applies to games without a configured row', async () => {
+  const cache = new GameConfigCache(fakeDb([], { calls: 0 }, 12_345));
+  assert.equal((await cache.get('new-game')).maxPayoutGc, 12_345);
 });
 
 test('a zero-multiplier cap cannot produce a negative payout', () => {

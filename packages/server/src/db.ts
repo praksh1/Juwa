@@ -36,6 +36,8 @@ export interface StoredRound {
   currency: string;
   /** The complete engine RoundState, including private data. Server-only. */
   state: unknown;
+  maxWinMultiplier: number | null;
+  maxPayoutGc: number | null;
 }
 
 export interface PlayerSummary {
@@ -59,6 +61,8 @@ export interface Db {
     currency: string;
     state: unknown;
     idempotencyKey: string;
+    maxWinMultiplier?: number | null;
+    maxPayoutGc?: number | null;
   }): Promise<{ roundId: string; balance: number }>;
 
   openRound(args: {
@@ -70,6 +74,8 @@ export interface Db {
     currency: string;
     state: unknown;
     idempotencyKey: string;
+    maxWinMultiplier?: number | null;
+    maxPayoutGc?: number | null;
   }): Promise<{ roundId: string; balance: number }>;
 
   updateRound(args: {

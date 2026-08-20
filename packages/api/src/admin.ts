@@ -239,6 +239,64 @@ export interface GamePatch {
   maxBet?: number | null;
 }
 
+export interface GlobalControls {
+  maxSingleBetPayout: number | null;
+  vaultInactiveDays: number;
+  vaultWarningDays: number;
+}
+
+export async function getGlobalControls(db: AdminDb): Promise<GlobalControls> {
+  const { rows } = await db.query<{
+    max_single_bet_payout: string | null;
+    vault_inactive_days: number;
+    vault_warning_days: number;
+  }>(
+    `select max_single_bet_payout, vault_inactive_days, vault_warning_days
+       from global_settings where id = true`,
+  );
+  const row = rows[0];
+  if (!row) throw new Error('Global settings are missing');
+  return {
+    maxSingleBetPayout: row.max_single_bet_payout == null
+      ? null
+      : Number(row.max_single_bet_payout),
+    vaultInactiveDays: Number(row.vault_inactive_days),
+    vaultWarningDays: Number(row.vault_warning_days),
+  };
+}
+
+function optionalWhole(value: unknown, name: string): number | null {
+  if (value === null || value === '') return null;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive whole number`);
+  }
+  return parsed;
+}
+
+/** Update the global hard payout ceiling and dormant-vault timing, attributed. */
+export async function updateGlobalControls(
+  db: AdminDb,
+  operator: OperatorIdentity,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const maxPayout = optionalWhole(patch['maxSingleBetPayout'], 'Maximum payout');
+  const inactiveDays = optionalWhole(patch['vaultInactiveDays'], 'Inactive days');
+  const warningDays = optionalWhole(patch['vaultWarningDays'], 'Warning days');
+  if (inactiveDays == null || inactiveDays > 3650) {
+    throw new Error('Inactive days must be between 1 and 3650');
+  }
+  if (warningDays == null || warningDays > 365) {
+    throw new Error('Warning days must be between 1 and 365');
+  }
+  await db.query(
+    `update global_settings set max_single_bet_payout = $1,
+       vault_inactive_days = $2, vault_warning_days = $3,
+       updated_at = now(), updated_by = $4 where id = true`,
+    [maxPayout, inactiveDays, warningDays, operator.operatorId],
+  );
+}
+
 /**
  * Apply a change, attributed.
  *

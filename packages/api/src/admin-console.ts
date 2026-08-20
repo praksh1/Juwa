@@ -52,6 +52,7 @@ export const ADMIN_CONSOLE_HTML = `<!doctype html>
     background: var(--cyan); color: #08070E; border: 0; border-radius: 999px;
     padding: 9px 16px; font-weight: 700; cursor: pointer;
   }
+  button:disabled { opacity: .45; cursor: not-allowed; }
   button.ghost { background: transparent; color: var(--cyan); border: 1px solid var(--border); }
   .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
   .login { max-width: 380px; margin: 8vh auto; display: grid; gap: 12px; }
@@ -134,13 +135,15 @@ function renderLogin(message) {
 }
 
 async function renderPanel() {
-  let games, audit, operator, agents, rates;
+  let games, audit, operator, agents, rates, settings, vaultReturns;
   try {
     const result = await api('/admin/games');
     games = result.games;
+    settings = result.settings;
     operator = result.operator;
     audit = (await api('/admin/audit?limit=40')).entries;
     agents = (await api('/admin/agents')).agents;
+    vaultReturns = (await api('/admin/vault/returns')).returns;
     /*
      * Rates are fetched SEPARATELY and allowed to fail.
      *
@@ -180,6 +183,9 @@ async function renderPanel() {
       <div style="margin-left:24px"><div class="hint">Observed RTP</div><strong>\${totals.wagered ? pct(totals.paid / totals.wagered) : '—'}</strong></div>
     </div>
   </section>\`));
+
+  main.append(renderGlobalControls(settings));
+  main.append(renderVaultReturns(vaultReturns));
 
   const table = $(\`<section><h2>Games</h2><div class="wrap"><table>
     <thead><tr>
@@ -285,6 +291,108 @@ async function renderPanel() {
  * cannot edit the ledger — a mistake is corrected by a further transaction, not
  * by changing history.
  */
+function renderGlobalControls(settings) {
+  const section = $(\`<section class="card">
+    <h2>Global safeguards</h2>
+    <div class="grid">
+      <label>Maximum payout from one wager (GC)
+        <input type="number" min="1" step="1" name="maxPayout"
+          value="\${settings.maxSingleBetPayout ?? ''}" placeholder="No absolute cap">
+      </label>
+      <label>Player inactivity before return (days)
+        <input type="number" min="1" max="3650" step="1" name="inactive"
+          value="\${settings.vaultInactiveDays}">
+      </label>
+      <label>Warning before operator approval (days)
+        <input type="number" min="1" max="365" step="1" name="warning"
+          value="\${settings.vaultWarningDays}">
+      </label>
+      <label>&nbsp;<button data-do="save">Save safeguards</button></label>
+    </div>
+    <div class="err"></div>
+    <p class="hint"><strong>The payout limit is server-enforced for every game and every wager,</strong>
+    including slots, Blackjack and multi-step games. Leave it blank for no absolute GC cap; the
+    game-specific multiplier caps below still apply. Dormant-player timing can be changed later,
+    but a return still requires operator approval.</p>
+  </section>\`);
+  const button = section.querySelector('[data-do=save]');
+  button.addEventListener('click', async () => {
+    const read = (name) => section.querySelector('[name=' + name + ']').value;
+    const max = read('maxPayout');
+    button.disabled = true;
+    section.querySelector('.err').textContent = '';
+    try {
+      await api('/admin/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          maxSingleBetPayout: max === '' ? null : Number(max),
+          vaultInactiveDays: Number(read('inactive')),
+          vaultWarningDays: Number(read('warning')),
+        }),
+      });
+      button.textContent = 'Saved';
+      setTimeout(renderPanel, 600);
+    } catch (error) {
+      section.querySelector('.err').textContent = error.message;
+      button.disabled = false;
+    }
+  });
+  return section;
+}
+
+function renderVaultReturns(returns) {
+  const open = returns.filter((entry) => entry.status === 'warning');
+  const section = $(\`<section><h2>Agent Vault returns\${open.length ? ' — ' + open.length + ' waiting' : ''}</h2>
+    <div class="wrap"><table><thead><tr>
+      <th>Player</th><th>Agent</th><th class="num">Reserved GC</th><th>Last active</th>
+      <th>Approval available</th><th>Status</th><th>Decision</th>
+    </tr></thead><tbody></tbody></table></div>
+    <p class="hint">An agent may start this process only after the configured inactivity period.
+    The GC stay reserved under the player’s name during the warning. A player who returns cancels
+    the warning automatically. Approval moves the reserved GC into that agent’s inventory through
+    the audited ledger; rejection puts it back into the player’s Agent Vault.</p>
+  </section>\`);
+  const body = section.querySelector('tbody');
+  for (const entry of returns) {
+    const eligible = new Date(entry.eligibleAt).getTime() <= Date.now();
+    const row = $(\`<tr>
+      <td>\${entry.username}<div class="hint">\${entry.playerId}</div></td>
+      <td>\${entry.agentName}</td><td class="num">\${num(entry.amount)}</td>
+      <td>\${new Date(entry.lastActivityAt).toLocaleString()}</td>
+      <td>\${new Date(entry.eligibleAt).toLocaleString()}</td>
+      <td><span class="pill \${entry.status === 'approved' ? 'active' : entry.status === 'warning' ? 'pending' : 'suspended'}">\${entry.status}</span></td>
+      <td><div class="row"></div></td>
+    </tr>\`);
+    const actions = row.querySelector('td:last-child .row');
+    if (entry.status === 'warning') {
+      const approve = $('<button>Approve return</button>');
+      approve.disabled = !eligible;
+      approve.title = eligible ? '' : 'The warning period has not ended yet';
+      const reject = $('<button class="ghost">Keep for player</button>');
+      const resolve = async (decision, button) => {
+        button.disabled = true;
+        try {
+          await api('/admin/vault/returns/resolve', {
+            method: 'POST', body: JSON.stringify({ requestId: entry.id, decision }),
+          });
+          renderPanel();
+        } catch (error) {
+          button.textContent = error.message;
+          button.disabled = false;
+        }
+      };
+      approve.addEventListener('click', () => resolve('approve', approve));
+      reject.addEventListener('click', () => resolve('reject', reject));
+      actions.append(approve, reject);
+    } else {
+      actions.append($('<span class="hint">Resolved</span>'));
+    }
+    body.append(row);
+  }
+  if (!returns.length) body.append($('<tr><td colspan="7" class="hint">No return requests yet.</td></tr>'));
+  return section;
+}
+
 function renderAgents(agents) {
   const section = $(\`<section><h2>Agents</h2>
     <div class="card" style="margin-bottom:14px">

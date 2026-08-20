@@ -60,13 +60,16 @@ export class PostgresDb implements Db {
     currency: string;
     state: unknown;
     idempotencyKey: string;
+    maxWinMultiplier?: number | null;
+    maxPayoutGc?: number | null;
   }): Promise<{ roundId: string; balance: number }> {
     const { rows } = await this.client.query(
-      `select * from play_instant_round($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)`,
+      `select * from play_instant_round_with_limits($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11)`,
       [
         args.playerId, args.gameId, args.seedPairId, args.nonce,
         args.stake, args.payout, args.currency,
         JSON.stringify(args.state), args.idempotencyKey,
+        args.maxWinMultiplier ?? null, args.maxPayoutGc ?? null,
       ],
     );
     const row = rows[0] as Record<string, string>;
@@ -82,12 +85,15 @@ export class PostgresDb implements Db {
     currency: string;
     state: unknown;
     idempotencyKey: string;
+    maxWinMultiplier?: number | null;
+    maxPayoutGc?: number | null;
   }): Promise<{ roundId: string; balance: number }> {
     const { rows } = await this.client.query(
-      `select * from open_round($1, $2, $3, $4, $5, $6, $7::jsonb, $8)`,
+      `select * from open_round_with_limits($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10)`,
       [
         args.playerId, args.gameId, args.seedPairId, args.nonce,
         args.stake, args.currency, JSON.stringify(args.state), args.idempotencyKey,
+        args.maxWinMultiplier ?? null, args.maxPayoutGc ?? null,
       ],
     );
     const row = rows[0] as Record<string, string>;
@@ -122,7 +128,8 @@ export class PostgresDb implements Db {
 
   async getRound(roundId: string): Promise<StoredRound | null> {
     const { rows } = await this.client.query(
-      `select id, player_id, game_id, status, seed_pair_id, nonce, stake, payout, currency, state
+      `select id, player_id, game_id, status, seed_pair_id, nonce, stake, payout, currency, state,
+              max_win_multiplier, max_payout_gc
          from game_rounds where id = $1`,
       [roundId],
     );
@@ -139,6 +146,8 @@ export class PostgresDb implements Db {
       payout: row['payout'] === null ? null : toInt(row['payout']),
       currency: row['currency'] as string,
       state: row['state'],
+      maxWinMultiplier: row['max_win_multiplier'] == null ? null : Number(row['max_win_multiplier']),
+      maxPayoutGc: row['max_payout_gc'] == null ? null : toInt(row['max_payout_gc']),
     };
   }
 

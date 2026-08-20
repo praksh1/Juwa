@@ -157,7 +157,12 @@ export async function placeBet(
       // inside it. The engine stays pure and replayable: anyone verifying this
       // round recomputes the same raw outcome, and the cap that was in force is
       // recorded alongside it rather than hidden in the arithmetic.
-      const capped = capPayout(settlement.stake, settlement.payout, request.maxWinMultiplier);
+      const capped = capPayout(
+        settlement.stake,
+        settlement.payout,
+        request.maxWinMultiplier,
+        request.maxPayoutGc,
+      );
       // ONE state, used for both the record and the reply. Capping only the
       // stored copy paid the ceiling but told the player they had won the
       // uncapped figure — a balance that disagrees with the win on screen is
@@ -174,6 +179,8 @@ export async function placeBet(
         currency: ctx.currency,
         state: settled,
         idempotencyKey: request.idempotencyKey,
+        maxWinMultiplier: request.maxWinMultiplier ?? null,
+        maxPayoutGc: request.maxPayoutGc ?? null,
       });
       return clientRound(roundId, engine.id, settled, balance, fairness);
     }
@@ -187,6 +194,8 @@ export async function placeBet(
       currency: ctx.currency,
       state,
       idempotencyKey: request.idempotencyKey,
+      maxWinMultiplier: request.maxWinMultiplier ?? null,
+      maxPayoutGc: request.maxPayoutGc ?? null,
     });
     return clientRound(roundId, engine.id, state, balance, fairness);
   } catch (error) {
@@ -257,13 +266,20 @@ export async function act(
         idempotencyKey: `${request.idempotencyKey}:stake`,
       });
     }
+    const capped = capPayout(
+      settlement.stake,
+      settlement.payout,
+      stored.maxWinMultiplier,
+      stored.maxPayoutGc,
+    );
+    const settled = withCapRecord(after, capped);
     const balance = await db.settleRound({
       roundId: request.roundId,
-      payout: settlement.payout,
-      state: after,
+      payout: capped.payout,
+      state: settled,
       idempotencyKey: `${request.idempotencyKey}:payout`,
     });
-    return clientRound(request.roundId, stored.gameId, after, balance, fairness);
+    return clientRound(request.roundId, stored.gameId, settled, balance, fairness);
   }
 
   const extra = totalStake(after, stored.stake) - stakeBefore;
@@ -287,9 +303,17 @@ export function capPayout(
   stake: number,
   payout: number,
   maxWinMultiplier: number | null | undefined,
+  maxPayoutGc?: number | null,
 ): { payout: number; capped: boolean; ceiling: number | null } {
-  if (maxWinMultiplier == null) return { payout, capped: false, ceiling: null };
-  const ceiling = Math.max(0, Math.floor(stake * maxWinMultiplier));
+  const multiplierCeiling = maxWinMultiplier == null
+    ? null
+    : Math.max(0, Math.floor(stake * maxWinMultiplier));
+  const absoluteCeiling = maxPayoutGc == null ? null : Math.max(0, Math.floor(maxPayoutGc));
+  const ceilings = [multiplierCeiling, absoluteCeiling].filter(
+    (value): value is number => value !== null,
+  );
+  if (ceilings.length === 0) return { payout, capped: false, ceiling: null };
+  const ceiling = Math.min(...ceilings);
   if (payout <= ceiling) return { payout, capped: false, ceiling };
   return { payout: ceiling, capped: true, ceiling };
 }

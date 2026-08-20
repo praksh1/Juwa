@@ -50,11 +50,13 @@ import {
   operatorLogin,
   operatorLogout,
   updateGameConfig,
+  getGlobalControls,
+  updateGlobalControls,
 } from './admin.js';
 import { GameConfigCache, assertBetAllowed } from './game-config.js';
 import { agentRoutes, handleAdminAgents } from './agent-routes.js';
 import { conversionRoutes, handleAdminConversions } from './conversion-routes.js';
-import { vaultRoutes } from './vault-routes.js';
+import { handleAdminVaultReturns, vaultRoutes } from './vault-routes.js';
 import { SupabaseAdmin, type SupabaseAdminConfig } from './supabase-admin.js';
 import { ADMIN_CONSOLE_HTML } from './admin-console.js';
 import {
@@ -207,6 +209,7 @@ async function handleAdmin(
   gameConfigs: GameConfigCache,
   agents: AgentsDb,
   conversions: ConversionsDb,
+  vaults: VaultsDb,
   req: IncomingMessage,
   res: ServerResponse,
   url: URL,
@@ -257,7 +260,27 @@ async function handleAdmin(
         rtp: game.rtp,
         limits: { min: game.limits.min, max: game.limits.max },
       }));
-      send(res, 200, { operator, games: await listGameAdmin(config, engines) });
+      const [games, settings] = await Promise.all([
+        listGameAdmin(config, engines),
+        getGlobalControls(config),
+      ]);
+      send(res, 200, { operator, games, settings });
+      return;
+    }
+
+    if (route === 'PATCH /admin/settings') {
+      await updateGlobalControls(config, operator, body as Record<string, unknown>);
+      gameConfigs.invalidate();
+      send(res, 200, { ok: true, settings: await getGlobalControls(config) });
+      return;
+    }
+
+    const vaultResult = await handleAdminVaultReturns(vaults, {
+      method: req.method ?? 'GET', pathname: url.pathname,
+      body: body as Record<string, unknown>, operator,
+    });
+    if (vaultResult !== undefined) {
+      send(res, 200, vaultResult);
       return;
     }
 
@@ -595,6 +618,7 @@ export function createServer(config: ServerConfig) {
         gameId,
         stake,
         maxWinMultiplier: gameConfig.maxWinMultiplier,
+        maxPayoutGc: gameConfig.maxPayoutGc,
         // A client that forgets to send one still gets replay protection, it
         // just cannot benefit from retrying the exact same request.
         idempotencyKey: idempotencyKey ?? randomUUID(),
@@ -917,7 +941,7 @@ export function createServer(config: ServerConfig) {
      * flag on a player row.
      */
     if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
-      await handleAdmin(config, gameConfigs, agents, conversions, req, res, url);
+      await handleAdmin(config, gameConfigs, agents, conversions, vaults, req, res, url);
       return;
     }
 
@@ -934,6 +958,11 @@ export function createServer(config: ServerConfig) {
         ...(config.jwks ? { jwks: config.jwks } : {}),
       });
       const player: PlayerContext = { playerId: claims.sub, currency: 'GC' };
+
+      // A returning player automatically cancels any dormant-vault warning.
+      // This runs after JWT verification and before every authenticated route,
+      // so neither a client bug nor a forgotten screen can bypass it.
+      await config.query(`select record_player_activity($1)`, [claims.sub]);
 
       const limit = limiterFor(route).check(`${claims.sub}:${route}`);
       if (!limit.allowed) {

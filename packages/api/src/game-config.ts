@@ -19,6 +19,8 @@ export interface GameConfig {
   enabled: boolean;
   /** Ceiling on one round's payout as a multiple of the stake, or null. */
   maxWinMultiplier: number | null;
+  /** Absolute maximum gross payout in GC for one wager, across every game. */
+  maxPayoutGc: number | null;
   minBet: number | null;
   maxBet: number | null;
 }
@@ -39,6 +41,7 @@ interface Row {
 
 export class GameConfigCache {
   private cache = new Map<string, GameConfig>();
+  private globalMaxPayoutGc: number | null = null;
   private loadedAt = 0;
   private inflight: Promise<void> | null = null;
 
@@ -55,17 +58,27 @@ export class GameConfigCache {
 
     this.inflight = (async () => {
       try {
-        const { rows } = await this.db.query<Row>(`select * from game_configs`);
+        const [{ rows }, global] = await Promise.all([
+          this.db.query<Row>(`select * from game_configs`),
+          this.db.query<{ max_single_bet_payout: string | null }>(
+            `select max_single_bet_payout from global_settings where id = true`,
+          ),
+        ]);
+        const maxPayoutGc = global.rows[0]?.max_single_bet_payout == null
+          ? null
+          : Number(global.rows[0].max_single_bet_payout);
         const next = new Map<string, GameConfig>();
         for (const row of rows) {
           next.set(row.game_id, {
             enabled: row.enabled,
             maxWinMultiplier: row.max_win_multiplier == null ? null : Number(row.max_win_multiplier),
+            maxPayoutGc,
             minBet: row.min_bet == null ? null : Number(row.min_bet),
             maxBet: row.max_bet == null ? null : Number(row.max_bet),
           });
         }
         this.cache = next;
+        this.globalMaxPayoutGc = maxPayoutGc;
         this.loadedAt = this.now();
       } finally {
         this.inflight = null;
@@ -87,6 +100,7 @@ export class GameConfigCache {
       this.cache.get(gameId) ?? {
         enabled: true,
         maxWinMultiplier: null,
+        maxPayoutGc: this.globalMaxPayoutGc,
         minBet: null,
         maxBet: null,
       }
@@ -137,8 +151,12 @@ export function applyMaxWin(
   stake: number,
   payout: number,
 ): { payout: number; capped: boolean } {
-  if (config.maxWinMultiplier == null) return { payout, capped: false };
-  const ceiling = Math.floor(stake * config.maxWinMultiplier);
+  const ceilings = [
+    config.maxWinMultiplier == null ? null : Math.floor(stake * config.maxWinMultiplier),
+    config.maxPayoutGc,
+  ].filter((value): value is number => value !== null);
+  if (ceilings.length === 0) return { payout, capped: false };
+  const ceiling = Math.min(...ceilings);
   if (payout <= ceiling) return { payout, capped: false };
   return { payout: Math.max(0, ceiling), capped: true };
 }

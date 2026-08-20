@@ -39,6 +39,8 @@ export interface PlaceBetRequest {
    * could not be replayed to verify a past round.
    */
   maxWinMultiplier?: number | null;
+  /** Absolute GC ceiling for a single wager, shared by every game. */
+  maxPayoutGc?: number | null;
 }
 
 export interface ActRequest {

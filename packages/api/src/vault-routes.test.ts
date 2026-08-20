@@ -13,7 +13,7 @@ function ctx(body: Record<string, unknown> = {}): VaultCtx {
 
 function fixtures() {
   const calls: { operation: string; args: unknown[] }[] = [];
-  const wallet = { playable: 900, pending: 100, saved: 500 };
+  const wallet = { playable: 900, pending: 100, saved: 500, returnPending: 0 };
   const request = {
     id: '33333333-3333-4333-8333-333333333333',
     playerId: PLAYER,
@@ -41,8 +41,17 @@ function fixtures() {
     },
     agentPlayers: async (agentId: string) => {
       calls.push({ operation: 'agentPlayers', args: [agentId] });
-      return [{ playerId: PLAYER, username: 'player-one', ...wallet }];
+      return [{
+        playerId: PLAYER, username: 'player-one', ...wallet,
+        lastSeenAt: new Date(0).toISOString(),
+        dormantEligibleAt: new Date(0).toISOString(), dormantEligible: true,
+      }];
     },
+    agentReturns: async (agentId: string) => {
+      calls.push({ operation: 'agentReturns', args: [agentId] });
+      return [];
+    },
+    policy: async () => ({ inactiveDays: 60, warningDays: 30 }),
     request: async (...args: unknown[]) => {
       calls.push({ operation: 'request', args });
       return request.id;
@@ -59,6 +68,13 @@ function fixtures() {
     restore: async (...args: unknown[]) => {
       calls.push({ operation: 'restore', args });
       return request.id;
+    },
+    requestDormantReturn: async (...args: unknown[]) => {
+      calls.push({ operation: 'requestDormantReturn', args });
+      return request.id;
+    },
+    cancelDormantReturn: async (...args: unknown[]) => {
+      calls.push({ operation: 'cancelDormantReturn', args });
     },
   };
   const agents = {
@@ -84,6 +100,12 @@ function fixtures() {
 }
 
 describe('Agent Vault routes', () => {
+  it('returns the operator-controlled dormant-player policy to the agent UI', async () => {
+    const { routes } = fixtures();
+    const result = await routes['GET /agent/vault']!(ctx()) as Record<string, unknown>;
+    assert.deepEqual(result['policy'], { inactiveDays: 60, warningDays: 30 });
+  });
+
   it('always scopes a save request to the signed-in player', async () => {
     const { calls, routes } = fixtures();
     await routes['POST /wallet/vault/save']!(
@@ -109,6 +131,18 @@ describe('Agent Vault routes', () => {
     );
     const restore = calls.find((call) => call.operation === 'restore');
     assert.deepEqual(restore?.args, [AGENT, OTHER_PLAYER, 250, 'restore-once']);
+  });
+
+  it('starts a dormant return only through the authenticated agent', async () => {
+    const { calls, routes } = fixtures();
+    await routes['POST /agent/vault/dormant-return']!(ctx({
+      playerId: OTHER_PLAYER,
+      agentId: 'attacker',
+      amount: 250,
+      idempotencyKey: 'dormant-return-once',
+    }));
+    const warning = calls.find((call) => call.operation === 'requestDormantReturn');
+    assert.deepEqual(warning?.args, [AGENT, OTHER_PLAYER, 250, 'dormant-return-once']);
   });
 
   it('rejects invalid amounts before calling the database', async () => {

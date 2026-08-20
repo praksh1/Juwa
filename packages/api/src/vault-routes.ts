@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ApiError, type AgentsDb, type VaultsDb } from '@juwa/server';
+import type { OperatorIdentity } from './admin.js';
 
 export interface VaultCtx {
   url: URL;
@@ -40,6 +41,27 @@ function vaultError(error: unknown): ApiError {
   const message = error instanceof Error ? error.message : '';
   if (/Insufficient (funds|saved funds)/i.test(message)) {
     return new ApiError('There are not enough GC in that balance.', 402, 'insufficient_funds');
+  }
+  if (/not inactive long enough/i.test(message)) {
+    return new ApiError(
+      'This player has not yet been inactive for the required period.',
+      409,
+      'player_not_dormant',
+    );
+  }
+  if (/warning period has not ended/i.test(message)) {
+    return new ApiError(
+      'The configured warning period has not ended yet.',
+      409,
+      'warning_not_complete',
+    );
+  }
+  if (/already has an open dormant return/i.test(message)) {
+    return new ApiError(
+      'A return-to-inventory warning is already open for this player.',
+      409,
+      'dormant_return_already_open',
+    );
   }
   if (/already have|agent_vault_one_pending|duplicate key/i.test(message)) {
     return new ApiError(
@@ -113,11 +135,13 @@ export function vaultRoutes(
 
     'GET /agent/vault': async (ctx) => {
       const agent = await activeAgent(ctx);
-      const [requests, players] = await Promise.all([
+      const [requests, players, returns, policy] = await Promise.all([
         vaults.agentRequests(agent.agentId),
         vaults.agentPlayers(agent.agentId),
+        vaults.agentReturns(agent.agentId),
+        vaults.policy(),
       ]);
-      return { requests, players };
+      return { requests, players, returns, policy };
     },
 
     'POST /agent/vault/approve': async (ctx) => {
@@ -159,5 +183,58 @@ export function vaultRoutes(
         throw vaultError(error);
       }
     },
+
+    'POST /agent/vault/dormant-return': async (ctx) => {
+      const agent = await activeAgent(ctx);
+      try {
+        await vaults.requestDormantReturn(
+          agent.agentId,
+          id(ctx.body['playerId'], 'playerId'),
+          wholeAmount(ctx.body['amount']),
+          idempotencyKey(ctx.body['idempotencyKey']),
+        );
+        return { ok: true };
+      } catch (error) {
+        throw vaultError(error);
+      }
+    },
+
+    'POST /agent/vault/dormant-return/cancel': async (ctx) => {
+      const agent = await activeAgent(ctx);
+      try {
+        await vaults.cancelDormantReturn(id(ctx.body['requestId'], 'requestId'), agent.agentId);
+        return { ok: true };
+      } catch (error) {
+        throw vaultError(error);
+      }
+    },
   };
+}
+
+export async function handleAdminVaultReturns(
+  vaults: VaultsDb,
+  ctx: {
+    method: string; pathname: string; body: Record<string, unknown>;
+    operator: OperatorIdentity;
+  },
+): Promise<unknown | undefined> {
+  if (ctx.method === 'GET' && ctx.pathname === '/admin/vault/returns') {
+    return { returns: await vaults.adminReturns() };
+  }
+  if (ctx.method === 'POST' && ctx.pathname === '/admin/vault/returns/resolve') {
+    const approve = ctx.body['decision'] === 'approve';
+    if (!approve && ctx.body['decision'] !== 'reject') {
+      throw new ApiError('Decision must be approve or reject.', 400, 'invalid_input');
+    }
+    try {
+      await vaults.resolveDormantReturn(
+        id(ctx.body['requestId'], 'requestId'), ctx.operator.operatorId, approve,
+        typeof ctx.body['reason'] === 'string' ? ctx.body['reason'].slice(0, 300) : undefined,
+      );
+      return { ok: true };
+    } catch (error) {
+      throw vaultError(error);
+    }
+  }
+  return undefined;
 }

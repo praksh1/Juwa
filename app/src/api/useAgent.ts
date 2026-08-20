@@ -94,6 +94,13 @@ export interface AgentDesk {
   ) => Promise<{ ok: boolean; message?: string }>;
   /** Move saved GC back to that same player's playable balance. */
   restoreVault: (playerId: string, amount: number) => Promise<{ ok: boolean; message?: string }>;
+  /** Begin the operator-reviewed return of an inactive player's saved GC. */
+  requestDormantReturn: (
+    playerId: string,
+    amount: number,
+  ) => Promise<{ ok: boolean; message?: string }>;
+  /** Stop a return during its warning period and put the GC back in the player's vault. */
+  cancelDormantReturn: (requestId: string) => Promise<{ ok: boolean; message?: string }>;
 }
 
 export function useAgentDesk(): AgentDesk {
@@ -231,6 +238,43 @@ export function useAgentDesk(): AgentDesk {
     [api, refresh],
   );
 
+  const requestDormantReturn = useCallback(
+    async (playerId: string, amount: number) => {
+      const idempotencyKey = `vault-return-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      try {
+        await api.requestDormantVaultReturn({ playerId, amount, idempotencyKey });
+        await refresh();
+        return { ok: true };
+      } catch (caught) {
+        return {
+          ok: false,
+          message:
+            caught instanceof PlayApiError
+              ? caught.message
+              : 'Could not start the return warning period',
+        };
+      }
+    },
+    [api, refresh],
+  );
+
+  const cancelDormantReturn = useCallback(
+    async (requestId: string) => {
+      try {
+        await api.cancelDormantVaultReturn(requestId);
+        await refresh();
+        return { ok: true };
+      } catch (caught) {
+        return {
+          ok: false,
+          message:
+            caught instanceof PlayApiError ? caught.message : 'Could not cancel that return',
+        };
+      }
+    },
+    [api, refresh],
+  );
+
   const createInvite = useCallback(
     async (label?: string) => {
       try {
@@ -317,6 +361,8 @@ export function useAgentDesk(): AgentDesk {
       resetPassword,
       decideVault,
       restoreVault,
+      requestDormantReturn,
+      cancelDormantReturn,
     }),
     [
       summary,
@@ -333,6 +379,8 @@ export function useAgentDesk(): AgentDesk {
       resetPassword,
       decideVault,
       restoreVault,
+      requestDormantReturn,
+      cancelDormantReturn,
     ],
   );
 }

@@ -182,6 +182,8 @@ export function AgentScreen() {
             canAct={summary.status === 'active'}
             onDecide={desk.decideVault}
             onRestore={desk.restoreVault}
+            onDormantReturn={desk.requestDormantReturn}
+            onCancelDormantReturn={desk.cancelDormantReturn}
           />
         </View>
       ) : null}

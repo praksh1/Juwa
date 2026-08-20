@@ -63,3 +63,24 @@ test('the ceiling is reported so it can be recorded', () => {
   assert.equal(result.payout, 50_000);
   assert.equal(result.capped, true);
 });
+
+test('the operator absolute jackpot ceiling applies without a multiplier ceiling', () => {
+  assert.deepEqual(capPayout(100, 250_000, null, 75_000), {
+    payout: 75_000,
+    capped: true,
+    ceiling: 75_000,
+  });
+});
+
+test('the strictest of game and global ceilings wins', () => {
+  assert.deepEqual(capPayout(1_000, 100_000, 25, 40_000), {
+    payout: 25_000,
+    capped: true,
+    ceiling: 25_000,
+  });
+  assert.deepEqual(capPayout(1_000, 100_000, 100, 40_000), {
+    payout: 40_000,
+    capped: true,
+    ceiling: 40_000,
+  });
+});

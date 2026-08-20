@@ -314,6 +314,7 @@ export interface VaultWallet {
   playable: number;
   pending: number;
   saved: number;
+  returnPending: number;
 }
 
 export interface WalletResponse {
@@ -325,11 +326,31 @@ export interface WalletResponse {
 export interface AgentVaultPlayer extends VaultWallet {
   playerId: string;
   username: string;
+  lastSeenAt: string | null;
+  dormantEligibleAt: string;
+  dormantEligible: boolean;
+}
+
+export interface DormantVaultReturn {
+  id: string;
+  playerId: string;
+  username: string;
+  agentId: string;
+  agentName: string;
+  amount: number;
+  status: 'warning' | 'approved' | 'cancelled' | 'rejected';
+  lastActivityAt: string;
+  warningStartedAt: string;
+  eligibleAt: string;
+  resolvedAt: string | null;
+  reason: string | null;
 }
 
 export interface AgentVaultData {
   requests: VaultRequest[];
   players: AgentVaultPlayer[];
+  returns: DormantVaultReturn[];
+  policy: { inactiveDays: number; warningDays: number };
 }
 
 export interface AgentConversions {
@@ -466,6 +487,12 @@ export interface PlayApi {
     amount: number;
     idempotencyKey: string;
   }): Promise<{ ok: boolean; player: VaultWallet }>;
+  requestDormantVaultReturn(request: {
+    playerId: string;
+    amount: number;
+    idempotencyKey: string;
+  }): Promise<{ ok: boolean }>;
+  cancelDormantVaultReturn(requestId: string): Promise<{ ok: boolean }>;
 
   /* ---------------------------------------------- legacy casino cash */
   /**
@@ -946,6 +973,18 @@ export class HttpPlayApi implements PlayApi {
 
   restoreVaultCoins(request: { playerId: string; amount: number; idempotencyKey: string }) {
     return this.request<{ ok: boolean; player: VaultWallet }>('/agent/vault/restore', request);
+  }
+
+  requestDormantVaultReturn(request: {
+    playerId: string;
+    amount: number;
+    idempotencyKey: string;
+  }) {
+    return this.request<{ ok: boolean }>('/agent/vault/dormant-return', request);
+  }
+
+  cancelDormantVaultReturn(requestId: string) {
+    return this.request<{ ok: boolean }>('/agent/vault/dormant-return/cancel', { requestId });
   }
 
   /* Legacy CC endpoints are retained for the reversible feature switch. */
@@ -1541,7 +1580,7 @@ export class DemoPlayApi implements PlayApi {
    */
   async getWallet(): Promise<WalletResponse> {
     return {
-      wallet: { playable: this.balance, pending: 0, saved: 0 },
+      wallet: { playable: this.balance, pending: 0, saved: 0, returnPending: 0 },
       agent: null,
       requests: [],
     };
@@ -1563,6 +1602,12 @@ export class DemoPlayApi implements PlayApi {
     this.noAgentInDemo();
   }
   async restoreVaultCoins(): Promise<never> {
+    this.noAgentInDemo();
+  }
+  async requestDormantVaultReturn(): Promise<never> {
+    this.noAgentInDemo();
+  }
+  async cancelDormantVaultReturn(): Promise<never> {
     this.noAgentInDemo();
   }
 
