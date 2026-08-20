@@ -237,7 +237,7 @@ export function BlackjackScreen() {
       return;
     }
     unlock();
-    sounds.cardDeal();
+    sounds.tap();
 
     setBusy(true);
     setError(null);
@@ -256,7 +256,7 @@ export function BlackjackScreen() {
 
       const state = result.state as BlackjackPublic;
       // Four cards, dealt in sequence.
-      [0, 1, 2, 3].forEach((i) => setTimeout(() => sounds.cardDeal(), i * 110));
+      [0, 1, 2, 3].forEach((i) => setTimeout(() => sounds.cardDeal(), i * 145));
       if (result.status === 'settled') {
         setTimeout(() => announce(state, result.settlement?.payout ?? 0, bet), 500);
       }
@@ -364,30 +364,24 @@ export function BlackjackScreen() {
           end={{ x: 0.7, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
-        <View style={styles.tableRail} pointerEvents="none">
-          <View style={styles.tableRailInner} />
-        </View>
-        <LinearGradient colors={['rgba(181,119,50,0)', 'rgba(116,62,19,0.68)', 'rgba(25,11,5,0.95)']} style={styles.tableRailGlow} pointerEvents="none" />
-        <View style={styles.feltInset} pointerEvents="none" />
+        <View style={styles.tableRail} pointerEvents="none" />
+        <LinearGradient
+          colors={['rgba(223,161,70,0.08)', 'rgba(89,40,13,0.76)', 'rgba(20,8,3,0.98)']}
+          style={styles.tableRailGlow}
+          pointerEvents="none"
+        />
+        <View style={styles.feltEdge} pointerEvents="none" />
         <Animated.View style={[styles.lampPool, { opacity: lamp.interpolate({ inputRange: [0, 1], outputRange: [0.18, 0.52] }) }]} pointerEvents="none" />
-        <View style={styles.tableDimension} pointerEvents="none" />
-        <View style={styles.tablePerspectiveLeft} pointerEvents="none" />
-        <View style={styles.tablePerspectiveRight} pointerEvents="none" />
-        <View style={styles.playerArc} pointerEvents="none" />
-        <View style={styles.tableWatermark} pointerEvents="none">
-          <Txt variant="display" color="rgba(242,210,125,0.10)">21</Txt>
+        <View style={styles.ruleArc} pointerEvents="none">
+          <View style={styles.ruleArcLine} />
+          <Txt variant="caption" color="rgba(255,224,145,0.54)">BLACKJACK PAYS 3 TO 2</Txt>
+          <Txt variant="caption" color="rgba(255,224,145,0.40)">DEALER STANDS ON 17</Txt>
         </View>
-        <View style={styles.casinoRules} pointerEvents="none">
-          <Txt variant="caption" color="rgba(255,224,145,0.62)">BLACKJACK PAYS 3 TO 2 · DEALER STANDS ON 17</Txt>
-        </View>
-        <View style={[styles.betSpot, styles.betSpotLeft]} pointerEvents="none" />
-        <View style={[styles.betSpot, styles.betSpotCentre]} pointerEvents="none" />
-        <View style={[styles.betSpot, styles.betSpotRight]} pointerEvents="none" />
         <View style={styles.dealerHardware} pointerEvents="none">
-          <View style={styles.discardTray}>
-            <View style={styles.discardSlot} />
-            <View style={styles.discardSlot} />
-            <View style={styles.discardSlot} />
+          <View style={styles.chipRack}>
+            {['#C62B39', '#E9E6D7', '#2E66BC', '#248A5B', '#17191F'].map((chip, index) => (
+              <View key={chip} style={[styles.rackChip, { backgroundColor: chip, left: 4 + index * 10 }]} />
+            ))}
           </View>
           <View style={styles.cardShoe}>
             <LinearGradient colors={['#6A4B1B', '#15110D', '#020407']} style={StyleSheet.absoluteFill} />
@@ -397,7 +391,7 @@ export function BlackjackScreen() {
           </View>
         </View>
         <View style={styles.tablePlaque} pointerEvents="none">
-          <Txt variant="caption" color="#FFE9A6">JUWA GRAND TABLE · 21</Txt>
+          <Txt variant="caption" color="#FFE9A6">PRIVATE TABLE · 21</Txt>
         </View>
         <View style={styles.feltSheen} pointerEvents="none">
           <LinearGradient
@@ -623,25 +617,83 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
   },
   tableCompact: { padding: spacing.md, gap: spacing.sm, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderBottomLeftRadius: 58, borderBottomRightRadius: 58 },
-  tableArtwork: { ...StyleSheet.absoluteFillObject, opacity: 0.24 },
-  tableRail: { ...StyleSheet.absoluteFillObject, borderTopLeftRadius: 22, borderTopRightRadius: 22, borderBottomLeftRadius: 80, borderBottomRightRadius: 80, borderWidth: 9, borderColor: '#3D1D0B', padding: 5 },
-  tableRailInner: { flex: 1, borderTopLeftRadius: 12, borderTopRightRadius: 12, borderBottomLeftRadius: 67, borderBottomRightRadius: 67, borderWidth: 2, borderColor: 'rgba(255,224,137,0.78)', shadowColor: '#000', shadowOpacity: 0.75, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
-  tableRailGlow: { position: 'absolute', left: 8, right: 8, bottom: 0, height: 58, borderBottomLeftRadius: 72, borderBottomRightRadius: 72, opacity: 0.88 },
-  feltInset: { ...StyleSheet.absoluteFillObject, margin: 14, borderTopLeftRadius: 10, borderTopRightRadius: 10, borderBottomLeftRadius: 62, borderBottomRightRadius: 62, borderWidth: 1, borderColor: 'rgba(246,214,128,0.35)' },
+  tableArtwork: { ...StyleSheet.absoluteFillObject, opacity: 0.08 },
+  tableRail: {
+    ...StyleSheet.absoluteFillObject,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderBottomLeftRadius: 80,
+    borderBottomRightRadius: 80,
+    borderWidth: 9,
+    borderColor: '#341706',
+    shadowColor: '#E2A85A',
+    shadowOpacity: 0.26,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  tableRailGlow: {
+    position: 'absolute',
+    left: 5,
+    right: 5,
+    bottom: -2,
+    height: 70,
+    borderBottomLeftRadius: 76,
+    borderBottomRightRadius: 76,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(242,194,104,0.46)',
+  },
+  feltEdge: {
+    ...StyleSheet.absoluteFillObject,
+    margin: 10,
+    borderTopLeftRadius: 13,
+    borderTopRightRadius: 13,
+    borderBottomLeftRadius: 68,
+    borderBottomRightRadius: 68,
+    borderWidth: 1,
+    borderColor: 'rgba(235,198,106,0.46)',
+  },
   lampPool: { position: 'absolute', width: 260, height: 150, borderRadius: 130, alignSelf: 'center', top: -54, backgroundColor: '#F8CD63', shadowColor: '#FFE29A', shadowRadius: 40 },
-  tableDimension: { position: 'absolute', left: 30, right: 30, bottom: -44, height: 126, borderRadius: 100, borderWidth: 1, borderColor: 'rgba(255,224,133,0.26)', backgroundColor: 'rgba(0,0,0,0.14)', transform: [{ scaleX: 1.18 }] },
-  tablePerspectiveLeft: { position: 'absolute', left: 7, top: 70, bottom: 46, width: 2, backgroundColor: 'rgba(255,218,121,0.28)', transform: [{ rotate: '2deg' }] },
-  tablePerspectiveRight: { position: 'absolute', right: 7, top: 70, bottom: 46, width: 2, backgroundColor: 'rgba(255,218,121,0.28)', transform: [{ rotate: '-2deg' }] },
-  playerArc: { position: 'absolute', left: '13%', right: '13%', bottom: 19, height: 104, borderRadius: 999, borderWidth: 2, borderColor: 'rgba(246,210,119,0.26)', transform: [{ scaleY: 0.62 }] },
-  tableWatermark: { position: 'absolute', alignSelf: 'center', top: '43%', width: 120, alignItems: 'center', transform: [{ rotate: '-8deg' }] },
-  casinoRules: { position: 'absolute', left: 30, right: 30, bottom: 20, alignItems: 'center' },
-  betSpot: { position: 'absolute', bottom: 37, width: 72, height: 38, borderRadius: 36, borderWidth: 1, borderColor: 'rgba(241,206,113,0.23)', transform: [{ scaleY: 0.62 }] },
-  betSpotLeft: { left: '12%' },
-  betSpotCentre: { alignSelf: 'center' },
-  betSpotRight: { right: '12%' },
+  ruleArc: {
+    position: 'absolute',
+    left: '16%',
+    right: '16%',
+    top: '43%',
+    height: 74,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 1,
+    opacity: 0.72,
+  },
+  ruleArcLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 58,
+    borderTopWidth: 1.5,
+    borderColor: 'rgba(242,205,116,0.50)',
+    borderRadius: 999,
+    transform: [{ scaleY: 0.56 }],
+  },
   dealerHardware: { position: 'absolute', top: 10, left: 16, right: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  discardTray: { width: 46, height: 25, paddingHorizontal: 5, flexDirection: 'row', gap: 3, alignItems: 'center', borderRadius: 5, borderWidth: 1, borderColor: '#8A6A2A', backgroundColor: 'rgba(3,5,8,0.78)' },
-  discardSlot: { flex: 1, height: 15, borderRadius: 2, backgroundColor: 'rgba(236,222,184,0.14)' },
+  chipRack: {
+    width: 62,
+    height: 23,
+    overflow: 'hidden',
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#7B622D',
+    backgroundColor: 'rgba(3,5,8,0.82)',
+  },
+  rackChip: {
+    position: 'absolute',
+    top: 3,
+    width: 17,
+    height: 17,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.62)',
+  },
   cardShoe: { width: 66, height: 34, overflow: 'hidden', borderRadius: 6, borderWidth: 1, borderColor: '#D0A84B', transform: [{ perspective: 220 }, { rotateX: '-8deg' }] },
   shoeCard: { position: 'absolute', width: 32, height: 22, right: 8, top: 5, borderRadius: 3, borderWidth: 1, borderColor: '#E7CC86', backgroundColor: '#151E36', transform: [{ rotate: '-8deg' }] },
   shoeCardTwo: { right: 12, top: 3, opacity: 0.7 },

@@ -10,9 +10,10 @@ import { colors, motion, radius, spacing } from '@juwa/ui';
  * hundred kilobytes a player waits for. Text and a border cost nothing, scale to
  * any size without blurring, and are legible at the sizes a phone actually uses.
  *
- * The deal animation is a slide plus a fade, staggered by position. Cards
- * appearing all at once reads as a table refreshing; cards arriving one after
- * another reads as a hand being dealt.
+ * The deal animation follows the motion of a card leaving a shoe: it lifts,
+ * turns slightly in the dealer's hand, travels across the felt, then settles
+ * with a tiny overshoot. Cards appearing all at once reads as a table refresh;
+ * cards arriving one after another reads as a hand being dealt.
  */
 
 export type Suit = 'S' | 'H' | 'D' | 'C';
@@ -37,11 +38,12 @@ export function PlayingCard({ rank, suit, hidden, index = 0, dealOrder = index, 
   const entrance = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    entrance.setValue(0);
     Animated.timing(entrance, {
       toValue: 1,
-      duration: Math.max(motion.cardDeal, 360),
-      delay: dealOrder * 115,
-      easing: Easing.out(Easing.back(0.9)),
+      duration: Math.max(motion.cardDeal, 540),
+      delay: dealOrder * 145,
+      easing: Easing.bezier(0.16, 0.78, 0.24, 1),
       useNativeDriver: true,
     }).start();
   }, [dealOrder, entrance]);
@@ -52,13 +54,48 @@ export function PlayingCard({ rank, suit, hidden, index = 0, dealOrder = index, 
   // slow down reading a hand.
   const ink = suit === 'H' || suit === 'D' ? colors.table.red : colors.table.black;
 
+  const sourceX = trajectory === 'dealer' ? 116 + index * 10 : 166 + index * 12;
+  const sourceY = trajectory === 'dealer' ? -68 : -184;
   const animatedStyle = {
-    opacity: entrance,
+    opacity: entrance.interpolate({ inputRange: [0, 0.08, 1], outputRange: [0, 1, 1] }),
     transform: [
-      { translateX: entrance.interpolate({ inputRange: [0, 1], outputRange: [trajectory === 'dealer' ? 112 : 148, 0] }) },
-      { translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [trajectory === 'dealer' ? -54 : -164, 0] }) },
-      { rotate: entrance.interpolate({ inputRange: [0, 1], outputRange: [trajectory === 'dealer' ? '-12deg' : '-22deg', '0deg'] }) },
-      { scale: entrance.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] }) },
+      { perspective: 620 },
+      {
+        translateX: entrance.interpolate({
+          inputRange: [0, 0.18, 0.72, 0.9, 1],
+          outputRange: [sourceX, sourceX * 0.86, 14, -4, 0],
+        }),
+      },
+      {
+        translateY: entrance.interpolate({
+          inputRange: [0, 0.18, 0.72, 0.9, 1],
+          outputRange: [sourceY, sourceY - 10, -14, 3, 0],
+        }),
+      },
+      {
+        rotateZ: entrance.interpolate({
+          inputRange: [0, 0.2, 0.76, 1],
+          outputRange: ['-24deg', '-18deg', '3deg', '0deg'],
+        }),
+      },
+      {
+        rotateY: entrance.interpolate({
+          inputRange: [0, 0.22, 0.74, 1],
+          outputRange: ['-48deg', '-24deg', '6deg', '0deg'],
+        }),
+      },
+      {
+        rotateX: entrance.interpolate({
+          inputRange: [0, 0.68, 1],
+          outputRange: ['18deg', '4deg', '0deg'],
+        }),
+      },
+      {
+        scale: entrance.interpolate({
+          inputRange: [0, 0.7, 0.9, 1],
+          outputRange: [0.68, 0.96, 1.035, 1],
+        }),
+      },
     ],
   };
 
