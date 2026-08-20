@@ -584,6 +584,15 @@ export function SlotsScreen() {
     round: 0,
   });
   const celebrationRound = useRef(0);
+  /**
+   * The headline banner currently owning the stage, if there is one.
+   *
+   * Free spins are an await-driven presentation loop. A fixed pause cannot
+   * safely stand in for BIG WIN / MEGA WIN / JACKPOT because those banners
+   * deliberately have different lengths and can be lengthened independently.
+   * The banner itself resolves this handshake when its real animation ends.
+   */
+  const headlineDone = useRef<{ round: number; resolve: () => void } | null>(null);
   const shake = useCabinetShake(celebration.tier, celebration.round);
   const screenShake = useScreenShake(celebration.tier, celebration.round);
 
@@ -764,14 +773,29 @@ export function SlotsScreen() {
      * largest was 49x. See `SlotModelInfo.tiers`.
      */
     const tier = winTier(payout, stake, paytable?.tiers);
-    if (tier === 'none') return;
+    if (tier === 'none') return { tier, done: Promise.resolve() };
 
     // The round's own record of how loud it got. A free-spin round calls this
     // a dozen times and the tail has to wait for the biggest of them.
     if (TIER_RANK.indexOf(tier) > TIER_RANK.indexOf(lastTier.current)) lastTier.current = tier;
 
     celebrationRound.current += 1;
-    setCelebration({ tier, amount: payout, round: celebrationRound.current });
+    const round = celebrationRound.current;
+    const headline = tier === 'big' || tier === 'mega' || tier === 'jackpot';
+
+    /*
+     * A new headline supersedes an old one only when the player deliberately
+     * skips ahead. Release the old waiter before replacing it so an interrupted
+     * presentation can never strand the bonus loop on a promise.
+     */
+    const done = headline
+      ? new Promise<void>((resolve) => {
+          headlineDone.current?.resolve();
+          headlineDone.current = { round, resolve };
+        })
+      : Promise.resolve();
+
+    setCelebration({ tier, amount: payout, round });
 
     if (tier === 'jackpot' || tier === 'mega') sounds.megaWin();
     else if (tier === 'big') sounds.bigWin();
@@ -818,7 +842,29 @@ export function SlotsScreen() {
        */
       screenCoins.current?.pour(power, celebrationDuration(tier) / 1000);
     }
+    return { tier, done };
   }, [paytable?.tiers]);
+
+  /** Resolve only the banner that actually reported completing. */
+  const finishHeadlineCelebration = useCallback((round: number) => {
+    const pending = headlineDone.current;
+    if (pending?.round === round) {
+      headlineDone.current = null;
+      pending.resolve();
+    }
+    setCelebration((current) =>
+      current.round === round ? { ...current, tier: 'none' } : current,
+    );
+  }, []);
+
+  // Do not leave an async bonus presentation waiting if the screen is closed.
+  useEffect(
+    () => () => {
+      headlineDone.current?.resolve();
+      headlineDone.current = null;
+    },
+    [],
+  );
 
   /**
    * The reel's own stop callback. It no longer plays the sound — that was
@@ -1128,6 +1174,11 @@ export function SlotsScreen() {
      */
     transferDone.current?.();
     transferDone.current = null;
+    // A human tap is allowed to skip a celebration. Release the presentation
+    // loop as well as hiding the banner, otherwise the old round remains alive
+    // behind the new one waiting for an onDone callback that can no longer fire.
+    headlineDone.current?.resolve();
+    headlineDone.current = null;
     cancelAnimationFrame(rampFrame.current);
     rampFrame.current = 0;
     setTransfer(null);
@@ -1327,7 +1378,7 @@ export function SlotsScreen() {
       else if (scatters === 2) sounds.nearMiss();
 
       const baseWin = spinWin(state.baseSpin.totalMultiplier);
-      celebrate(baseWin, bet);
+      const baseCelebration = celebrate(baseWin, bet);
 
       /*
        * The feature round, if this machine has one and it fired.
@@ -1361,6 +1412,12 @@ export function SlotsScreen() {
       }
 
       if (state.freeSpinsAwarded > 0) {
+        // A headline win on the triggering spin owns the stage first. Starting
+        // the bonus intro underneath it would recreate the same overlapping
+        // audio and animation fault as starting another free spin underneath.
+        await baseCelebration.done;
+        if (superseded()) return;
+
         setFreeSpinsTotal(state.freeSpinsAwarded);
         sounds.bonus();
         setPhase('fs-intro');
@@ -1409,7 +1466,7 @@ export function SlotsScreen() {
           const freeWin = spinWin(spinResult.totalMultiplier);
           runningWinRef.current += freeWin;
           setRunningWin(runningWinRef.current);
-          celebrate(freeWin, bet);
+          const freeCelebration = celebrate(freeWin, bet);
           /*
            * A beat between spins, LONGER when that spin paid.
            *
@@ -1423,7 +1480,20 @@ export function SlotsScreen() {
            * a spin that paid. That makes the round a sequence of events rather
            * than a blur, which is the whole reason a player wants free spins.
            */
-          await wait(freeWin > 0 ? FS_WIN_PAUSE_MS : FS_PAUSE_MS);
+          // This is the sequencing fix: a headline win must finish before the
+          // next free spin can make a sound or move a reel. Ordinary wins have
+          // no full-screen banner and retain the measured readout pause below.
+          await freeCelebration.done;
+          if (superseded()) return;
+          await wait(
+            freeCelebration.tier === 'big' ||
+              freeCelebration.tier === 'mega' ||
+              freeCelebration.tier === 'jackpot'
+              ? FS_PAUSE_MS
+              : freeWin > 0
+                ? FS_WIN_PAUSE_MS
+                : FS_PAUSE_MS,
+          );
           if (superseded()) return;
         }
 
@@ -2105,7 +2175,7 @@ export function SlotsScreen() {
           tier={celebration.tier}
           amount={celebration.amount}
           round={celebration.round}
-          onDone={() => setCelebration((c) => ({ ...c, tier: 'none' }))}
+          onDone={() => finishHeadlineCelebration(celebration.round)}
         />
       </View>
 
