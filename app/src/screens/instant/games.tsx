@@ -152,7 +152,7 @@ export function CrashScreen() {
   const shown = running ? live : (result?.crashPoint ?? 1);
 
   return (
-    <InstantLayout game={game} state={state}
+    <InstantLayout game={game} state={state} pinHeader
       dockControl={<DockChoices choices={CRASH_TARGETS.map((option) => ({ key: `${option}`, label: `${option}×`, selected: option === target, onPress: () => setTarget(option), colour: game.accent }))} />}
       action={
           <PlayButton
@@ -857,7 +857,7 @@ export function PlinkoScreen() {
   const boardWidth = viewportWidth >= 760 ? 470 : Math.min(330, viewportWidth - 60);
 
   return (
-    <InstantLayout game={game} state={state}
+    <InstantLayout game={game} state={state} pinHeader
       dockControl={<DockChoices choices={[
         ...PLINKO_ROWS.map((option) => ({ key: `rows-${option}`, label: `${option} ROWS`, selected: rows === option, onPress: () => setRows(option), colour: game.accent })),
         ...RISKS.map((option) => ({ key: option, label: option.toUpperCase(), selected: risk === option, onPress: () => setRisk(option), colour: game.accent })),
@@ -1291,7 +1291,6 @@ export function GoldenScratchScreen() {
   const game = GAMES['scratch']!;
   const state = useInstantGame(game);
   const [revealed, setRevealed] = useState(false);
-  const announce = useSettlementAnnouncer();
   const { handle, celebrate } = useCelebration();
   const ticket = state.round?.state as { multiplier: number; prizes: readonly number[] } | undefined;
   const needsReveal = !!ticket && !revealed;
@@ -1307,13 +1306,18 @@ export function GoldenScratchScreen() {
     if (!ticket || revealed) return;
     setRevealed(true);
     if (ticket.multiplier > 0) {
-      sounds.coinLock();
-      announce(state.round);
+      sounds.cardFlip();
+      setTimeout(() => {
+        if (ticket.multiplier >= 10) sounds.bigWin();
+        else sounds.win();
+        sounds.coins(ticket.multiplier >= 10 ? 7 : 4);
+      }, 90);
       celebrate(state.round);
     } else {
-      // A loss should close softly. The former settlement sting sounded like
-      // an error alarm and made an ordinary no-match feel punitive.
       sounds.cardFlip();
+      // A quiet, short resolve after the foil lift. This is intentionally not
+      // the harsh error cue that used to make an ordinary no-match punitive.
+      setTimeout(() => sounds.lose(), 110);
     }
   };
 
@@ -1383,10 +1387,12 @@ function ScratchCard({
   }, [ticketId]);
 
   useEffect(() => {
-    // Crossing all three prize windows with a real stroke reveals the card.
-    // Requiring arbitrary rows made a naturally horizontal scratch look
-    // complete while the game still refused to settle.
-    if (scratched < 3 || points.length < 10 || announced.current) return;
+    // The foil lifts only after most of its AREA has genuinely been scraped.
+    // A single swipe across the three prize columns used to count as complete,
+    // which exposed the whole ticket after only a tiny reveal and killed the
+    // suspense of scratching it by hand.
+    const coverage = scratched / (18 * 6);
+    if (coverage < 0.62 || points.length < 24 || announced.current) return;
     announced.current = true;
     onReveal();
   }, [scratched, points.length, onReveal]);
@@ -1397,15 +1403,27 @@ function ScratchCard({
     // it pass without creating invisible progress.
     if (x < 12 || x > 270 || y < 24 || y > 109) return;
     const last = previous.current;
-    if (last && Math.hypot(last.x - x, last.y - y) < 9) return;
+    if (last && Math.hypot(last.x - x, last.y - y) < 7) return;
     previous.current = { x, y };
     const point = { id: ++serial.current, x, y };
     setPoints((current) => [...current.slice(-150), point]);
     setDust((current) => [...current.slice(-22), point]);
-    const column = Math.max(0, Math.min(2, Math.floor((x - 12) / 86)));
-    marks.current.add(column);
+    // Coverage is sampled on a fine grid behind the foil. Mark every sample
+    // touched by the same circular scraper that punches the SVG mask, so the
+    // visual hole and the completion meter cannot disagree.
+    const columns = 18;
+    const rows = 6;
+    const cellWidth = 258 / columns;
+    const cellHeight = 85 / rows;
+    for (let row = 0; row < rows; row++) {
+      for (let column = 0; column < columns; column++) {
+        const cx = 12 + (column + 0.5) * cellWidth;
+        const cy = 24 + (row + 0.5) * cellHeight;
+        if (Math.hypot(cx - x, cy - y) <= 14) marks.current.add(row * columns + column);
+      }
+    }
     setScratched(marks.current.size);
-    sounds.scratch();
+    if (point.id % 3 === 1) sounds.scratch();
   };
 
   const measureSurface = useCallback(() => {
@@ -1475,7 +1493,7 @@ function ScratchCard({
           </SvgLinearGradient>
           <Mask id="scratched-foil" x="0" y="0" width="282" height="138">
             <Rect x="12" y="24" width="258" height="85" rx="14" fill="#FFFFFF" />
-            {points.map((point) => <Circle key={point.id} cx={point.x} cy={point.y} r="17" fill="#000000" />)}
+            {points.map((point) => <Circle key={point.id} cx={point.x} cy={point.y} r="13" fill="#000000" />)}
           </Mask>
         </Defs>
         <Rect x="12" y="24" width="258" height="85" rx="14" fill="url(#scratch-foil)" mask="url(#scratched-foil)" />

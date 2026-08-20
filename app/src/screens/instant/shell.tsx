@@ -177,6 +177,8 @@ export function InstantLayout({
   action,
   dockControl,
   footer,
+  /** Keep balance/rules/audio visible while a tall playfield scrolls beneath it. */
+  pinHeader = false,
   /** Locked while a multi-step round is open — the stake is already committed. */
   stakeLocked = false,
 }: {
@@ -196,6 +198,7 @@ export function InstantLayout({
   /** Compact game-specific choices pinned with the stake and play button. */
   dockControl?: React.ReactNode;
   footer?: React.ReactNode;
+  pinHeader?: boolean;
   stakeLocked?: boolean;
 }) {
   /**
@@ -221,35 +224,32 @@ export function InstantLayout({
     useSoundSet(INSTANT_SOUND_SETS[game.id] ?? INSTANT_SOUNDS);
   }, [game.id]);
 
+  const header = (
+    <View style={styles.topRow}>
+      <View>
+        <Txt variant="caption" color={colors.text.muted}>
+          BALANCE
+        </Txt>
+        <Txt variant="money" color={colors.gold.default}>
+          {format(state.balance, 'GC')}
+        </Txt>
+      </View>
+      {INSTANT_RULES[game.id] ? (
+        <HowToPlayButton
+          title={game.name}
+          content={INSTANT_RULES[game.id]!}
+          accent={game.accent}
+        />
+      ) : null}
+      <SoundToggles compact />
+    </View>
+  );
+
   return (
     <View style={styles.frame}>
+    {pinHeader ? <View style={styles.pinnedHeader}>{header}</View> : null}
     <Screen contentStyle={[styles.scrollBody, !!dockControl && styles.scrollBodyWithControl]}>
-      <View style={styles.topRow}>
-        <View>
-          <Txt variant="caption" color={colors.text.muted}>
-            BALANCE
-          </Txt>
-          <Txt variant="money" color={colors.gold.default}>
-            {format(state.balance, 'GC')}
-          </Txt>
-        </View>
-        {/*
-          The rules, one tap away, on every one of these games.
-
-          These games are the only ones in the app with no physical ancestor —
-          nobody has to be told how a slot machine works, and everybody has to
-          be told what Limbo is. See HowToPlay.
-        */}
-        {INSTANT_RULES[game.id] ? (
-          <HowToPlayButton
-            title={game.name}
-            content={INSTANT_RULES[game.id]!}
-            accent={game.accent}
-          />
-        ) : null}
-        {/* Sound, reachable without leaving the game. See SoundToggles. */}
-        <SoundToggles compact />
-      </View>
+      {!pinHeader ? header : null}
 
       {children}
 
@@ -723,6 +723,15 @@ export const styles = StyleSheet.create({
   dockControl: { minHeight: 34, paddingBottom: spacing.xs, justifyContent: 'center' },
   dockChip: { minHeight: 34, minWidth: 76, paddingHorizontal: spacing.md, borderRadius: 10, borderWidth: 1, borderColor: '#3A3446', backgroundColor: '#15131D', justifyContent: 'center', alignItems: 'center' },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  pinnedHeader: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    backgroundColor: colors.surface.base,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.surface.border,
+    zIndex: 3,
+  },
   rtpPill: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,

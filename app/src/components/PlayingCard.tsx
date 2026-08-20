@@ -26,21 +26,25 @@ export interface PlayingCardProps {
   hidden?: boolean;
   /** Position in the hand, for the deal stagger. */
   index?: number;
+  /** Order in the physical deal, independent of where the card sits in a hand. */
+  dealOrder?: number;
+  /** Cards visibly travel from the dealer's shoe to their destination. */
+  trajectory?: 'dealer' | 'player';
   size?: 'normal' | 'small';
 }
 
-export function PlayingCard({ rank, suit, hidden, index = 0, size = 'normal' }: PlayingCardProps) {
+export function PlayingCard({ rank, suit, hidden, index = 0, dealOrder = index, trajectory = 'player', size = 'normal' }: PlayingCardProps) {
   const entrance = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(entrance, {
       toValue: 1,
-      duration: motion.cardDeal,
-      delay: index * 90,
-      easing: Easing.out(Easing.cubic),
+      duration: Math.max(motion.cardDeal, 360),
+      delay: dealOrder * 115,
+      easing: Easing.out(Easing.back(0.9)),
       useNativeDriver: true,
     }).start();
-  }, [entrance, index]);
+  }, [dealOrder, entrance]);
 
   const small = size === 'small';
   // Hearts and diamonds red, spades and clubs near-black on white — the
@@ -51,8 +55,10 @@ export function PlayingCard({ rank, suit, hidden, index = 0, size = 'normal' }: 
   const animatedStyle = {
     opacity: entrance,
     transform: [
-      { translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [-28, 0] }) },
-      { scale: entrance.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) },
+      { translateX: entrance.interpolate({ inputRange: [0, 1], outputRange: [trajectory === 'dealer' ? 112 : 148, 0] }) },
+      { translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [trajectory === 'dealer' ? -54 : -164, 0] }) },
+      { rotate: entrance.interpolate({ inputRange: [0, 1], outputRange: [trajectory === 'dealer' ? '-12deg' : '-22deg', '0deg'] }) },
+      { scale: entrance.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] }) },
     ],
   };
 

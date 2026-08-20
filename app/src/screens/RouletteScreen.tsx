@@ -101,6 +101,44 @@ function describeBet(bet: Bet): string {
   }
 }
 
+type RouletteWinTier = 'return' | 'win' | 'big' | 'mega';
+
+/** A fresh, table-sized announcement for every paying result. */
+function RouletteWinMoment({ payout, tier }: { payout: number; tier: RouletteWinTier }) {
+  const entrance = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.sequence([
+      Animated.spring(entrance, { toValue: 1, friction: 5, tension: 92, useNativeDriver: true }),
+      Animated.delay(tier === 'mega' ? 1750 : tier === 'big' ? 1350 : 900),
+      Animated.timing(entrance, { toValue: 0, duration: 320, useNativeDriver: true }),
+    ]).start();
+  }, [entrance, tier]);
+
+  const label = tier === 'mega' ? 'SALON JACKPOT' : tier === 'big' ? 'HOT NUMBER' : tier === 'win' ? 'TABLE WIN' : 'CHIPS RETURNED';
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.winMoment,
+        tier === 'mega' && styles.winMomentMega,
+        {
+          opacity: entrance,
+          transform: [
+            { scale: entrance.interpolate({ inputRange: [0, 1], outputRange: [0.54, 1] }) },
+            { translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [26, 0] }) },
+          ],
+        },
+      ]}
+    >
+      <View style={styles.winMomentRays} />
+      <Txt variant="caption" color="#FFF0B8">{label}</Txt>
+      <Txt variant={tier === 'mega' ? 'display' : 'h1'} color="#FFF5C5">
+        WON {format(minor(payout), 'GC')}
+      </Txt>
+    </Animated.View>
+  );
+}
+
 export function RouletteScreen() {
   const api = useRef<PlayApi>(createPlayApi()).current;
 
@@ -159,6 +197,7 @@ export function RouletteScreen() {
   /** Gold coins and ribbons thrown only after the ball visibly lands. */
   const celebration = useRef<FireworksHandle | null>(null);
   const [celebrationStage, setCelebrationStage] = useState({ width: WHEEL_SIZE, height: 310 });
+  const [winMoment, setWinMoment] = useState<{ id: number; payout: number; tier: RouletteWinTier } | null>(null);
   /** Resolved by the wheel's own stop, so the readout can never run ahead. */
   const wheelStopped = useRef<(() => void) | null>(null);
   /**
@@ -348,6 +387,7 @@ export function RouletteScreen() {
     // animation the player was going to watch anyway — the same trick the
     // reels use, and the reason a spin feels instant on a slow connection.
     setDisplay(null);
+    setWinMoment(null);
     setWheelTarget(null);
     setWheelPhase('spinning');
 
@@ -410,8 +450,10 @@ export function RouletteScreen() {
 
       const payout = result.settlement?.payout ?? 0;
       setTimeout(() => {
-        if (payout > total) {
+        if (payout > 0) {
           const multiple = payout / Math.max(total, 1);
+          const tier: RouletteWinTier = multiple >= 25 ? 'mega' : multiple >= 10 ? 'big' : multiple >= 1 ? 'win' : 'return';
+          setWinMoment({ id: Date.now(), payout, tier });
           // The burst is deliberately tied to the ball's landing rather than
           // the server response: the table never celebrates information the
           // player has not seen yet.
@@ -426,12 +468,18 @@ export function RouletteScreen() {
           } else if (multiple >= 3) {
             sounds.win();
             celebration.current?.fire(0.9);
-          } else {
+            celebration.current?.pour(0.42, 1.1);
+          } else if (multiple >= 1) {
             sounds.win();
-            celebration.current?.fire(Math.max(0.32, Math.min(0.64, (multiple - 1) / 4)));
+            sounds.coins(4);
+            celebration.current?.fire(0.58);
+            celebration.current?.pour(0.28, 0.8);
+          } else {
+            sounds.coinLock();
+            sounds.coins(2);
+            celebration.current?.fire(0.3);
           }
-        }
-        else sounds.lose();
+        } else sounds.lose();
       }, 220);
     } catch (caught) {
       stopRoll.current?.();
@@ -631,6 +679,7 @@ export function RouletteScreen() {
         height={celebrationStage.height}
         controller={celebration}
       />
+      {winMoment ? <RouletteWinMoment key={winMoment.id} payout={winMoment.payout} tier={winMoment.tier} /> : null}
       </View>
 
       {/* Chip denomination */}
@@ -732,6 +781,10 @@ export function RouletteScreen() {
         <View style={styles.spinStage} pointerEvents="none">
           <LinearGradient colors={['rgba(3,4,11,0.96)', 'rgba(27,8,3,0.94)', 'rgba(3,4,11,0.98)']} style={StyleSheet.absoluteFill} />
           <Image source={{ uri: '/art/tiles/juwa-roulette-eu.png' }} resizeMode="cover" style={styles.spinArtwork} />
+          <View style={styles.spinBalance}>
+            <Txt variant="caption" color="#D7C391">TOTAL GC BALANCE</Txt>
+            <Txt variant="money" color="#FFE9A1">{format(balance, 'GC')}</Txt>
+          </View>
           <View style={styles.spinCrown}><Txt variant="caption" color="#FFE8A7">NO MORE BETS · BALL IN MOTION</Txt></View>
           <RouletteWheel
             size={292}
@@ -865,7 +918,11 @@ const styles = StyleSheet.create({
   wheelCrown: { alignSelf: 'center', paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.sm, borderWidth: 1, borderColor: 'rgba(255,224,143,0.68)', backgroundColor: 'rgba(12,5,2,0.72)' },
   spinStage: { ...StyleSheet.absoluteFillObject, zIndex: 8, alignItems: 'center', justifyContent: 'center', gap: spacing.md, overflow: 'hidden' },
   spinArtwork: { ...StyleSheet.absoluteFillObject, opacity: 0.24 },
+  spinBalance: { position: 'absolute', left: spacing.lg, top: spacing.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: 'rgba(255,224,143,0.68)', backgroundColor: 'rgba(4,5,12,0.82)' },
   spinCrown: { paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.sm, borderWidth: 1, borderColor: '#E1B555', backgroundColor: 'rgba(13,7,4,0.86)' },
+  winMoment: { position: 'absolute', left: spacing.md, right: spacing.md, bottom: 36, zIndex: 12, minHeight: 88, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: 22, borderWidth: 2, borderColor: '#FFE49A', backgroundColor: 'rgba(35,9,4,0.92)', shadowColor: '#FFD35A', shadowOpacity: 0.92, shadowRadius: 26, shadowOffset: { width: 0, height: 0 } },
+  winMomentMega: { minHeight: 116, bottom: 28, borderColor: '#FFFFFF', backgroundColor: 'rgba(75,22,2,0.95)' },
+  winMomentRays: { position: 'absolute', width: '130%', height: 18, backgroundColor: 'rgba(255,220,111,0.18)', transform: [{ rotate: '-8deg' }] },
   ball: {
     width: 56,
     height: 56,
