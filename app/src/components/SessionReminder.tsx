@@ -23,28 +23,47 @@ import { AppState, Modal, StyleSheet, View } from 'react-native';
 import { colors, spacing } from '@juwa/ui';
 import { Button, Card, Txt } from './primitives';
 import { createPlayApi } from '../api/client';
+import {
+  responsiblePlaySnapshot,
+  subscribeResponsiblePlay,
+  publishResponsiblePlay,
+} from '../responsible-play';
 
 /** How often the accumulated time is checked. A minute is granular enough. */
 const TICK_MS = 60_000;
 
 export function SessionReminder() {
   const api = useRef(createPlayApi()).current;
-  const [everyMinutes, setEveryMinutes] = useState<number | null>(null);
+  const [everyMinutes, setEveryMinutes] = useState<number | null>(
+    responsiblePlaySnapshot()?.sessionReminderMinutes ?? null,
+  );
   const [showing, setShowing] = useState(false);
   /** Foreground milliseconds since the last reset. */
   const elapsed = useRef(0);
   const lastTick = useRef(Date.now());
+  const appIsActive = useRef(AppState.currentState === 'active');
 
   useEffect(() => {
     let alive = true;
     api
       .getProfile()
-      .then((profile) => alive && setEveryMinutes(profile.limits?.sessionReminderMinutes ?? null))
+      .then((profile) => alive && publishResponsiblePlay(profile.limits ?? null))
       .catch(() => {});
     return () => {
       alive = false;
     };
   }, [api]);
+
+  useEffect(
+    () =>
+      subscribeResponsiblePlay((limits) => {
+        setEveryMinutes(limits?.sessionReminderMinutes ?? null);
+        elapsed.current = 0;
+        lastTick.current = Date.now();
+        setShowing(false);
+      }),
+    [],
+  );
 
   useEffect(() => {
     if (!everyMinutes) return undefined;
@@ -52,11 +71,16 @@ export function SessionReminder() {
     // Backgrounding stops the clock rather than pausing a timer: a timer that
     // keeps running in a background tab counts time nobody spent playing.
     const onAppState = AppState.addEventListener('change', (state) => {
+      appIsActive.current = state === 'active';
       if (state === 'active') lastTick.current = Date.now();
     });
 
     const timer = setInterval(() => {
       const now = Date.now();
+      if (!appIsActive.current) {
+        lastTick.current = now;
+        return;
+      }
       const delta = now - lastTick.current;
       lastTick.current = now;
       // A jump much larger than the tick means the tab was asleep. Count one

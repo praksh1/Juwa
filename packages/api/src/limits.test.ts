@@ -161,7 +161,7 @@ describe('limits', { skip: URL_ENV ? false : 'JUWA_LIMITS_TEST_DATABASE_URL not 
 
     const blocked = await bet(100);
     assert.equal(blocked.status, 403);
-    assert.match(String(blocked.body['message']), /self-excluded/i);
+    assert.match(String(blocked.body['message']), /play break/i);
 
     // A shorter break must not replace a longer one.
     const shorter = await call('/me/limits', { breakDays: 1 });

@@ -23,7 +23,7 @@
  */
 
 import React from 'react';
-import { Linking, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { Linking, Modal, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { colors, radius, spacing } from '@juwa/ui';
 import { Button, Card, Screen, SectionHeader, Txt } from '../components/primitives';
 import { PlayApiError, createPlayApi, type PlayerLimits, type Profile } from '../api/client';
@@ -31,6 +31,7 @@ import { getSession } from '../api/auth';
 import { sounds } from '../sound';
 import { useMuted } from '../components/SoundToggles';
 import { SignOutButton } from '../components/SignOutButton';
+import { publishResponsiblePlay } from '../responsible-play';
 
 /** Break lengths, in days. The long ones are what "self-exclude" means. */
 const BREAKS = [
@@ -41,6 +42,8 @@ const BREAKS = [
 ];
 
 const REMINDERS = [15, 30, 60, 120];
+
+type BreakOption = (typeof BREAKS)[number];
 
 const coins = (value: number) => Math.round(value).toLocaleString('en-US');
 
@@ -107,6 +110,8 @@ export function ProfileScreen() {
   );
   const [limitDraft, setLimitDraft] = React.useState('');
   const [seedDraft, setSeedDraft] = React.useState('');
+  const [breakChoice, setBreakChoice] = React.useState<BreakOption | null>(null);
+  const [breakStep, setBreakStep] = React.useState<1 | 2>(1);
 
   const [applying, setApplying] = React.useState(false);
   const [agentLabel, setAgentLabel] = React.useState('');
@@ -124,6 +129,7 @@ export function ProfileScreen() {
         setAgentName(profile.agentName ?? null);
         setAgentStatus(profile.agent?.status ?? null);
         setLimits(profile.limits ?? null);
+        publishResponsiblePlay(profile.limits ?? null);
       })
       .catch(() => {});
     void getSession().then((session) => setEmail(session?.email ?? null));
@@ -138,6 +144,7 @@ export function ProfileScreen() {
     try {
       const next = await api.setLimits(changes);
       setLimits(next);
+      publishResponsiblePlay(next);
       setEditing(null);
       setNote(confirmation);
     } catch (error) {
@@ -151,6 +158,36 @@ export function ProfileScreen() {
     limits?.selfExcludedUntil && new Date(limits.selfExcludedUntil) > new Date()
       ? new Date(limits.selfExcludedUntil)
       : null;
+
+  const proposedBreakEnd = breakChoice
+    ? new Date(
+        Math.max(
+          excluded?.getTime() ?? 0,
+          Date.now() + breakChoice.days * 24 * 60 * 60 * 1000,
+        ),
+      )
+    : null;
+
+  const activateBreak = async () => {
+    if (!breakChoice) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      const next = await api.setLimits({ breakDays: breakChoice.days });
+      setLimits(next);
+      publishResponsiblePlay(next);
+      setEditing(null);
+      setBreakChoice(null);
+      setBreakStep(1);
+      setNote(
+        `Your break is active until ${new Date(next.selfExcludedUntil!).toLocaleString()}. Betting is switched off.`,
+      );
+    } catch (error) {
+      setNote(error instanceof PlayApiError ? error.message : 'Could not start that break.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <Screen>
@@ -187,8 +224,9 @@ export function ProfileScreen() {
                 You are taking a break until {excluded.toLocaleString()}.
               </Txt>
               <Txt variant="caption" color={colors.text.muted}>
-                Betting is switched off until then. A break cannot be shortened — that is what
-                makes it worth setting.
+                Betting is switched off until then. You and your agent cannot cancel it. An
+                operator can only correct a verified accidental activation, and that correction
+                is permanently recorded.
               </Txt>
             </View>
           ) : null}
@@ -319,7 +357,7 @@ export function ProfileScreen() {
 
           <Row
             label="Take a break"
-            hint="Switch betting off for a while. Cannot be undone."
+            hint="Temporarily lock betting after two confirmations"
             value={excluded ? 'Active' : 'Set up'}
             onPress={() => {
               sounds.tap();
@@ -329,22 +367,26 @@ export function ProfileScreen() {
           {editing === 'break' ? (
             <View style={styles.editor}>
               <Txt variant="caption" color={colors.feedback.loss}>
-                A break cannot be shortened or cancelled, by you or by support. Only pick one you
-                mean.
+                This is a real account lock, not a reminder. You will see the exact return date
+                and confirm it twice before anything changes.
               </Txt>
               <View style={styles.chips}>
                 {BREAKS.map((option) => (
                   <Pressable
                     key={option.days}
-                    onPress={() =>
-                      void change(
-                        { breakDays: option.days },
-                        `Betting is off for ${option.label}. Look after yourself.`,
-                      )
-                    }
+                    disabled={busy}
+                    onPress={() => {
+                      sounds.tap();
+                      setBreakChoice(option);
+                      setBreakStep(1);
+                    }}
                     accessibilityRole="button"
                     accessibilityLabel={`Take a break for ${option.label}`}
-                    style={[styles.chip, styles.chipDanger]}
+                    style={({ pressed }) => [
+                      styles.chip,
+                      styles.chipDanger,
+                      pressed && styles.chipPressed,
+                    ]}
                   >
                     <Txt variant="caption" color={colors.feedback.loss}>
                       {option.label}
@@ -363,9 +405,9 @@ export function ProfileScreen() {
         <SectionHeader title="Fairness" />
         <Card style={styles.group}>
           <Row
-            label="Your client seed"
-            hint="Mixed into every result. Change it any time."
-            value="Change"
+            label="Fairness key (advanced)"
+            hint="Created automatically to prove game results were not changed"
+            value="Learn / change"
             onPress={() => {
               sounds.tap();
               setSeedDraft('');
@@ -385,11 +427,12 @@ export function ProfileScreen() {
                 accessibilityLabel="New client seed"
               />
               <Txt variant="caption" color={colors.text.muted}>
-                Every result is drawn from your seed and ours together. Changing yours proves we
-                could not have known the outcome in advance.
+                You do not need to manage this. The app combines your fairness key with a hidden
+                server key for every round. After that server key is revealed, the proof in your
+                Wallet can reproduce the result. Advanced players may replace their key here.
               </Txt>
               <Button
-                label="Use this seed"
+                label={seedDraft.trim() ? 'Use my fairness key' : 'Create a new random key'}
                 loading={busy}
                 onPress={async () => {
                   setBusy(true);
@@ -407,8 +450,8 @@ export function ProfileScreen() {
                      */
                     setNote(
                       chosen
-                        ? `Your client seed is now "${chosen}". Every round from here mixes it in.`
-                        : 'You have a fresh random client seed. Every round from here mixes it in.',
+                        ? `Your fairness key is now "${chosen}". New rounds will use it.`
+                        : 'A fresh random fairness key is ready. New rounds will use it.',
                     );
                   } catch (error) {
                     setNote(
@@ -568,6 +611,53 @@ export function ProfileScreen() {
             : undefined
         }
       />
+
+      <Modal
+        transparent
+        animationType="fade"
+        visible={breakChoice !== null}
+        onRequestClose={() => {
+          if (!busy) {
+            setBreakChoice(null);
+            setBreakStep(1);
+          }
+        }}
+      >
+        <View style={styles.modalBackdrop}>
+          <Card style={styles.modalCard}>
+            <Txt variant="h3">
+              {breakStep === 1 ? `Take a ${breakChoice?.label} break?` : 'Final confirmation'}
+            </Txt>
+            <Txt variant="bodySmall" color={colors.text.secondary}>
+              {breakStep === 1
+                ? `If you continue, betting in every game will be locked until ${proposedBreakEnd?.toLocaleString()}. Browsing your account will still work.`
+                : `You will not be able to place a bet until ${proposedBreakEnd?.toLocaleString()}. You and your agent cannot undo this. An operator may only correct a verified accidental activation, and every correction is audited.`}
+            </Txt>
+            <View style={styles.editorRow}>
+              <Button
+                label={breakStep === 1 ? 'Cancel' : 'Back'}
+                variant="secondary"
+                style={styles.flex}
+                onPress={() => {
+                  sounds.tap();
+                  if (breakStep === 2) setBreakStep(1);
+                  else setBreakChoice(null);
+                }}
+              />
+              <Button
+                label={breakStep === 1 ? 'Continue' : 'Confirm break'}
+                loading={busy}
+                style={styles.flex}
+                onPress={() => {
+                  sounds.tap();
+                  if (breakStep === 1) setBreakStep(2);
+                  else void activateBreak();
+                }}
+              />
+            </View>
+          </Card>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -619,6 +709,7 @@ const styles = StyleSheet.create({
   },
   chipOn: { borderColor: colors.gold.default, backgroundColor: 'rgba(200,164,77,0.14)' },
   chipDanger: { borderColor: colors.feedback.loss },
+  chipPressed: { opacity: 0.62, transform: [{ scale: 0.96 }] },
   input: {
     backgroundColor: colors.surface.base,
     borderColor: colors.surface.border,
@@ -629,4 +720,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: spacing.lg,
+    backgroundColor: 'rgba(6, 4, 14, 0.90)',
+  },
+  modalCard: { gap: spacing.md, padding: spacing.xl, alignSelf: 'center', maxWidth: 440 },
 });

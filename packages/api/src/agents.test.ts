@@ -535,6 +535,57 @@ describe('agents', { skip: URL_ENV ? false : 'JUWA_AGENT_TEST_DATABASE_URL not s
     await pool.query(`delete from agents where profile_id = $1`, [PLAYER_A]);
   });
 
+  it('lets only an operator correct an accidental break and audits the reason', async () => {
+    await pool.query(
+      `update profiles set self_excluded_until = now() + interval '6 months' where id = $1`,
+      [PLAYER_A],
+    );
+
+    const search = await adminGet('/admin/players?q=player_ann');
+    assert.equal(search.status, 200, JSON.stringify(search.body));
+    const match = (search.body['players'] as { selfExcludedUntil: string | null }[])[0];
+    assert.ok(match?.selfExcludedUntil, 'active break was missing from operator search');
+
+    const refused = await call('/admin/players/break/correct', {
+      auth: token(AGENT_A),
+      body: { playerId: PLAYER_A, reason: 'Player tapped the wrong control by mistake' },
+    });
+    assert.equal(refused.status, 401, 'an agent could clear a player break');
+
+    const tooShort = await adminCall('/admin/players/break/correct', {
+      playerId: PLAYER_A,
+      reason: 'mistake',
+    });
+    assert.equal(tooShort.status, 400);
+
+    const corrected = await adminCall('/admin/players/break/correct', {
+      playerId: PLAYER_A,
+      reason: 'Player confirmed this was an accidental activation',
+    });
+    assert.equal(corrected.status, 200, JSON.stringify(corrected.body));
+
+    const profile = await pool.query<{ self_excluded_until: Date | null }>(
+      `select self_excluded_until from profiles where id = $1`,
+      [PLAYER_A],
+    );
+    assert.equal(profile.rows[0]!.self_excluded_until, null);
+
+    const audit = await pool.query<{ old_value: string; new_value: string }>(
+      `select old_value, new_value from audit_log
+        where target = $1 and field = 'self_excluded_until'
+        order by at desc limit 1`,
+      [`profiles:${PLAYER_A}`],
+    );
+    assert.match(audit.rows[0]!.old_value, /\d{4}/);
+    assert.match(audit.rows[0]!.new_value, /accidental activation/i);
+
+    const repeated = await adminCall('/admin/players/break/correct', {
+      playerId: PLAYER_A,
+      reason: 'Attempted to clear an already inactive break',
+    });
+    assert.equal(repeated.status, 400);
+  });
+
   it('refuses a search too short to mean anything', async () => {
     // One character is a request for the whole player table.
     const response = await fetch(`${base}/admin/players?q=a`, {

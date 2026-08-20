@@ -117,6 +117,12 @@ function agentError(error: unknown): ApiError {
   if (/No such transaction/i.test(message)) {
     return new ApiError('No such transaction.', 404, 'not_found');
   }
+  if (/That player has no active break/i.test(message)) {
+    return new ApiError('That player no longer has an active break.', 400, 'no_active_break');
+  }
+  if (/Player not found/i.test(message)) {
+    return new ApiError('No such player.', 404, 'unknown_player');
+  }
   if (/Unknown agent/i.test(message) || code === 'P0002') {
     return new ApiError('No such agent.', 404, 'unknown_agent');
   }
@@ -590,6 +596,27 @@ export async function handleAdminAgents(
       const query = (url?.searchParams.get('q') ?? '').trim();
       if (query.length < 2) return { players: [] };
       return { players: await agents.findPlayers(query) };
+    }
+
+    if (route === 'POST /admin/players/break/correct') {
+      const playerId = requireString(body['playerId'], 'playerId', 36);
+      if (!/^[0-9a-f-]{36}$/i.test(playerId)) {
+        throw new ApiError('playerId is invalid', 400, 'invalid_input');
+      }
+      const reason = requireString(body['reason'], 'reason', 500);
+      if (reason.length < 10) {
+        throw new ApiError(
+          'Write a short reason (at least 10 characters) for the audit record.',
+          400,
+          'invalid_input',
+        );
+      }
+      const previousUntil = await agents.correctAccidentalBreak({
+        playerId,
+        operatorId: operator.operatorId,
+        reason,
+      });
+      return { ok: true, previousUntil };
     }
 
     /**

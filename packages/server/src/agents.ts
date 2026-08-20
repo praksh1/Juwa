@@ -44,6 +44,8 @@ export interface PlayerMatch {
   username: string;
   /** Null when this connection cannot read Supabase's auth schema. */
   email: string | null;
+  /** Present only while the player has an active betting break. */
+  selfExcludedUntil: string | null;
 }
 
 export interface AgentTxn {
@@ -486,7 +488,7 @@ export class AgentsDb {
     const needle = `%${query.trim()}%`;
     try {
       const { rows } = await this.client.query(
-        `select p.id, p.username, u.email, p.registered_at
+        `select p.id, p.username, u.email, p.registered_at, p.self_excluded_until
            from profiles p
            left join auth.users u on u.id = p.id
           where p.registered_at is not null
@@ -499,11 +501,12 @@ export class AgentsDb {
         playerId: row['id']!,
         username: row['username']!,
         email: row['email'] ?? null,
+        selfExcludedUntil: row['self_excluded_until'] ?? null,
       }));
     } catch {
       // No read access to auth.users. Usernames still work.
       const { rows } = await this.client.query(
-        `select p.id, p.username
+        `select p.id, p.username, p.self_excluded_until
            from profiles p
           where p.registered_at is not null and p.username ilike $1
           order by p.registered_at desc
@@ -514,8 +517,28 @@ export class AgentsDb {
         playerId: row['id']!,
         username: row['username']!,
         email: null,
+        selfExcludedUntil: row['self_excluded_until'] ?? null,
       }));
     }
+  }
+
+  /**
+   * Correct a verified accidental break activation.
+   *
+   * There is deliberately no player- or agent-facing equivalent. The database
+   * validates the operator, requires a meaningful reason and writes the prior
+   * end date to the append-only audit log in the same transaction.
+   */
+  async correctAccidentalBreak(args: {
+    playerId: string;
+    operatorId: string;
+    reason: string;
+  }): Promise<string> {
+    const { rows } = await this.client.query(
+      `select correct_accidental_player_break($1, $2, $3) as previous_until`,
+      [args.playerId, args.operatorId, args.reason],
+    );
+    return String((rows[0] as Record<string, unknown>)['previous_until']);
   }
 
   /**

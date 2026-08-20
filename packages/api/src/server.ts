@@ -167,7 +167,16 @@ function toApiError(error: unknown): ApiError {
     if (/Age verification/i.test(message) || /must be at least \d+ to play/i.test(message)) {
       return new ApiError(message, 403, 'age_gate');
     }
-    if (/self-excluded/i.test(message)) return new ApiError(message, 403, 'self_excluded');
+    if (/self-excluded/i.test(message)) {
+      const until = message.match(/until\s+(.+)$/i)?.[1];
+      return new ApiError(
+        until
+          ? `You are taking a play break. Betting is unavailable until ${until}.`
+          : 'You are taking a play break. Betting is currently unavailable.',
+        403,
+        'self_excluded',
+      );
+    }
     /*
      * The player's own daily cap, raised by `assert_can_play`.
      *

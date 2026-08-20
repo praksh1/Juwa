@@ -408,7 +408,9 @@ function renderAgents(agents) {
       <p class="hint">Start typing a <strong>username</strong> or the <strong>email</strong> on
       their account and pick them from the list. The person signs up as a player first, with their
       own email and password — this promotes that existing account, and nothing here creates a
-      login or sees a password. New agents start <strong>pending</strong> and cannot allocate or
+      login or sees a password. A player on an active break is marked below. Only an operator can
+      correct a <strong>verified accidental activation</strong>; the reason and previous end date
+      are permanently audited. New agents start <strong>pending</strong> and cannot allocate or
       invite until activated.</p>
       <div class="err"></div>
     </div>
@@ -441,9 +443,12 @@ function renderAgents(agents) {
     results.innerHTML = '';
     if (!players.length) return;
     for (const player of players) {
-      const hit = $(\`<button class="ghost" style="margin:0 6px 6px 0">\${player.username}\${
+      const wrap = $('<span style="display:inline-flex;gap:6px;margin:0 8px 8px 0;align-items:center"></span>');
+      const activeBreak = player.selfExcludedUntil &&
+        new Date(player.selfExcludedUntil).getTime() > Date.now();
+      const hit = $(\`<button class="ghost">\${player.username}\${
         player.email ? ' · ' + player.email : ''
-      }</button>\`);
+      }\${activeBreak ? ' · BREAK UNTIL ' + new Date(player.selfExcludedUntil).toLocaleString() : ''}</button>\`);
       hit.addEventListener('click', () => {
         // The USERNAME goes in the field, whichever the operator searched by.
         // It is the canonical handle, and seeing it land teaches what this
@@ -451,7 +456,39 @@ function renderAgents(agents) {
         search.value = player.username;
         results.innerHTML = '';
       });
-      results.append(hit);
+      wrap.append(hit);
+      if (activeBreak) {
+        const correct = $('<button class="ghost">Correct accidental break</button>');
+        correct.addEventListener('click', async () => {
+          const reason = prompt(
+            'Why is this an accidental activation? This reason is permanently recorded.',
+          );
+          if (!reason || reason.trim().length < 10) {
+            alert('No change was made. A reason of at least 10 characters is required.');
+            return;
+          }
+          const confirmed = confirm(
+            'Final confirmation: restore betting for ' + player.username +
+            ' before ' + new Date(player.selfExcludedUntil).toLocaleString() +
+            '? Use this only for a verified accidental activation.',
+          );
+          if (!confirmed) return;
+          correct.disabled = true;
+          try {
+            await api('/admin/players/break/correct', {
+              method: 'POST',
+              body: JSON.stringify({ playerId: player.playerId, reason: reason.trim() }),
+            });
+            results.innerHTML = '<span class="pill active">Break corrected and audited</span>';
+            setTimeout(renderPanel, 800);
+          } catch (error) {
+            correct.textContent = error.message;
+            correct.disabled = false;
+          }
+        });
+        wrap.append(correct);
+      }
+      results.append(wrap);
     }
   };
 

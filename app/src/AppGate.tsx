@@ -11,6 +11,7 @@ import { PurchaseWatcher } from './components/PurchaseWatcher';
 import { SessionReminder } from './components/SessionReminder';
 import { notifyBalanceChanged } from './api/usePlayer';
 import { captureInviteFromUrl, clearInvite, pendingInvite } from './api/invite';
+import { publishResponsiblePlay } from './responsible-play';
 
 /**
  * An agent's invite token, taken out of the URL before anything else runs.
@@ -96,6 +97,7 @@ export function AppGate({ children }: { children: React.ReactNode }) {
       .getProfile()
       .then((profile) => {
         if (!alive) return;
+        publishResponsiblePlay(profile.limits ?? null);
         setRegistered(profile.registered);
         setMustSetPassword(
           profile.mustSetPassword === true && !passwordDone.current.has(session.userId),
