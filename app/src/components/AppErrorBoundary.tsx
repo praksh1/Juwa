@@ -1,6 +1,7 @@
 import React from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, spacing } from '@juwa/ui';
+import { reportReactCrash } from '../monitoring/sentry';
 
 const CRASH_STORAGE_KEY = 'juwa.client-crashes.v1';
 const MAX_SAVED_CRASHES = 5;
@@ -79,6 +80,7 @@ export class AppErrorBoundary extends React.Component<Props, State> {
     };
 
     saveCrash(record);
+    reportReactCrash(error, diagnosticId, info.componentStack || undefined);
     console.error(`[Juwa recovery ${diagnosticId}]`, error, info.componentStack);
 
     if (!this.state.diagnosticId) {
