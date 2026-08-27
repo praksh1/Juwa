@@ -106,6 +106,34 @@ interface Ctx {
 }
 
 const MAX_BODY_BYTES = 16 * 1024;
+const READINESS_TIMEOUT_MS = 3_000;
+
+/**
+ * Keep a stalled database connection from leaving a health request open until
+ * the platform gives up. The query may still finish later, but callers get a
+ * useful 503 quickly and Railway can avoid routing traffic to an unhealthy
+ * deployment.
+ */
+function withReadinessTimeout<T>(operation: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`Database readiness check exceeded ${READINESS_TIMEOUT_MS}ms`)),
+      READINESS_TIMEOUT_MS,
+    );
+    timer.unref();
+
+    operation.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
 
 async function readRaw(req: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
@@ -884,6 +912,28 @@ export function createServer(config: ServerConfig) {
 
     if (url.pathname === '/health') {
       send(res, 200, { ok: true });
+      return;
+    }
+
+    if (url.pathname === '/health/ready') {
+      const startedAt = Date.now();
+      try {
+        await withReadinessTimeout(config.query('select 1'));
+        send(res, 200, {
+          ok: true,
+          database: 'reachable',
+          responseTimeMs: Date.now() - startedAt,
+        });
+      } catch (error) {
+        // Do not expose database hostnames, credentials, or provider details in
+        // this public endpoint. The full reason stays in Railway's private log.
+        console.error('[GET /health/ready]', error instanceof Error ? error.message : error);
+        send(res, 503, {
+          ok: false,
+          database: 'unavailable',
+          responseTimeMs: Date.now() - startedAt,
+        });
+      }
       return;
     }
 

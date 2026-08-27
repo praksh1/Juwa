@@ -57,6 +57,13 @@ try {
   const response = await get('/health');
   if (response.ok) pass('/health responds');
   else fail(`/health returned ${response.status}`, 'check the service logs — it may be crash-looping');
+
+  const ready = await get('/health/ready');
+  if (ready.ok) pass('/health/ready can reach the database');
+  else fail(
+    `/health/ready returned ${ready.status}`,
+    'the API process is running, but Supabase is not reachable',
+  );
 } catch (error) {
   fail(`cannot reach the API (${error.message})`, 'is the service deployed and awake?');
   console.log('\nNothing else can be checked until the API answers.\n');

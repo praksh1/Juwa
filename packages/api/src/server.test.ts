@@ -213,6 +213,15 @@ describe('api', { skip: URL_ENV ? false : 'JUWA_TEST_DATABASE_URL not set' }, ()
     assert.equal(response.status, 200);
   });
 
+  it('serves database-aware readiness without a token', async () => {
+    const response = await fetch(`${base}/health/ready`);
+    assert.equal(response.status, 200);
+    const body = await response.json() as Record<string, unknown>;
+    assert.equal(body['ok'], true);
+    assert.equal(body['database'], 'reachable');
+    assert.equal(typeof body['responseTimeMs'], 'number');
+  });
+
   it('refuses every protected route without a valid token', async () => {
     assert.equal((await call('/balance', { auth: null })).status, 401);
     assert.equal((await call('/balance', { auth: 'garbage' })).status, 401);
