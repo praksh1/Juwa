@@ -207,6 +207,8 @@ export interface ReelProps {
   round?: number;
   /** Fires when this reel physically stops. */
   onLanded?: () => void;
+  /** Reports that the browser missed the normal landing animation callback. */
+  onLateLanding?: (lateByMs: number) => void;
 }
 
 function randomFiller(count: number): string[] {
@@ -235,6 +237,7 @@ export function Reel({
   fill = 0.86,
   cellHeight,
   onLanded,
+  onLateLanding,
 }: ReelProps) {
   const offset = useRef(new Animated.Value(0)).current;
   /**
@@ -269,6 +272,8 @@ export function Reel({
   // it would restart the animation mid-spin.
   const landedRef = useRef(onLanded);
   landedRef.current = onLanded;
+  const lateLandingRef = useRef(onLateLanding);
+  lateLandingRef.current = onLateLanding;
 
   const spinning = phase === 'spinning';
   const landing = phase === 'landing';
@@ -382,6 +387,16 @@ export function Reel({
     let frame = 0;
     let done = false;
 
+    const finish = (lateByMs = 0) => {
+      if (done) return;
+      done = true;
+      offset.setValue(0);
+      speed.setValue(0);
+      setMoving(false);
+      if (lateByMs > 0) lateLandingRef.current?.(lateByMs);
+      landedRef.current?.();
+    };
+
     const tick = () => {
       const u = Math.min(1, Math.max(0, (spinNow() - landFrom) / landDuration));
       offset.setValue(landingTravel * (1 - landPosition(u)));
@@ -397,16 +412,29 @@ export function Reel({
       }
       // Land exactly on zero. The eased value is within a fraction of a pixel
       // at u = 1, but "within a fraction" is not "on the payline".
-      offset.setValue(0);
-      speed.setValue(0);
-      if (!done) {
-        done = true;
-        setMoving(false);
-        landedRef.current?.();
-      }
+      finish();
     };
     frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+
+    /*
+     * Safari can occasionally stop delivering requestAnimationFrame callbacks
+     * while a busy page is still otherwise interactive. The round used to wait
+     * forever for the last reel in that case, leaving the symbols blurred until
+     * a refresh. This timer is deliberately later than the booked landing and
+     * only supplies the callback the animation should already have delivered.
+     * Normal reel timing and appearance are unchanged.
+     */
+    const expectedAt = landFrom + landDuration;
+    const watchdogDelayMs = Math.max(0, (expectedAt - spinNow()) * 1000) + 750;
+    const watchdog = setTimeout(() => {
+      const lateByMs = Math.max(1, (spinNow() - expectedAt) * 1000);
+      finish(lateByMs);
+    }, watchdogDelayMs);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(watchdog);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [landing, landFrom, landDuration, landingTravel, round]);
 

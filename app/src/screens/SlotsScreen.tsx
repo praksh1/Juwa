@@ -41,6 +41,7 @@ import { SlotEnvironment } from '../components/SlotEnvironment';
 import { cabinetFor, roomFor } from '../api/cabinets';
 import { hasTileArt } from '../components/GameArt';
 import { WinOverlay, useCabinetShake, useScreenShake } from '../components/WinOverlay';
+import { reportGameTiming } from '../monitoring/sentry';
 import { DragonRoar, DRAGON_GAME_ID } from '../components/DragonRoar';
 import { HoldSpinRound } from '../components/HoldSpinRound';
 import { PrizeWheel } from '../components/PrizeWheel';
@@ -570,6 +571,17 @@ export function SlotsScreen() {
    */
   const landingResolver = useRef<(() => void) | null>(null);
 
+  // Closing the game must also release any animation promise that was waiting
+  // for a reel which has just been unmounted.
+  useEffect(
+    () => () => {
+      spinToken.current += 1;
+      landingResolver.current?.();
+      landingResolver.current = null;
+    },
+    [],
+  );
+
   /**
    * The celebration.
    *
@@ -880,6 +892,15 @@ export function SlotsScreen() {
       }
     },
     [REELS],
+  );
+
+  const handleLateReelLanding = useCallback(
+    (index: number, lateByMs: number) => {
+      if (index === REELS - 1) {
+        reportGameTiming('reel-landing-recovered', gameId, lateByMs);
+      }
+    },
+    [REELS, gameId],
   );
 
   const inFreeSpins = phase === 'fs-intro' || phase === 'fs' || phase === 'fs-total';
@@ -1292,6 +1313,7 @@ export function SlotsScreen() {
       });
 
     try {
+      const requestStartedAt = spinNow();
       const result = await api.placeBet({
         gameId,
         stake: bet,
@@ -1299,6 +1321,10 @@ export function SlotsScreen() {
         // same bet rather than charged again.
         idempotencyKey: `${Date.now()}-${token}`,
       });
+      const responseTimeMs = (spinNow() - requestStartedAt) * 1000;
+      if (responseTimeMs >= 5_000) {
+        reportGameTiming('bet-response', gameId, responseTimeMs);
+      }
       if (superseded()) return;
 
       // Let the reels finish getting up to speed before asking them to stop.
@@ -1838,6 +1864,7 @@ export function SlotsScreen() {
               // without un-marking what won.
               settled={winPhase.kind === 'settled'}
               onLanded={() => handleReelLanded(i)}
+              onLateLanding={(lateByMs) => handleLateReelLanding(i, lateByMs)}
             />
           ))}
           {/* Above the symbols, below anything pressable. */}

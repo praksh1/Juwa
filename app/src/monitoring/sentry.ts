@@ -5,6 +5,7 @@ const SENTRY_DSN =
   'https://1e377fa3e0d8ccc3c8a40e0e06a4c605@o4511946612998144.ingest.us.sentry.io/4511946617454597';
 
 let initialized = false;
+const reportedTimings = new Set<string>();
 
 function withoutQueryOrFragment(url?: string) {
   if (!url) return url;
@@ -76,5 +77,31 @@ export function reportReactCrash(error: Error, diagnosticId: string, componentSt
       componentStack: componentStack || 'Unavailable',
     });
     Sentry.captureException(error);
+  });
+}
+
+/**
+ * Reports a slow or recovered game operation without attaching player data.
+ *
+ * One event per game/stage per page load is enough to diagnose a pattern and
+ * avoids turning a bad connection into hundreds of duplicate Sentry events.
+ */
+export function reportGameTiming(
+  stage: 'bet-response' | 'reel-landing-recovered',
+  gameId: string,
+  durationMs: number,
+) {
+  if (!initialized) return;
+
+  const key = `${stage}:${gameId}`;
+  if (reportedTimings.has(key)) return;
+  reportedTimings.add(key);
+
+  Sentry.withScope((scope) => {
+    scope.setLevel('warning');
+    scope.setTag('juwa.game', gameId);
+    scope.setTag('juwa.timing_stage', stage);
+    scope.setContext('timing', { durationMs: Math.round(durationMs) });
+    Sentry.captureMessage('Slow game operation recovered');
   });
 }
