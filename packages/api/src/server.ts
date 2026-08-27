@@ -632,6 +632,7 @@ export function createServer(config: ServerConfig) {
     },
 
     'POST /bet': async (ctx) => {
+      const startedAt = Date.now();
       const { gameId, stake, action, idempotencyKey } = ctx.body as {
         gameId?: string;
         stake?: number;
@@ -645,13 +646,15 @@ export function createServer(config: ServerConfig) {
       // The player's own limits, checked with the stake in hand so a daily cap
       // can refuse the spin that would cross it.
       await assertCanPlay(config, ctx.player.playerId, ctx.utcOffset, stake);
+      const policyCheckedAt = Date.now();
 
       // Operator configuration, read per bet. A round already in flight settles
       // on the terms it started on; only NEW spins see a change.
       const gameConfig = await gameConfigs.get(gameId);
       assertBetAllowed(gameConfig, gameId, stake);
+      const configLoadedAt = Date.now();
 
-      return placeBet(config.db, ctx.player, {
+      const result = await placeBet(config.db, ctx.player, {
         gameId,
         stake,
         maxWinMultiplier: gameConfig.maxWinMultiplier,
@@ -661,6 +664,22 @@ export function createServer(config: ServerConfig) {
         idempotencyKey: idempotencyKey ?? randomUUID(),
         ...(action ? { action } : {}),
       });
+      const finishedAt = Date.now();
+
+      // A slow spin is impossible to diagnose from a screenshot alone. Keep
+      // phase timings in Railway's private log without recording the player,
+      // stake, outcome, token, seed, or idempotency key.
+      if (finishedAt - startedAt >= 1_000) {
+        console.warn('[slow-bet]', JSON.stringify({
+          gameId,
+          totalMs: finishedAt - startedAt,
+          policyMs: policyCheckedAt - startedAt,
+          configMs: configLoadedAt - policyCheckedAt,
+          roundMs: finishedAt - configLoadedAt,
+        }));
+      }
+
+      return result;
     },
 
     'POST /act': async (ctx) => {
@@ -909,6 +928,23 @@ export function createServer(config: ServerConfig) {
     }
 
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+    const requestStartedAt = Date.now();
+
+    // Railway did not retain enough request detail to explain the August 26
+    // slow-spin recording. Log only requests that are observably slow, and
+    // never log query strings (invite tokens and other private values can live
+    // there), bodies, headers, or account identifiers.
+    res.once('finish', () => {
+      const durationMs = Date.now() - requestStartedAt;
+      if (durationMs >= 1_000) {
+        console.warn('[slow-http]', JSON.stringify({
+          method: req.method ?? 'UNKNOWN',
+          path: url.pathname,
+          status: res.statusCode,
+          durationMs,
+        }));
+      }
+    });
 
     if (url.pathname === '/health') {
       send(res, 200, { ok: true });

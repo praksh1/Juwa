@@ -39,6 +39,48 @@ const pool = new Pool({
 });
 
 /**
+ * A privacy-safe name for a database operation. Parameters are deliberately
+ * omitted: they can contain player ids, amounts, tokens, or other private
+ * values. The function/table name is enough to locate a slow phase.
+ */
+function databaseOperation(sql: string): string {
+  const statement = sql.trim().replace(/\s+/g, ' ');
+  const called = statement.match(
+    /^(select|insert into|update|delete from)\s+(?:\*\s+from\s+)?([a-z_][a-z0-9_]*)/i,
+  );
+  return called ? `${called[1]!.toLowerCase()}:${called[2]!.toLowerCase()}` : 'database-query';
+}
+
+/**
+ * Route every production query through one timer. When Supabase or the pool is
+ * slow, Railway will now show which operation waited and whether all pool
+ * connections were occupied. Successful fast queries produce no log noise.
+ */
+async function timedQuery<T = Record<string, unknown>>(
+  sql: string,
+  params?: unknown[],
+): Promise<{ rows: T[] }> {
+  const startedAt = Date.now();
+  try {
+    const result = await pool.query(sql, params as unknown[] | undefined);
+    return { rows: result.rows as T[] };
+  } finally {
+    const durationMs = Date.now() - startedAt;
+    if (durationMs >= 1_000) {
+      console.warn('[slow-db]', JSON.stringify({
+        operation: databaseOperation(sql),
+        durationMs,
+        poolTotal: pool.totalCount,
+        poolIdle: pool.idleCount,
+        poolWaiting: pool.waitingCount,
+      }));
+    }
+  }
+}
+
+const database = { query: timedQuery };
+
+/**
  * A pool emits errors on idle clients, where there is no caller to reject.
  * Without this listener Node treats them as unhandled and kills the process,
  * turning a momentary network blip into an outage.
@@ -160,8 +202,8 @@ if (supabaseAdmin) {
 }
 
 const { server } = createServer({
-  db: new PostgresDb(pool),
-  query: (sql, params) => pool.query(sql, params as unknown[]) as never,
+  db: new PostgresDb(database),
+  query: timedQuery,
   ...(legacySecret ? { jwtSecret: legacySecret } : {}),
   ...(jwks ? { jwks } : {}),
   allowedOrigins,
