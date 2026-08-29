@@ -11,7 +11,7 @@
  */
 
 import React, { useRef } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, spacing, typography } from '@juwa/ui';
 import { Button, Card, Txt } from '../components/primitives';
@@ -54,6 +54,9 @@ export function LandingScreen({
   onCreateAccount: () => void;
   onSignIn: () => void;
 }) {
+  const { width } = useWindowDimensions();
+  const isWideDesktop = width >= 1200;
+  const isCompactDesktop = width >= 760 && !isWideDesktop;
   const featured = GAMES.filter((g) => PLAYABLE.has(g.id)).slice(0, 4);
   const packs = COIN_PACKS.slice(0, 3);
   /**
@@ -78,7 +81,10 @@ export function LandingScreen({
         </View>
       </View>
 
-      <ScrollView ref={scroller} contentContainerStyle={styles.scroll}>
+      <ScrollView
+        ref={scroller}
+        contentContainerStyle={[styles.scroll, isWideDesktop && styles.scrollWide]}
+      >
         <View style={styles.hero}>
           <LinearGradient
             colors={['#1A1030', '#08070E']}
@@ -166,7 +172,17 @@ export function LandingScreen({
             Tapping goes to sign-in, because a stranger cannot play yet.
           */}
           {featured.map((game) => (
-            <View key={game.id} style={styles.tile}>
+            <View
+              key={game.id}
+              style={[
+                styles.tile,
+                isWideDesktop
+                  ? styles.tileWide
+                  : isCompactDesktop
+                    ? styles.tileCompactDesktop
+                    : styles.tilePhone,
+              ]}
+            >
               <GameCard game={game} playable onPress={onSignIn} />
             </View>
           ))}
@@ -236,6 +252,10 @@ const styles = StyleSheet.create({
   },
   navActions: { flexDirection: 'row', gap: spacing.sm },
   scroll: { paddingBottom: spacing.xl },
+  // Prevent a wide monitor from stretching two lobby posters into enormous
+  // billboards. The page still fills phones, while desktop content stays at a
+  // comfortable reading width and uses the available horizontal space.
+  scrollWide: { width: '100%', maxWidth: 1440, alignSelf: 'center' },
   hero: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing['2xl'],
@@ -277,14 +297,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   tile: {
-    flexGrow: 1,
-    flexBasis: '44%',
     borderRadius: radius.md,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: colors.surface.border,
     backgroundColor: colors.surface.raised,
   },
+  tileWide: { flexBasis: '23%', maxWidth: '23%' },
+  tileCompactDesktop: { flexBasis: '31%', maxWidth: '31%' },
+  tilePhone: { flexGrow: 1, flexBasis: '44%' },
   tileArt: { aspectRatio: 1.15 },
   tileName: { padding: spacing.sm, fontWeight: '700' },
   packs: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg },
