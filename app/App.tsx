@@ -119,6 +119,49 @@ const TAB_BAR_CONTENT_HEIGHT = 60;
  */
 const MIN_BOTTOM_LIFT = 14;
 
+/**
+ * iOS Safari freezes timers, requestAnimationFrame and WebAudio while another
+ * app owns the screen. After a long freeze those subsystems do not always
+ * resume in lockstep, which leaves reels crawling or visually black until the
+ * player manually refreshes. Restore the exact same route automatically when
+ * a genuinely stale tab returns; a quick app switch is left untouched.
+ */
+const STALE_SAFARI_RESUME_MS = 90_000;
+
+function useRefreshAfterLongSuspend() {
+  React.useEffect(() => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+
+    let hiddenAt: number | null = document.visibilityState === 'hidden' ? Date.now() : null;
+    let reloading = false;
+
+    const resume = (restoredFromPageCache = false) => {
+      if (reloading || document.visibilityState !== 'visible') return;
+      const stale = hiddenAt !== null && Date.now() - hiddenAt >= STALE_SAFARI_RESUME_MS;
+      hiddenAt = null;
+      if (!restoredFromPageCache && !stale) return;
+      reloading = true;
+      window.location.reload();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') hiddenAt = Date.now();
+      else resume();
+    };
+    const onPageShow = (event: PageTransitionEvent) => resume(event.persisted);
+    const onFocus = () => resume();
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pageshow', onPageShow);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pageshow', onPageShow);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, []);
+}
+
 const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Lobby: 'game-controller',
   Store: 'cart',
@@ -208,6 +251,8 @@ function Tabs() {
 }
 
 export default function App() {
+  useRefreshAfterLongSuspend();
+
   // Registers the offline shell. No-op off the web.
   React.useEffect(() => {
     registerServiceWorker();

@@ -59,6 +59,8 @@ export interface InstantState {
   play: (action?: { type: string; [key: string]: unknown }) => Promise<RoundResponse | null>;
   /** Continue an open round — Mines only. */
   act: (action: { type: string; [key: string]: unknown }) => Promise<RoundResponse | null>;
+  /** Publish a settled round's final wallet only when its result is visible. */
+  reveal: (result?: RoundResponse | null) => void;
   reset: () => void;
 }
 
@@ -92,27 +94,48 @@ export function useInstantGame(game: InstantGame): InstantState {
 
   const options = useMemo(() => betOptions(balance, MIN, MAX), [balance, MIN, MAX]);
 
+  const commitBalance = useCallback((value: number) => {
+    const current = minor(value);
+    setBalance(current);
+    publishBalance(current);
+  }, []);
+
+  const recoverBalance = useCallback(async () => {
+    try {
+      const current = await api.getBalance();
+      commitBalance(current.balance);
+    } catch {
+      // Keep the last honest on-screen value. A later navigation or play will
+      // fetch the authoritative wallet again; never invent a rollback after a
+      // request that may have reached the server.
+    }
+  }, [api, commitBalance]);
+
   const send = useCallback(
-    async (run: () => Promise<RoundResponse>) => {
+    async (run: () => Promise<RoundResponse>, commitSettled = false) => {
       setError(null);
       setBusy(true);
       try {
         const result = await run();
         setRound(result);
-        setBalance(minor(result.balance));
-        // Keeps the lobby header honest without a refetch. See publishBalance.
-        publishBalance(minor(result.balance));
+        // An open Mines round has only charged its wager, so that balance is
+        // already safe to show. A settled game's balance includes its payout;
+        // the screen publishes that only when the result animation lands.
+        if (result.status !== 'settled' || commitSettled) {
+          commitBalance(result.balance);
+        }
         return result;
       } catch (caught) {
         setError(
           caught instanceof PlayApiError ? caught.message : 'Something went wrong. Try again.',
         );
+        await recoverBalance();
         return null;
       } finally {
         setBusy(false);
       }
     },
-    [],
+    [commitBalance, recoverBalance],
   );
 
   const play = useCallback(
@@ -121,6 +144,9 @@ export function useInstantGame(game: InstantGame): InstantState {
         setError('Not enough coins for that bet');
         return Promise.resolve(null);
       }
+      // Show the wager leaving immediately, but do not reveal any returned
+      // winnings until the game's own visual result has completed.
+      commitBalance(balance - bet);
       return send(() =>
         api.placeBet({
           gameId: game.id,
@@ -132,19 +158,21 @@ export function useInstantGame(game: InstantGame): InstantState {
         }),
       );
     },
-    [api, bet, balance, game.id, send],
+    [api, bet, balance, commitBalance, game.id, send],
   );
 
   const act = useCallback(
     (action: { type: string; [key: string]: unknown }) => {
       const open = round;
       if (!open) return Promise.resolve(null);
+      // Mines is interactive. Its selections and cash-out are themselves the
+      // visible result, so it keeps publishing each server response at once.
       return send(() =>
         api.act({
           roundId: open.roundId,
           action,
           idempotencyKey: `${open.roundId}-${action.type}-${Date.now()}`,
-        }),
+        }), true,
       );
     },
     [api, round, send],
@@ -160,6 +188,9 @@ export function useInstantGame(game: InstantGame): InstantState {
     round,
     play,
     act,
+    reveal: (result = round) => {
+      if (result?.status === 'settled') commitBalance(result.balance);
+    },
     reset: () => setRound(null),
   };
 }

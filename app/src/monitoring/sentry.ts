@@ -25,7 +25,11 @@ function withoutQueryOrFragment(url?: string) {
 export function initializeErrorMonitoring() {
   if (initialized || Platform.OS !== 'web' || typeof window === 'undefined') return;
 
-  const isProduction = window.location.hostname === 'juwa.praksh-dhakal.workers.dev';
+  const isProduction = [
+    'simplecasinos.uk',
+    'www.simplecasinos.uk',
+    'juwa.praksh-dhakal.workers.dev',
+  ].includes(window.location.hostname);
 
   Sentry.init({
     dsn: SENTRY_DSN,

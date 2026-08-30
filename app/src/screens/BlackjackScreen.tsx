@@ -178,7 +178,11 @@ export function BlackjackScreen() {
   const lamp = useRef(new Animated.Value(0)).current;
   const presentationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const presentCards = useCallback((state: BlackjackPublic, duration: number) => {
+  const presentCards = useCallback((
+    state: BlackjackPublic,
+    duration: number,
+    onPresented?: () => void,
+  ) => {
     if (presentationTimer.current) clearTimeout(presentationTimer.current);
     setCardsSettling(true);
     presentationTimer.current = setTimeout(() => {
@@ -188,6 +192,7 @@ export function BlackjackScreen() {
       });
       setCardsSettling(false);
       presentationTimer.current = null;
+      onPresented?.();
     }, duration);
   }, []);
 
@@ -266,6 +271,22 @@ export function BlackjackScreen() {
     sparks.current?.fire(power);
   }, []);
 
+  const commitBalance = useCallback((value: number) => {
+    const current = minor(value);
+    setBalance(current);
+    publishBalance(current);
+  }, []);
+
+  const recoverBalance = useCallback(async () => {
+    try {
+      const current = await api.getBalance();
+      commitBalance(current.balance);
+    } catch {
+      // Do not guess whether a timed-out request reached the table. The next
+      // successful request/navigation will fetch the authoritative wallet.
+    }
+  }, [api, commitBalance]);
+
   const deal = useCallback(async () => {
     if (busy) return;
     if (bet > balance) {
@@ -279,7 +300,7 @@ export function BlackjackScreen() {
     setError(null);
     setRound(null);
     setDisplayedTotals({ dealer: null, hands: [] });
-    setBalance((current) => minor(current - bet));
+    commitBalance(balance - bet);
 
     try {
       const result = await api.placeBet({
@@ -288,24 +309,23 @@ export function BlackjackScreen() {
         idempotencyKey: `${Date.now()}-bj`,
       });
       setRound(result);
-      setBalance(minor(result.balance));
-      publishBalance(minor(result.balance));
 
       const state = result.state as BlackjackPublic;
-      presentCards(state, 1_120);
+      if (result.status !== 'settled') commitBalance(result.balance);
+      presentCards(state, 1_120, result.status === 'settled' ? () => {
+        commitBalance(result.balance);
+        announce(state, result.settlement?.payout ?? 0, bet);
+      } : undefined);
       // Four cards, dealt in sequence.
       [0, 1, 2, 3].forEach((i) => setTimeout(() => sounds.cardDeal(), i * 145));
-      if (result.status === 'settled') {
-        setTimeout(() => announce(state, result.settlement?.payout ?? 0, bet), 1_180);
-      }
     } catch (caught) {
-      setBalance((current) => minor(current + bet));
+      await recoverBalance();
       sounds.error();
       setError(caught instanceof PlayApiError ? caught.message : 'Could not deal. Try again.');
     } finally {
       setBusy(false);
     }
-  }, [announce, api, balance, bet, busy, presentCards]);
+  }, [announce, api, balance, bet, busy, commitBalance, presentCards, recoverBalance]);
 
   const act = useCallback(
     async (action: string) => {
@@ -315,6 +335,11 @@ export function BlackjackScreen() {
 
       setBusy(true);
       setError(null);
+      const currentTable = round.state as BlackjackPublic;
+      const additionalStake = action === 'double' || action === 'split'
+        ? currentTable.hands[currentTable.activeHand]?.stake ?? 0
+        : 0;
+      if (additionalStake > 0) commitBalance(balance - additionalStake);
       try {
         const result = await api.act({
           roundId: round.roundId,
@@ -322,8 +347,6 @@ export function BlackjackScreen() {
           idempotencyKey: `${Date.now()}-${action}`,
         });
         setRound(result);
-        setBalance(minor(result.balance));
-        publishBalance(minor(result.balance));
 
         const state = result.state as BlackjackPublic;
         const actionMovesCards = action === 'hit' || action === 'double' || action === 'split';
@@ -338,13 +361,21 @@ export function BlackjackScreen() {
           setDisplayedTotals((current) => ({ ...current, dealer: null }));
         }
 
+        const finishSettlement = result.status === 'settled' ? () => {
+          commitBalance(result.balance);
+          announce(state, result.settlement?.payout ?? 0, result.settlement?.stake ?? bet);
+        } : undefined;
+
+        if (result.status !== 'settled') commitBalance(result.balance);
+
         if (presentationMs > 0) {
-          presentCards(state, presentationMs);
+          presentCards(state, presentationMs, finishSettlement);
         } else {
           setDisplayedTotals({
             dealer: handValue(state.dealer),
             hands: state.hands.map((hand) => handValue(hand.cards)),
           });
+          finishSettlement?.();
         }
 
         // The sound belongs to the visible card crossing the felt, not the
@@ -359,19 +390,16 @@ export function BlackjackScreen() {
         if (result.status === 'settled') {
           // The hole card turns over as the hand resolves.
           sounds.cardFlip();
-          setTimeout(
-            () => announce(state, result.settlement?.payout ?? 0, result.settlement?.stake ?? bet),
-            presentationMs + 60,
-          );
         }
       } catch (caught) {
+        await recoverBalance();
         sounds.error();
         setError(caught instanceof PlayApiError ? caught.message : 'That did not work.');
       } finally {
         setBusy(false);
       }
     },
-    [announce, api, bet, busy, presentCards, round],
+    [announce, api, balance, bet, busy, commitBalance, presentCards, recoverBalance, round],
   );
 
   const splitTable = (table?.hands.length ?? 0) > 1;

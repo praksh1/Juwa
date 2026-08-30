@@ -140,6 +140,7 @@ export function CrashScreen() {
   const tightIphoneStage = useTightIphoneStage();
   // Sound and sparks together, on the frame the picture says so.
   const reveal = (round: RoundResponse | null) => {
+    state.reveal(round);
     announce(round);
     celebrate(round);
   };
@@ -426,6 +427,7 @@ export function LimboScreen() {
   const announce = useSettlementAnnouncer();
   const { handle, celebrate } = useCelebration();
   const reveal = (round: RoundResponse | null) => {
+    state.reveal(round);
     announce(round);
     celebrate(round);
   };
@@ -617,6 +619,7 @@ export function DiceScreen() {
   const announce = useSettlementAnnouncer();
   const { handle, celebrate } = useCelebration();
   const reveal = (round: RoundResponse | null) => {
+    state.reveal(round);
     announce(round);
     celebrate(round);
   };
@@ -851,6 +854,7 @@ export function PlinkoScreen() {
   const announce = useSettlementAnnouncer();
   const { handle, celebrate } = useCelebration();
   const reveal = (round: RoundResponse | null) => {
+    state.reveal(round);
     announce(round);
     celebrate(round);
   };
@@ -1377,6 +1381,7 @@ export function GoldenScratchScreen() {
   };
   const reveal = () => {
     if (!ticket || revealed) return;
+    state.reveal();
     setRevealed(true);
     if (ticket.multiplier > 0) {
       sounds.cardFlip();
