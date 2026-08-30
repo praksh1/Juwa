@@ -13,6 +13,8 @@ import { BLACKJACK_SOUNDS } from '../api/sound-sets';
 import { BLACKJACK_BED, useAmbientBed } from '../ambience';
 import { HowToPlayButton, type HowToPlayContent } from '../components/HowToPlay';
 import { Fireworks, type FireworksHandle } from '../components/Fireworks';
+import { WinOverlay } from '../components/WinOverlay';
+import { winTier, type WinTier } from '../motion';
 import {
   PlayApiError,
   USE_DEMO_API,
@@ -24,6 +26,12 @@ import {
 const GAME_ID = 'juwa-blackjack';
 const MIN_BET = minor(100);
 const MAX_BET = minor(100_000);
+/**
+ * Relative to the original table wager. A profitable double or several
+ * successful split hands can therefore earn a headline, while merely getting
+ * all committed chips back never does.
+ */
+const BLACKJACK_WIN_TIERS = { big: 4, mega: 6, jackpot: 8 } as const;
 
 /**
  * Blackjack.
@@ -175,6 +183,10 @@ export function BlackjackScreen() {
   });
   const [handView, setHandView] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [headline, setHeadline] = useState<{ tier: WinTier; amount: number; round: number }>({
+    tier: 'none', amount: 0, round: 0,
+  });
+  const headlineSequence = useRef(0);
   const lamp = useRef(new Animated.Value(0)).current;
   const presentationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -247,9 +259,19 @@ export function BlackjackScreen() {
    * this screen happened to have from the start. The fountain is added on the
    * same call for the same reason: the celebration must not precede the reveal.
    */
-  const announce = useCallback((state: BlackjackPublic, payout: number, staked: number) => {
+  const announce = useCallback((state: BlackjackPublic, payout: number, staked: number, originalBet: number) => {
     const natural = state.hands.some((hand) => hand.outcome === 'blackjack');
-    if (natural) {
+    const calculatedTier = winTier(payout, originalBet, BLACKJACK_WIN_TIERS);
+    const headlineTier: WinTier = payout > staked
+      ? natural && calculatedTier !== 'mega' && calculatedTier !== 'jackpot'
+        ? 'big'
+        : calculatedTier
+      : 'none';
+
+    if (headlineTier === 'mega' || headlineTier === 'jackpot') {
+      sounds.megaWin();
+      sounds.coins(9);
+    } else if (headlineTier === 'big') {
       sounds.bigWin();
       sounds.coins(6);
     } else if (payout > staked) {
@@ -267,6 +289,10 @@ export function BlackjackScreen() {
      * throws nothing: getting your own money back is not a win.
      */
     if (payout <= staked) return;
+    if (headlineTier === 'big' || headlineTier === 'mega' || headlineTier === 'jackpot') {
+      headlineSequence.current += 1;
+      setHeadline({ tier: headlineTier, amount: payout, round: headlineSequence.current });
+    }
     const power = natural ? 1 : Math.max(0, Math.min(1, (payout / Math.max(staked, 1) - 1) / 1.5));
     sparks.current?.fire(power);
   }, []);
@@ -299,6 +325,7 @@ export function BlackjackScreen() {
     setBusy(true);
     setError(null);
     setRound(null);
+    setHeadline((current) => ({ ...current, tier: 'none' }));
     setDisplayedTotals({ dealer: null, hands: [] });
     commitBalance(balance - bet);
 
@@ -314,7 +341,7 @@ export function BlackjackScreen() {
       if (result.status !== 'settled') commitBalance(result.balance);
       presentCards(state, 1_120, result.status === 'settled' ? () => {
         commitBalance(result.balance);
-        announce(state, result.settlement?.payout ?? 0, bet);
+        announce(state, result.settlement?.payout ?? 0, bet, bet);
       } : undefined);
       // Four cards, dealt in sequence.
       [0, 1, 2, 3].forEach((i) => setTimeout(() => sounds.cardDeal(), i * 145));
@@ -363,7 +390,7 @@ export function BlackjackScreen() {
 
         const finishSettlement = result.status === 'settled' ? () => {
           commitBalance(result.balance);
-          announce(state, result.settlement?.payout ?? 0, result.settlement?.stake ?? bet);
+          announce(state, result.settlement?.payout ?? 0, result.settlement?.stake ?? bet, bet);
         } : undefined;
 
         if (result.status !== 'settled') commitBalance(result.balance);
@@ -690,6 +717,14 @@ export function BlackjackScreen() {
         />
       )}
       </View>
+      <WinOverlay
+        tier={headline.tier}
+        amount={headline.amount}
+        round={headline.round}
+        onDone={() => setHeadline((current) => current.round === headline.round
+          ? { ...current, tier: 'none' }
+          : current)}
+      />
     </View>
   );
 }

@@ -1237,9 +1237,10 @@ export function MinesScreen() {
   const { handle, celebrate } = useCelebration();
   useEffect(() => {
     if (state.round?.status !== 'settled') return;
+    state.reveal(state.round);
     announce(state.round);
     celebrate(state.round);
-  }, [state.round, announce, celebrate]);
+  }, [state.round, state.reveal, announce, celebrate]);
 
   /**
    * A safe tile and a mine must not sound the same.
@@ -1386,7 +1387,8 @@ export function GoldenScratchScreen() {
     if (ticket.multiplier > 0) {
       sounds.cardFlip();
       setTimeout(() => {
-        if (ticket.multiplier >= 10) sounds.bigWin();
+        if (ticket.multiplier >= 25) sounds.megaWin();
+        else if (ticket.multiplier >= 10) sounds.bigWin();
         else sounds.win();
         sounds.coins(ticket.multiplier >= 10 ? 7 : 4);
       }, 90);

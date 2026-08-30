@@ -32,7 +32,8 @@ import { INSTANT_RULES } from './rules';
 import { sounds, unlock, useSoundSet } from '../../sound';
 import { INSTANT_SOUNDS, INSTANT_SOUND_SETS } from '../../api/sound-sets';
 import { Fireworks, type FireworksHandle } from '../../components/Fireworks';
-import { usePrefersReducedMotion } from '../../motion';
+import { WinOverlay } from '../../components/WinOverlay';
+import { usePrefersReducedMotion, winTier, type WinTier } from '../../motion';
 import { PlayApiError, createPlayApi, type PlayApi, type RoundResponse } from '../../api/client';
 
 export interface InstantGame {
@@ -46,6 +47,19 @@ export interface InstantGame {
 }
 
 export type InstantCabinet = 'crash' | 'limbo' | 'dice' | 'plinko' | 'mines' | 'scratch';
+
+/**
+ * Instant games can return very large multiples, so their headline moments
+ * stay rarer than the model-tuned slot banners. A 50x Plinko landing is the
+ * top event, not the same chime as a routine return.
+ */
+export const INSTANT_WIN_TIERS = { big: 10, mega: 25, jackpot: 50 } as const;
+
+interface InstantHeadline {
+  tier: WinTier;
+  amount: number;
+  round: number;
+}
 
 export interface InstantState {
   balance: Minor;
@@ -61,6 +75,8 @@ export interface InstantState {
   act: (action: { type: string; [key: string]: unknown }) => Promise<RoundResponse | null>;
   /** Publish a settled round's final wallet only when its result is visible. */
   reveal: (result?: RoundResponse | null) => void;
+  headline: InstantHeadline;
+  dismissHeadline: (round: number) => void;
   reset: () => void;
 }
 
@@ -75,6 +91,9 @@ export function useInstantGame(game: InstantGame): InstantState {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [round, setRound] = useState<RoundResponse | null>(null);
+  const [headline, setHeadline] = useState<InstantHeadline>({ tier: 'none', amount: 0, round: 0 });
+  const headlineSequence = useRef(0);
+  const revealedRound = useRef<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -146,6 +165,7 @@ export function useInstantGame(game: InstantGame): InstantState {
       }
       // Show the wager leaving immediately, but do not reveal any returned
       // winnings until the game's own visual result has completed.
+      setHeadline((current) => ({ ...current, tier: 'none' }));
       commitBalance(balance - bet);
       return send(() =>
         api.placeBet({
@@ -160,6 +180,27 @@ export function useInstantGame(game: InstantGame): InstantState {
     },
     [api, bet, balance, commitBalance, game.id, send],
   );
+
+  const reveal = useCallback((result: RoundResponse | null = round) => {
+    if (result?.status !== 'settled') return;
+    commitBalance(result.balance);
+    if (revealedRound.current === result.roundId) return;
+    revealedRound.current = result.roundId;
+
+    const payout = result.settlement?.payout ?? 0;
+    const stake = result.settlement?.stake ?? 0;
+    const tier = winTier(payout, stake, INSTANT_WIN_TIERS);
+    if (tier === 'big' || tier === 'mega' || tier === 'jackpot') {
+      headlineSequence.current += 1;
+      setHeadline({ tier, amount: payout, round: headlineSequence.current });
+    }
+  }, [commitBalance, round]);
+
+  const dismissHeadline = useCallback((headlineRound: number) => {
+    setHeadline((current) => current.round === headlineRound
+      ? { ...current, tier: 'none' }
+      : current);
+  }, []);
 
   const act = useCallback(
     (action: { type: string; [key: string]: unknown }) => {
@@ -188,10 +229,13 @@ export function useInstantGame(game: InstantGame): InstantState {
     round,
     play,
     act,
-    reveal: (result = round) => {
-      if (result?.status === 'settled') commitBalance(result.balance);
+    reveal,
+    headline,
+    dismissHeadline,
+    reset: () => {
+      setRound(null);
+      setHeadline((current) => ({ ...current, tier: 'none' }));
     },
-    reset: () => setRound(null),
   };
 }
 
@@ -343,6 +387,12 @@ export function InstantLayout({
         </ScrollView> : null}
         {action}
       </View> : null}
+      <WinOverlay
+        tier={state.headline.tier}
+        amount={state.headline.amount}
+        round={state.headline.round}
+        onDone={() => state.dismissHeadline(state.headline.round)}
+      />
     </View>
   );
 }
@@ -722,10 +772,9 @@ export function useSettlementAnnouncer(): (round: RoundResponse | null) => void 
       sounds.lose();
       return;
     }
-    // Ten times the stake is the threshold the slots use for their longest
-    // fanfare, and using the same one here means a big win sounds like a big
-    // win everywhere in the app rather than per screen.
-    if (payout >= stake * 10) sounds.bigWin();
+    const tier = winTier(payout, stake, INSTANT_WIN_TIERS);
+    if (tier === 'mega' || tier === 'jackpot') sounds.megaWin();
+    else if (tier === 'big') sounds.bigWin();
     else sounds.win();
   }, []);
 }

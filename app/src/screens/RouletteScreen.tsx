@@ -101,7 +101,7 @@ function describeBet(bet: Bet): string {
   }
 }
 
-type RouletteWinTier = 'return' | 'win' | 'big' | 'mega';
+type RouletteWinTier = 'return' | 'win' | 'big' | 'mega' | 'jackpot';
 
 /** A fresh, table-sized announcement for every paying result. */
 function RouletteWinMoment({ payout, tier }: { payout: number; tier: RouletteWinTier }) {
@@ -109,18 +109,18 @@ function RouletteWinMoment({ payout, tier }: { payout: number; tier: RouletteWin
   useEffect(() => {
     Animated.sequence([
       Animated.spring(entrance, { toValue: 1, friction: 5, tension: 92, useNativeDriver: true }),
-      Animated.delay(tier === 'mega' ? 1750 : tier === 'big' ? 1350 : 900),
+      Animated.delay(tier === 'jackpot' ? 2200 : tier === 'mega' ? 1750 : tier === 'big' ? 1350 : 900),
       Animated.timing(entrance, { toValue: 0, duration: 320, useNativeDriver: true }),
     ]).start();
   }, [entrance, tier]);
 
-  const label = tier === 'mega' ? 'SALON JACKPOT' : tier === 'big' ? 'HOT NUMBER' : tier === 'win' ? 'TABLE WIN' : 'CHIPS RETURNED';
+  const label = tier === 'jackpot' ? 'SALON JACKPOT' : tier === 'mega' ? 'MEGA WIN' : tier === 'big' ? 'HOT NUMBER' : tier === 'win' ? 'TABLE WIN' : 'CHIPS RETURNED';
   return (
     <Animated.View
       pointerEvents="none"
       style={[
         styles.winMoment,
-        tier === 'mega' && styles.winMomentMega,
+        (tier === 'mega' || tier === 'jackpot') && styles.winMomentMega,
         {
           opacity: entrance,
           transform: [
@@ -132,7 +132,7 @@ function RouletteWinMoment({ payout, tier }: { payout: number; tier: RouletteWin
     >
       <View style={styles.winMomentRays} />
       <Txt variant="caption" color="#FFF0B8">{label}</Txt>
-      <Txt variant={tier === 'mega' ? 'display' : 'h1'} color="#FFF5C5">
+      <Txt variant={tier === 'mega' || tier === 'jackpot' ? 'display' : 'h1'} color="#FFF5C5">
         WON {format(minor(payout), 'GC')}
       </Txt>
     </Animated.View>
@@ -456,12 +456,16 @@ export function RouletteScreen() {
       setTimeout(() => {
         if (payout > 0) {
           const multiple = payout / Math.max(total, 1);
-          const tier: RouletteWinTier = multiple >= 25 ? 'mega' : multiple >= 10 ? 'big' : multiple >= 1 ? 'win' : 'return';
+          const tier: RouletteWinTier = multiple >= 35 ? 'jackpot' : multiple >= 25 ? 'mega' : multiple >= 10 ? 'big' : multiple >= 1 ? 'win' : 'return';
           setWinMoment({ id: Date.now(), payout, tier });
           // The burst is deliberately tied to the ball's landing rather than
           // the server response: the table never celebrates information the
           // player has not seen yet.
-          if (multiple >= 25) {
+          if (multiple >= 35) {
+            sounds.megaWin();
+            celebration.current?.blast(1);
+            celebration.current?.pour(1, 3.4);
+          } else if (multiple >= 25) {
             sounds.megaWin();
             celebration.current?.blast(1);
             celebration.current?.pour(1, 2.8);
