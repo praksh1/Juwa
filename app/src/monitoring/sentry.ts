@@ -7,6 +7,24 @@ const SENTRY_DSN =
 let initialized = false;
 const reportedTimings = new Set<string>();
 
+/**
+ * Cloudflare Web Analytics is injected after the app leaves our build. Its
+ * August 2026 beacon uses Array.prototype.at(), which is absent in a small set
+ * of otherwise usable browsers. Sentry's global handler sees that third-party
+ * failure as an unhandled Juwa exception unless we identify its source.
+ */
+function isCloudflareBeaconCompatibilityError(event: Sentry.Event): boolean {
+  return Boolean(event.exception?.values?.some((exception) => {
+    if (exception.type !== 'TypeError' || !/\.at is not a function/i.test(exception.value ?? '')) {
+      return false;
+    }
+
+    return exception.stacktrace?.frames?.some((frame) =>
+      /(?:^|\/)beacon\.min\.js(?:\/|$)/i.test(frame.filename ?? ''),
+    );
+  }));
+}
+
 function withoutQueryOrFragment(url?: string) {
   if (!url) return url;
 
@@ -41,6 +59,10 @@ export function initializeErrorMonitoring() {
     tracesSampleRate: 0,
     replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: 0,
+    // The script belongs to Cloudflare Web Analytics, not this application.
+    // Keep every Juwa frame reportable while preventing a vendor beacon from
+    // consuming issue quota or being promoted to a high-priority app crash.
+    denyUrls: [/^https:\/\/static\.cloudflareinsights\.com\/beacon\.min\.js(?:\/|$)/i],
     dataCollection: {
       userInfo: false,
       httpBodies: [],
@@ -51,6 +73,11 @@ export function initializeErrorMonitoring() {
       );
     },
     beforeSend(event) {
+      // Fallback for browsers/Sentry versions that normalize the injected
+      // beacon filename before denyUrls is applied. The message AND a beacon
+      // frame are required, so an actual Juwa `.at()` bug is never hidden.
+      if (isCloudflareBeaconCompatibilityError(event)) return null;
+
       // The browser/device context and JavaScript stack are useful for finding
       // the blackout. Account, request, and free-form app data are not needed.
       delete event.user;

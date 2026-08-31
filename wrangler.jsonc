@@ -7,8 +7,8 @@
   // file that is nothing. The build succeeds, the deploy succeeds, and the site
   // is empty.
   //
-  // This is a static site: there is no `main`, because there is no Worker
-  // script. Everything served is a file the Expo export produced.
+  // The Worker is intentionally tiny: it enforces HTTPS, then serves the
+  // static Expo export through the ASSETS binding.
   //
   // ⚠️ The API does NOT live here. It is a long-running container (see
   // Dockerfile) because the rate limiters in packages/api/src/server.ts hold
@@ -17,10 +17,13 @@
   // security control, not a performance tweak.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "juwa",
-  "compatibility_date": "2025-04-01",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-08-30",
 
   "assets": {
     "directory": "app/dist",
+    "binding": "ASSETS",
+    "run_worker_first": true,
 
     // Single-page app: any path that is not a real file serves index.html, so
     // refreshing on /games or returning from Stripe with /?purchase=... does

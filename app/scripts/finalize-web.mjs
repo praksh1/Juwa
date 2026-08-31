@@ -26,6 +26,12 @@ if (!existsSync(indexPath)) {
 }
 
 const TAGS = [
+  // Cloudflare's automatically injected Web Analytics beacon currently uses
+  // Array.prototype.at(). A small group of older-but-supported Safari/Chrome
+  // builds lack it, which crashes analytics (not Juwa) and creates false high
+  // priority Sentry alerts. This standards-compatible shim runs before any
+  // deferred application or analytics script.
+  '<script id="juwa-array-at-compat">if(!Array.prototype.at){Object.defineProperty(Array.prototype,"at",{configurable:true,writable:true,value:function(index){var length=this.length>>>0;var number=Number(index)||0;number=number<0?Math.ceil(number):Math.floor(number);var position=number<0?length+number:number;return position<0||position>=length?undefined:this[position]}})}</script>',
   '<link rel="manifest" href="/manifest.json">',
   '<link rel="icon" href="/favicon.png" sizes="48x48">',
   '<link rel="apple-touch-icon" href="/icon-192.png">',
@@ -39,8 +45,8 @@ const TAGS = [
 
 let html = readFileSync(indexPath, 'utf8');
 const missing = TAGS.filter((tag) => {
-  const key = /(?:rel|name)="([^"]+)"/.exec(tag)?.[1];
-  return key ? !new RegExp(`(?:rel|name)="${key}"`).test(html) : true;
+  const key = /(?:rel|name|id)="([^"]+)"/.exec(tag)?.[1];
+  return key ? !new RegExp(`(?:rel|name|id)="${key}"`).test(html) : true;
 });
 
 if (missing.length === 0) {
